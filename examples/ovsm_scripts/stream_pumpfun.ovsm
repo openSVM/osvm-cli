@@ -13,7 +13,7 @@
 
 (log :message "✅ Connected to Pump.fun event stream" :value stream-id)
 (log :message "🔍 Monitoring for Buy/Sell transactions...")
-(println "")
+(log :message "")
 
 ;; Initialize counters
 (define buy-count 0)
@@ -43,14 +43,14 @@
           (if (string-contains logs-text "Instruction: Buy")
               (do
                 (set! buy-count (+ buy-count 1))
-                (println (format "📈 BUY  #{} | Signature: {}" buy-count signature)))
+                (log :message "📈 BUY" :value (str "#" buy-count)))
               null)
 
           ;; Check for Sell transactions
           (if (string-contains logs-text "Instruction: Sell")
               (do
                 (set! sell-count (+ sell-count 1))
-                (println (format "📉 SELL #{} | Signature: {}" sell-count signature)))
+                (log :message "📉 SELL" :value (str "#" sell-count)))
               null)
 
           ;; Check for Token Graduation (migration to Raydium)
@@ -59,30 +59,21 @@
                   (string-contains logs-text "bonding curve complete"))
               (do
                 (set! graduation-count (+ graduation-count 1))
-                (println "")
-                (println (format "🎓 GRADUATION DETECTED #{} 🎓" graduation-count))
-                (println (format "   Signature: {}" signature))
-                (println "   Token has migrated to Raydium!")
-                (println ""))
+                (log :message "🎓 GRADUATION DETECTED!" :value (str "Count: " graduation-count))
+                (log :message "Signature" :value signature))
               null))
-        null))
-
-  ;; Sleep for 500ms before next poll
-  (if (= (length events) 0)
-      null  ;; Sleep handled by stream-wait if needed
-      null))
+        null)))
 
 ;; Print summary statistics
-(println "")
-(println "═══════════════════════════════════")
-(println "📊 Streaming Summary")
-(println "═══════════════════════════════════")
-(println (format "Duration: {} seconds" duration))
-(println (format "📈 Buy Transactions:   {}" buy-count))
-(println (format "📉 Sell Transactions:  {}" sell-count))
-(println (format "🎓 Graduations:       {}" graduation-count))
-(println (format "📦 Total Events:      {}" (+ buy-count sell-count graduation-count)))
-(println "═══════════════════════════════════")
+(log :message "═══════════════════════════════════")
+(log :message "📊 Streaming Summary")
+(log :message "═══════════════════════════════════")
+(log :message "Duration" :value (str duration " seconds"))
+(log :message "📈 Buy Transactions" :value buy-count)
+(log :message "📉 Sell Transactions" :value sell-count)
+(log :message "🎓 Graduations" :value graduation-count)
+(log :message "📦 Total Events" :value (+ buy-count sell-count graduation-count))
+(log :message "═══════════════════════════════════")
 
 ;; Close stream
 (stream-close stream-id)
