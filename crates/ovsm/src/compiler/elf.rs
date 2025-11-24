@@ -349,7 +349,8 @@ impl ElfWriter {
         let dynstr_size = self.dynstr.len();
 
         // .rel.dyn section (N relocations * 16 bytes)
-        let reldyn_offset = dynstr_offset + dynstr_size;
+        // CRITICAL: Must be 8-byte aligned for Elf64Rel casting
+        let reldyn_offset = ((dynstr_offset + dynstr_size) + 7) & !7;
         let reldyn_entry_size = 16usize;
         let reldyn_size = reldyn_entry_size * syscalls.len();
 
@@ -481,6 +482,12 @@ impl ElfWriter {
 
         // ==================== .dynstr Section ====================
         elf.extend_from_slice(&self.dynstr);
+
+        // Add padding to align .rel.dyn to 8 bytes (Elf64Rel requires 8-byte alignment)
+        let padding_needed = reldyn_offset - (dynstr_offset + dynstr_size);
+        for _ in 0..padding_needed {
+            elf.push(0);
+        }
 
         // ==================== .rel.dyn Section ====================
         for sc in syscalls {
@@ -621,7 +628,7 @@ mod tests {
             SbpfInstruction::exit(),
         ];
 
-        let elf = writer.write(&program, false).unwrap();
+        let elf = writer.write(&program, false, super::SbpfVersion::V1).unwrap();
         assert!(elf.len() > 64);
         validate_sbpf_elf(&elf).unwrap();
     }
