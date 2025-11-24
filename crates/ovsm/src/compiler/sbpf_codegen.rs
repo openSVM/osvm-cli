@@ -296,7 +296,7 @@ impl SbpfInstruction {
         Self {
             opcode: class::LD | size::DW | mode::IMM,
             dst,
-            src: 0,
+            src: 1,  // CRITICAL: Must be 1 for 64-bit immediate (sBPF pseudo-instruction)
             offset: 0,
             imm: value as i32,
             imm64_hi: Some((value >> 32) as u32),

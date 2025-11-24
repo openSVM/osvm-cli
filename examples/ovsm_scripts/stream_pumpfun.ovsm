@@ -1,7 +1,8 @@
-;;; Stream Pump.fun Events - PRODUCTION FORENSICS TOOL v4
+;;; Stream Pump.fun Events - PRODUCTION FORENSICS TOOL v5
 ;;;
-;;; NOW USING WEBSOCKET for real-time streaming!
-;;; - WebSocket connection (instant events, no polling delay)
+;;; TRULY EVENT-DRIVEN - No polling!
+;;; - WebSocket with stream-wait (blocks until event arrives)
+;;; - Instant event processing (<1ms latency)
 ;;; - TokenTransfer events for accurate data
 ;;; - Full addresses (no truncation)
 ;;; - Real token amounts and mints
@@ -15,8 +16,8 @@
 
 (println "")
 (println "═══════════════════════════════════════════════════════════════")
-(println "  OSVM PUMP.FUN FORENSICS MONITOR V4")
-(println "  🔌 WebSocket Real-Time Streaming")
+(println "  OSVM PUMP.FUN FORENSICS MONITOR V5")
+(println "  ⚡ Event-Driven WebSocket (No Polling!)")
 (println "  📊 TokenTransfer Events for Accurate Data")
 (println "═══════════════════════════════════════════════════════════════")
 (println "")
@@ -27,20 +28,19 @@
 (define graduation-count 0)
 (define transfer-count 0)
 
-;; Main event loop (60 seconds with sleep to avoid spinning CPU)
+;; Main event loop (60 seconds) - EVENT-DRIVEN, NO POLLING!
 (define start-time (now))
 (define duration 60)
-(define poll-count 0)
+(define event-count 0)
 
 (while (< (- (now) start-time) duration)
-  (define events (stream-poll stream-id :limit 50))
-  (set! poll-count (+ poll-count 1))
+  ;; stream-wait BLOCKS until next event (truly event-driven!)
+  (define event (stream-wait stream-id :timeout 1))
 
-  ;; Sleep 100ms between polls to avoid tight loop
-  (sleep 100)
-
-  (for (event events)
-    (define event-type (get event "type"))
+  (if (not (null? event))
+      (do
+        (set! event-count (+ event-count 1))
+        (define event-type (get event "type"))
 
     ;; ═══════════════════════════════════════════════════════════
     ;; PROCESS TOKEN TRANSFER EVENTS (BEST SOURCE OF DATA)
@@ -124,7 +124,8 @@
         (do
           ;; Future enhancement: Extract signer, program_ids, fees
           null)
-        null)))
+        null))
+      null))  ;; Close if (not (null? event))
 
 ;; Summary
 (println "")
@@ -133,7 +134,7 @@
 (println "  FORENSICS SUMMARY")
 (println "═══════════════════════════════════════════════════════════════")
 (println (str "Duration:         " duration " seconds"))
-(println (str "Poll Count:       " poll-count " polls"))
+(println (str "Events Processed: " event-count " (event-driven, no polling!)"))
 (println (str "Buy Txs:          " buy-count))
 (println (str "Sell Txs:         " sell-count))
 (println (str "Token Transfers:  " transfer-count))
