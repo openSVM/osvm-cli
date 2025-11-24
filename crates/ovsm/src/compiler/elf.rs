@@ -444,7 +444,8 @@ impl ElfWriter {
 
         // PT_LOAD #3: Dynamic sections (.dynsym, .dynstr, .rel.dyn) - READ-ONLY like reference!
         // These sections are metadata and don't need write access
-        let dyn_sections_size = dynsym_size + dynstr_size + reldyn_size;
+        // IMPORTANT: Calculate actual file span including alignment padding between sections
+        let dyn_sections_size = (reldyn_offset + reldyn_size) - dynsym_offset;
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynsym_offset, dynsym_vaddr, dyn_sections_size);
 
         // PT_DYNAMIC: Points to .dynamic section (needs 8-byte alignment, not page alignment)

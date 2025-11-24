@@ -1,21 +1,23 @@
-;;; Stream Pump.fun Events - PRODUCTION FORENSICS TOOL v3
+;;; Stream Pump.fun Events - PRODUCTION FORENSICS TOOL v4
 ;;;
-;;; REWRITTEN: Now uses TokenTransfer events (not logs!)
+;;; NOW USING WEBSOCKET for real-time streaming!
+;;; - WebSocket connection (instant events, no polling delay)
+;;; - TokenTransfer events for accurate data
 ;;; - Full addresses (no truncation)
-;;; - Actual token mints from transfer events
-;;; - Real token amounts (not parsed from binary)
+;;; - Real token amounts and mints
 ;;; - Clean single-line output format
 ;;;
 ;;; Usage:
 ;;;   1. Start: osvm stream --programs pumpfun --port 8080
 ;;;   2. Run: osvm ovsm run stream_pumpfun.ovsm
 
-(define stream-id (stream-connect "http://localhost:8080" :programs ["pumpfun"]))
+(define stream-id (stream-connect "ws://localhost:8080/ws" :programs ["pumpfun"]))
 
 (println "")
 (println "═══════════════════════════════════════════════════════════════")
-(println "  OSVM PUMP.FUN FORENSICS MONITOR V3")
-(println "  Using TokenTransfer events for accurate data")
+(println "  OSVM PUMP.FUN FORENSICS MONITOR V4")
+(println "  🔌 WebSocket Real-Time Streaming")
+(println "  📊 TokenTransfer Events for Accurate Data")
 (println "═══════════════════════════════════════════════════════════════")
 (println "")
 

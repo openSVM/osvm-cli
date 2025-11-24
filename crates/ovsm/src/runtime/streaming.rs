@@ -1,31 +1,34 @@
 /// Streaming support for OVSM LISP
 ///
-/// This module provides built-in functions for real-time blockchain event streaming:
-/// - `(stream-connect url :programs ["pumpfun"] :tokens ["USDC"])` - Connect to streaming server
-/// - `(stream-poll stream-id)` - Poll for new events (non-blocking)
-/// - `(stream-wait stream-id timeout)` - Wait for next event (blocking with timeout)
-/// - `(stream-close stream-id)` - Close streaming connection
+/// This module provides built-in functions for real-time blockchain event streaming via WebSocket:
+/// - `(stream-connect url :programs ["pumpfun"] :tokens ["USDC"])` - Connect to WebSocket stream
+/// - `(stream-poll stream-id :limit 50)` - Poll buffered events (non-blocking)
+/// - `(stream-wait stream-id :timeout 30)` - Wait for next event (blocking with timeout)
+/// - `(stream-close stream-id)` - Close WebSocket connection
 ///
 /// Example usage:
 /// ```lisp
-/// ;; Connect to Pump.fun event stream
-/// (define stream (stream-connect "http://localhost:8080" :programs ["pumpfun"]))
+/// ;; Connect to Pump.fun event stream via WebSocket
+/// (define stream (stream-connect "ws://localhost:8080/ws" :programs ["pumpfun"]))
 ///
 /// ;; Poll for events in a loop
 /// (while true
-///   (define events (stream-poll stream))
+///   (define events (stream-poll stream :limit 50))
 ///   (for (event events)
-///     (if (= (get event "type") "log_message")
-///         (log :message "Transaction:" :value (get event "signature"))
+///     (if (= (get event "type") "token_transfer")
+///         (log :message "Transfer:" :value (get event "amount"))
 ///         null)))
 /// ```
 
 use crate::error::{Error, Result};
 use crate::runtime::Value;
+use futures_util::{SinkExt, StreamExt};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::thread;
+use std::time::Duration;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 /// Stream connection handle
 #[derive(Clone, Debug)]
@@ -33,8 +36,8 @@ pub struct StreamHandle {
     pub id: String,
     pub url: String,
     pub filters: StreamFilters,
-    pub last_poll: SystemTime,
     pub event_buffer: Arc<Mutex<Vec<JsonValue>>>,
+    pub is_connected: Arc<Mutex<bool>>,
 }
 
 /// Stream filtering options
@@ -61,12 +64,12 @@ fn generate_stream_id() -> String {
     format!("stream_{}", id)
 }
 
-/// Connect to streaming server
+/// Connect to WebSocket streaming server
 ///
 /// Syntax: `(stream-connect url &key programs tokens accounts event-types success-only)`
 ///
 /// Parameters:
-/// - `url`: Server URL (e.g., "http://localhost:8080")
+/// - `url`: WebSocket URL (e.g., "ws://localhost:8080/ws")
 /// - `:programs` (optional): Array of program aliases or IDs
 /// - `:tokens` (optional): Array of token symbols or mint addresses
 /// - `:accounts` (optional): Array of account addresses
@@ -135,21 +138,98 @@ pub fn stream_connect(args: &[Value]) -> Result<Value> {
 
     // Create stream handle
     let stream_id = generate_stream_id();
+    let event_buffer = Arc::new(Mutex::new(Vec::new()));
+    let is_connected = Arc::new(Mutex::new(true));
+
     let handle = StreamHandle {
         id: stream_id.clone(),
         url: url.clone(),
-        filters,
-        last_poll: SystemTime::now(),
-        event_buffer: Arc::new(Mutex::new(Vec::new())),
+        filters: filters.clone(),
+        event_buffer: event_buffer.clone(),
+        is_connected: is_connected.clone(),
     };
 
     // Register stream
     {
         let mut registry = STREAM_REGISTRY.lock().unwrap();
-        registry.insert(stream_id.clone(), handle);
+        registry.insert(stream_id.clone(), handle.clone());
     }
 
+    // Start WebSocket connection in background thread
+    let url_clone = url.clone();
+    let buffer_clone = event_buffer.clone();
+    let connected_clone = is_connected.clone();
+    let filters_clone = filters.clone();
+
+    thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async move {
+            if let Err(e) = websocket_client_loop(
+                &url_clone,
+                buffer_clone,
+                connected_clone,
+                filters_clone,
+            )
+            .await
+            {
+                eprintln!("WebSocket error: {}", e);
+            }
+        });
+    });
+
+    // Wait a bit for connection to establish
+    thread::sleep(Duration::from_millis(500));
+
     Ok(Value::String(stream_id))
+}
+
+/// WebSocket client loop (runs in background)
+async fn websocket_client_loop(
+    url: &str,
+    event_buffer: Arc<Mutex<Vec<JsonValue>>>,
+    is_connected: Arc<Mutex<bool>>,
+    filters: StreamFilters,
+) -> Result<()> {
+    let (ws_stream, _) = connect_async(url)
+        .await
+        .map_err(|e| Error::runtime(format!("WebSocket connection failed: {}", e)))?;
+
+    let (_write, mut read) = ws_stream.split();
+
+    while let Some(message) = read.next().await {
+        match message {
+            Ok(Message::Text(text)) => {
+                // Parse JSON event
+                if let Ok(json_value) = serde_json::from_str::<JsonValue>(&text) {
+                    // Apply filters
+                    if filter_event(&json_value, &filters) {
+                        // Add to buffer
+                        let mut buffer = event_buffer.lock().unwrap();
+                        buffer.push(json_value);
+
+                        // Limit buffer size to prevent memory issues
+                        if buffer.len() > 10000 {
+                            buffer.drain(0..5000); // Remove oldest 5000 events
+                        }
+                    }
+                }
+            }
+            Ok(Message::Close(_)) => {
+                let mut connected = is_connected.lock().unwrap();
+                *connected = false;
+                break;
+            }
+            Err(e) => {
+                eprintln!("WebSocket read error: {}", e);
+                let mut connected = is_connected.lock().unwrap();
+                *connected = false;
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
 }
 
 /// Poll for new events (non-blocking)
@@ -194,8 +274,20 @@ pub fn stream_poll(args: &[Value]) -> Result<Value> {
             .ok_or_else(|| Error::runtime(format!("stream-poll: stream not found: {}", stream_id)))?
     };
 
-    // Poll HTTP endpoint
-    let events = poll_events_sync(&handle, limit)?;
+    // Check if still connected
+    {
+        let connected = handle.is_connected.lock().unwrap();
+        if !*connected {
+            return Err(Error::runtime("stream-poll: WebSocket connection closed".to_string()));
+        }
+    }
+
+    // Drain events from buffer
+    let events = {
+        let mut buffer = handle.event_buffer.lock().unwrap();
+        let drain_count = buffer.len().min(limit);
+        buffer.drain(0..drain_count).collect::<Vec<_>>()
+    };
 
     // Convert events to OVSM Value array
     let event_values: Vec<Value> = events
@@ -248,23 +340,34 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
             .ok_or_else(|| Error::runtime(format!("stream-wait: stream not found: {}", stream_id)))?
     };
 
-    // Poll with retries until event or timeout
-    let start = SystemTime::now();
+    // Wait for event with timeout
+    let start = std::time::Instant::now();
     let timeout_duration = Duration::from_secs(timeout_secs);
 
-    loop {
-        let events = poll_events_sync(&handle, 1)?;
-        if !events.is_empty() {
-            return Ok(json_to_value(&events[0]));
+    while start.elapsed() < timeout_duration {
+        // Check buffer
+        {
+            let mut buffer = handle.event_buffer.lock().unwrap();
+            if !buffer.is_empty() {
+                let event = buffer.remove(0);
+                return Ok(json_to_value(&event));
+            }
         }
 
-        if start.elapsed().unwrap_or(Duration::ZERO) >= timeout_duration {
-            return Ok(Value::Null);
+        // Check if still connected
+        {
+            let connected = handle.is_connected.lock().unwrap();
+            if !*connected {
+                return Err(Error::runtime("stream-wait: WebSocket connection closed".to_string()));
+            }
         }
 
-        // Sleep for 100ms before retry
-        std::thread::sleep(Duration::from_millis(100));
+        // Sleep briefly before checking again
+        thread::sleep(Duration::from_millis(100));
     }
+
+    // Timeout - return null
+    Ok(Value::Null)
 }
 
 /// Close streaming connection
@@ -274,7 +377,7 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
 /// Parameters:
 /// - `stream-id`: Stream ID returned from stream-connect
 ///
-/// Returns: true on success
+/// Returns: Boolean indicating success
 pub fn stream_close(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
         return Err(Error::runtime("stream-close requires stream-id argument".to_string()));
@@ -286,10 +389,12 @@ pub fn stream_close(args: &[Value]) -> Result<Value> {
     };
 
     // Remove from registry
-    let mut registry = STREAM_REGISTRY.lock().unwrap();
-    registry.remove(&stream_id);
+    let removed = {
+        let mut registry = STREAM_REGISTRY.lock().unwrap();
+        registry.remove(&stream_id).is_some()
+    };
 
-    Ok(Value::Bool(true))
+    Ok(Value::Bool(removed))
 }
 
 /// Helper: Extract string array from Value
@@ -315,43 +420,6 @@ fn extract_string_array(value: &Value) -> Result<Vec<String>> {
     }
 }
 
-/// Helper: Poll events from HTTP endpoint (synchronous)
-fn poll_events_sync(handle: &StreamHandle, limit: usize) -> Result<Vec<JsonValue>> {
-    // Use blocking reqwest client to avoid nested runtime issues
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| Error::runtime(format!("Failed to create HTTP client: {}", e)))?;
-
-    let url = format!("{}/events?limit={}", handle.url, limit);
-
-    let response = client
-        .get(&url)
-        .send()
-        .map_err(|e| Error::runtime(format!("HTTP request failed: {}", e)))?;
-
-    let events: Vec<JsonValue> = response
-        .json()
-        .map_err(|e| Error::runtime(format!("Failed to parse JSON response: {}", e)))?;
-
-    // Apply filters if any
-    let filtered = if handle.filters.programs.is_empty()
-        && handle.filters.tokens.is_empty()
-        && handle.filters.accounts.is_empty()
-        && handle.filters.event_types.is_empty()
-        && !handle.filters.success_only
-    {
-        events
-    } else {
-        events
-            .into_iter()
-            .filter(|event| filter_event(event, &handle.filters))
-            .collect()
-    };
-
-    Ok(filtered)
-}
-
 /// Helper: Filter event based on StreamFilters
 fn filter_event(event: &JsonValue, filters: &StreamFilters) -> bool {
     // Filter by event type
@@ -374,8 +442,8 @@ fn filter_event(event: &JsonValue, filters: &StreamFilters) -> bool {
         }
     }
 
-    // Note: Program/token/account filtering is done server-side via connection parameters
-    // These filters are redundant but kept for client-side double-checking
+    // Note: Program/token/account filtering should be done server-side
+    // These filters are for client-side double-checking if needed
 
     true
 }
