@@ -366,7 +366,8 @@ impl ElfWriter {
         let dynamic_vaddr = rodata_vaddr + rodata_size as u64;
         let dynsym_vaddr = dynamic_vaddr + dynamic_size as u64;
         let dynstr_vaddr = dynsym_vaddr + dynsym_size as u64;
-        let reldyn_vaddr = dynstr_vaddr + dynstr_size as u64;
+        // Must align to 8 bytes to match file offset alignment (for Elf64Rel)
+        let reldyn_vaddr = ((dynstr_vaddr + dynstr_size as u64) + 7) & !7;
 
         // Build ELF
         let mut elf = Vec::new();
