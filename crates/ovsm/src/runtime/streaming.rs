@@ -22,7 +22,6 @@
 
 use crate::error::{Error, Result};
 use crate::runtime::Value;
-use reqwest::Client;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -318,23 +317,21 @@ fn extract_string_array(value: &Value) -> Result<Vec<String>> {
 
 /// Helper: Poll events from HTTP endpoint (synchronous)
 fn poll_events_sync(handle: &StreamHandle, limit: usize) -> Result<Vec<JsonValue>> {
-    let client = Client::builder()
+    // Use blocking reqwest client to avoid nested runtime issues
+    let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| Error::runtime(format!("Failed to create HTTP client: {}", e)))?;
 
     let url = format!("{}/events?limit={}", handle.url, limit);
 
-    // Build runtime for sync reqwest call
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| Error::runtime(format!("Failed to create tokio runtime: {}", e)))?;
-
-    let response = runtime
-        .block_on(client.get(&url).send())
+    let response = client
+        .get(&url)
+        .send()
         .map_err(|e| Error::runtime(format!("HTTP request failed: {}", e)))?;
 
-    let events: Vec<JsonValue> = runtime
-        .block_on(response.json())
+    let events: Vec<JsonValue> = response
+        .json()
         .map_err(|e| Error::runtime(format!("Failed to parse JSON response: {}", e)))?;
 
     // Apply filters if any

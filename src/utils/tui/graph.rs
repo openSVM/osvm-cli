@@ -1317,6 +1317,20 @@ impl WalletGraph {
         use ratatui::widgets::{Paragraph, canvas::Canvas};
         use ratatui::text::{Line, Span};
 
+        // Split area for trail if enabled
+        let (graph_area, trail_area) = if self.show_trail && self.investigation_trail.is_some() {
+            let chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .constraints([
+                    ratatui::layout::Constraint::Min(10),
+                    ratatui::layout::Constraint::Length(3),
+                ])
+                .split(area);
+            (chunks[0], Some(chunks[1]))
+        } else {
+            (area, None)
+        };
+
         // Detect mixer nodes for visualization
         let mixer_nodes = self.detect_mixer_nodes();
 
@@ -1332,8 +1346,13 @@ impl WalletGraph {
                     .title(" Graph │ 0w 0tx ")
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Green)));
-            f.render_widget(widget, area);
+            f.render_widget(widget, graph_area);
             return;
+        }
+
+        // Render investigation trail if enabled
+        if let Some(trail_rect) = trail_area {
+            self.render_investigation_trail(f, trail_rect);
         }
 
         // Canvas-based graph for ANY size (scales to 10K+ nodes)
@@ -2205,24 +2224,91 @@ impl WalletGraph {
 
     /// Update investigation trail when node is selected
     pub fn update_trail_on_selection(&mut self, new_node_idx: usize) {
-        if let Some(ref mut trail) = self.investigation_trail {
-            // Only add if it's a different node than current
-            if trail.current_step().node_index != new_node_idx && new_node_idx < self.nodes.len() {
-                let address = self.nodes[new_node_idx].0.clone();
-                let risk_level = self.calculate_node_risk_level(new_node_idx);
+        // Check if we should add to trail
+        let should_add = if let Some(ref trail) = self.investigation_trail {
+            trail.current_step().node_index != new_node_idx && new_node_idx < self.nodes.len()
+        } else {
+            false
+        };
 
-                // Generate contextual note
-                let note = if matches!(self.nodes[new_node_idx].1.node_type, WalletNodeType::Mixer) {
-                    Some("Mixer detected".to_string())
-                } else if let Some(cluster) = self.get_wallet_cluster(&address) {
-                    Some(format!("Cluster #{} ({} wallets)", cluster.cluster_id, cluster.wallet_addresses.len()))
-                } else {
-                    None
-                };
+        if should_add {
+            // Calculate values before mutable borrow
+            let address = self.nodes[new_node_idx].0.clone();
+            let risk_level = self.calculate_node_risk_level(new_node_idx);
 
+            // Generate contextual note
+            let note = if matches!(self.nodes[new_node_idx].1.node_type, WalletNodeType::Mixer) {
+                Some("Mixer detected".to_string())
+            } else if let Some(cluster) = self.get_wallet_cluster(&address) {
+                Some(format!("Cluster #{} ({} wallets)", cluster.cluster_id, cluster.wallet_addresses.len()))
+            } else {
+                None
+            };
+
+            // Now add to trail
+            if let Some(ref mut trail) = self.investigation_trail {
                 trail.add_step(new_node_idx, address, risk_level, note);
             }
         }
+    }
+
+    /// Render investigation trail breadcrumb bar
+    fn render_investigation_trail(&self, f: &mut Frame, area: Rect) {
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+
+        let Some(ref trail) = self.investigation_trail else {
+            return;
+        };
+
+        let block = Block::default()
+            .title(" 🔍 Trail ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Blue));
+
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        // Build breadcrumb line
+        let mut spans = Vec::new();
+
+        for (i, step) in trail.steps.iter().enumerate() {
+            let is_current = i == trail.current_index;
+
+            // Risk icon
+            let icon = match step.risk_level {
+                RiskLevel::Critical => "🔴",
+                RiskLevel::High => "🟠",
+                RiskLevel::Medium => "🟡",
+                RiskLevel::Low => "🟢",
+            };
+
+            // Abbreviated address
+            let addr = if step.wallet_address.len() > 10 {
+                format!("{}...{}", &step.wallet_address[..4], &step.wallet_address[step.wallet_address.len().saturating_sub(3)..])
+            } else {
+                step.wallet_address.clone()
+            };
+
+            // Style
+            let style = if is_current {
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+
+            spans.push(Span::styled(format!("{} {}", icon, addr), style));
+
+            // Arrow separator
+            if i < trail.steps.len() - 1 {
+                spans.push(Span::styled(" → ", Style::default().fg(Color::DarkGray)));
+            }
+        }
+
+        let line = Line::from(spans);
+        let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
+
+        f.render_widget(paragraph, inner);
     }
 
 }
