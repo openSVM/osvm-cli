@@ -539,8 +539,8 @@ impl ElfWriter {
         // ==================== .rel.dyn Section ====================
         for sc in syscalls {
             let sym_idx = *seen_syscalls.get(&sc.name).unwrap();
-            // r_offset: address of the call instruction's imm field (offset + 4)
-            let r_offset = TEXT_VADDR + sc.offset as u64 + 4;
+            // r_offset: address of the call instruction START (loader adds +4 for R_BPF_64_32)
+            let r_offset = TEXT_VADDR + sc.offset as u64;
             elf.extend_from_slice(&r_offset.to_le_bytes());
             // r_info: symbol index + relocation type
             // Use R_BPF_64_32 for 32-bit immediate field relocations (syscalls)
