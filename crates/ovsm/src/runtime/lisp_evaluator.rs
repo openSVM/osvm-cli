@@ -20,8 +20,8 @@ use std::sync::Arc;
 /// - `(for (var coll) body)` - For loops
 /// - `(const name value)` - Constants
 pub struct LispEvaluator {
-    /// Variable environment
-    env: Environment,
+    /// Variable environment (public for async-call thread pool access)
+    pub env: Environment,
     /// Tool registry
     registry: Arc<ToolRegistry>,
     /// Gensym counter for generating unique symbols
@@ -125,7 +125,8 @@ impl LispEvaluator {
     }
 
     /// Evaluate an expression with LISP special form handling
-    fn evaluate_expression(&mut self, expr: &Expression) -> Result<Value> {
+    /// Evaluate a single expression (public for async-call thread pool access)
+    pub fn evaluate_expression(&mut self, expr: &Expression) -> Result<Value> {
         // First, try macro expansion
         if let Some(expanded) = self.try_expand_macro(expr)? {
             // Recursively evaluate expanded form (macros can expand to macro calls)
@@ -370,6 +371,8 @@ impl LispEvaluator {
                     "stream-wait" => self.eval_stream_wait(args),
                     "stream-close" => self.eval_stream_close(args),
                     "osvm-stream" => self.eval_osvm_stream(args),
+                    // Async execution
+                    "async-call" => self.eval_async_call(args),
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
@@ -9121,6 +9124,44 @@ impl LispEvaluator {
 
         // Call the streaming helper
         crate::runtime::streaming::osvm_stream(&evaluated_args)
+    }
+
+    /// (async-call function arg1 arg2 ...) - Execute function in thread pool (fire-and-forget)
+    ///
+    /// Dispatches function execution to the global thread pool for concurrent processing.
+    /// This enables parallel event handling without blocking the main thread.
+    ///
+    /// **Fire-and-forget semantics**: Returns immediately (null), does not wait for completion
+    /// **Side-effects only**: Cannot return values to caller
+    /// **Isolated execution**: Each async call runs in its own evaluator instance
+    ///
+    /// Example:
+    /// ```lisp
+    /// (defun process-event (event)
+    ///   (println (str "Processing: " (get event "id"))))
+    ///
+    /// ;; Process events concurrently
+    /// (for (event events)
+    ///   (async-call process-event event))  ; Returns immediately, processes in background
+    /// ```
+    fn eval_async_call(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::runtime(
+                "async-call requires at least a function argument".to_string(),
+            ));
+        }
+
+        // Evaluate function argument
+        let func_value = self.evaluate_expression(&args[0].value)?;
+
+        // Evaluate function arguments
+        let mut call_args = Vec::new();
+        for arg in &args[1..] {
+            call_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Delegate to streaming module for thread pool execution
+        crate::runtime::streaming::async_call(func_value, call_args)
     }
 }
 

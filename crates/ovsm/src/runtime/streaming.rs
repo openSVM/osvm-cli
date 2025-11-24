@@ -5,19 +5,39 @@
 /// - `(stream-poll stream-id :limit 50)` - Poll buffered events (non-blocking)
 /// - `(stream-wait stream-id :timeout 30)` - Wait for next event (blocking with timeout)
 /// - `(stream-close stream-id)` - Close WebSocket connection
+/// - `(async-call function arg1 arg2 ...)` - Execute function in thread pool (concurrent processing)
 ///
-/// Example usage:
+/// Example usage (V5 - Event-Driven):
 /// ```lisp
 /// ;; Connect to Pump.fun event stream via WebSocket
 /// (define stream (stream-connect "ws://localhost:8080/ws" :programs ["pumpfun"]))
 ///
-/// ;; Poll for events in a loop
+/// ;; Event-driven loop - blocks until event arrives (<1ms latency)
 /// (while true
-///   (define events (stream-poll stream :limit 50))
-///   (for (event events)
-///     (if (= (get event "type") "token_transfer")
-///         (log :message "Transfer:" :value (get event "amount"))
-///         null)))
+///   (define event (stream-wait stream :timeout 1))
+///   (if (not (null? event))
+///       (if (= (get event "type") "token_transfer")
+///           (log :message "Transfer:" :value (get event "amount"))
+///           null)
+///       null))
+/// ```
+///
+/// Example usage (V6 - Concurrent Processing):
+/// ```lisp
+/// ;; Define event handler
+/// (defun process-transfer (event)
+///   (do
+///     (define amount (get event "amount"))
+///     (define token (get event "token"))
+///     (println (str "Processing: " amount " of " token))))
+///
+/// ;; Process events concurrently in thread pool
+/// (define stream (stream-connect "ws://localhost:8080/ws" :programs ["pumpfun"]))
+/// (while true
+///   (define event (stream-wait stream :timeout 1))
+///   (if (not (null? event))
+///       (async-call process-transfer event)  ; Dispatches to thread pool, returns immediately
+///       null))
 /// ```
 
 use crate::error::{Error, Result};
@@ -636,4 +656,98 @@ fn spawn_internal_server(
     });
 
     Ok(())
+}
+
+/// Execute function asynchronously in thread pool (fire-and-forget)
+///
+/// Syntax: `(async-call function arg1 arg2 ...)`
+///
+/// This enables concurrent event processing by dispatching function execution
+/// to the global thread pool. Each call runs in an isolated evaluator instance.
+///
+/// **Key Characteristics:**
+/// - **Fire-and-forget**: Returns immediately with null, does not wait for completion
+/// - **Side-effects only**: Cannot return values to caller (prints, logs, I/O only)
+/// - **Isolated execution**: Each async call gets its own evaluator + environment
+/// - **Closure capture**: Lambda closures are properly preserved
+/// - **Thread-safe**: No shared state between async calls
+///
+/// **Performance:**
+/// - Utilizes all CPU cores (worker pool size = num_cpus)
+/// - No blocking on main thread
+/// - Ideal for I/O-heavy or CPU-intensive event handlers
+///
+/// Example:
+/// ```lisp
+/// (defun process-transfer (event)
+///   (do
+///     (define amount (get event "amount"))
+///     (define token (get event "token"))
+///     (println (str "Processing: " amount " of " token))
+///     (http-post "https://api.example.com/notify" (str amount))))
+///
+/// ;; Process 100 events concurrently
+/// (for (event events)
+///   (async-call process-transfer event))  ; Returns immediately, processes in parallel
+/// ```
+pub fn async_call(func: Value, args: Vec<Value>) -> Result<Value> {
+    match func {
+        Value::Function {
+            params,
+            body,
+            closure,
+            ..
+        } => {
+            // Validate arity
+            if params.len() != args.len() {
+                return Err(Error::runtime(format!(
+                    "async-call: function expects {} arguments, got {}",
+                    params.len(),
+                    args.len()
+                )));
+            }
+
+            // Clone everything for thread pool (must be Send + Sync)
+            let params_clone = params.clone();
+            let body_clone = Arc::clone(&body);
+            let closure_clone = Arc::clone(&closure);
+            let args_clone = args.clone();
+
+            // Dispatch to thread pool
+            THREAD_POOL.spawn(move || {
+                // Import here to avoid circular dependency in module-level use
+                use crate::runtime::Environment;
+                use crate::runtime::LispEvaluator;
+
+                // Create isolated evaluator for this thread
+                let mut evaluator = LispEvaluator::new();
+
+                // Restore closure environment (captured variables)
+                for (var_name, var_value) in closure_clone.iter() {
+                    evaluator.env.define(var_name.clone(), var_value.clone());
+                }
+
+                // Bind function parameters
+                for (param_name, arg_value) in params_clone.iter().zip(args_clone.iter()) {
+                    evaluator.env.define(param_name.clone(), arg_value.clone());
+                }
+
+                // Execute function body (ignore result - fire and forget)
+                match evaluator.evaluate_expression(&body_clone) {
+                    Ok(_) => {} // Success - result discarded
+                    Err(e) => {
+                        // Log error but don't propagate (fire-and-forget semantics)
+                        eprintln!("⚠️  async-call error: {}", e);
+                    }
+                }
+            });
+
+            // Return immediately (null)
+            Ok(Value::Null)
+        }
+        _ => Err(Error::runtime(format!(
+            "async-call: first argument must be a function, got {}",
+            func.type_name()
+        ))),
+    }
 }

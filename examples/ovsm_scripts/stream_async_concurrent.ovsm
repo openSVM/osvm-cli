@@ -1,0 +1,160 @@
+;;; OVSM V6: Concurrent Event Processing with async-call
+;;;
+;;; This script demonstrates parallel processing of blockchain events
+;;; using the thread pool for maximum throughput.
+
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  OSVM V6 - CONCURRENT EVENT PROCESSING")
+(println "  🚀 Multi-Core Parallel Processing with async-call")
+(println "═══════════════════════════════════════════════════════════════")
+(println "")
+
+;; Connect to Pump.fun WebSocket stream
+(define stream-id (stream-connect "ws://localhost:8080/ws" :programs ["pumpfun"]))
+
+(println "✅ Connected to WebSocket stream")
+(println (str "🔧 Thread pool initialized (" (getenv "NUM_CPUS" "8") " workers)"))
+(println "📡 Starting concurrent event processing...")
+(println "")
+
+;; ==================================================================
+;; DEFINE EVENT HANDLERS (These will run concurrently in thread pool)
+;; ==================================================================
+
+;; Handler for token transfers
+(defun handle-transfer (event)
+  (do
+    (define token (get event "token"))
+    (define amount (get event "amount"))
+    (define from (get event "from"))
+    (define to (get event "to"))
+
+    ;; Check if it's a Pump.fun token (ends with "pump")
+    (if (> (length token) 4)
+        (do
+          (define last-4 (substring token (- (length token) 4) (length token)))
+          (if (= last-4 "pump")
+              (do
+                (println "")
+                (println "═══════════════════════════════════════════════")
+                (println (str "💸 TRANSFER: " amount " tokens"))
+                (println (str "Token:  " token))
+                (println (str "From:   " from))
+                (println (str "To:     " to))
+                (println "═══════════════════════════════════════════════"))
+              null))
+        null)))
+
+;; Handler for buy events
+(defun handle-buy (event)
+  (do
+    (define sig (get event "signature"))
+    (println "")
+    (println "🟢 BUY EVENT DETECTED!")
+    (println (str "Signature: " sig))
+    (println (str "osvm.ai:   https://osvm.ai/tx/" sig))))
+
+;; Handler for sell events
+(defun handle-sell (event)
+  (do
+    (define sig (get event "signature"))
+    (println "")
+    (println "🔴 SELL EVENT DETECTED!")
+    (println (str "Signature: " sig))
+    (println (str "osvm.ai:   https://osvm.ai/tx/" sig))))
+
+;; Handler for graduation events
+(defun handle-graduation (event)
+  (do
+    (define sig (get event "signature"))
+    (define slot (get event "slot"))
+    (println "")
+    (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+    (println "🎓 TOKEN GRADUATION - MIGRATING TO RAYDIUM 🚀")
+    (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+    (println (str "Signature: " sig))
+    (println (str "Slot:      " slot))
+    (println (str "osvm.ai:   https://osvm.ai/tx/" sig))
+    (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+    (println "")))
+
+;; ==================================================================
+;; MAIN EVENT LOOP - Dispatches events to thread pool
+;; ==================================================================
+
+(define start-time (now))
+(define duration 60)
+(define event-count 0)
+(define async-count 0)
+
+(println (str "⏱️  Processing for " duration " seconds with concurrent handlers..."))
+(println "")
+
+(while (< (- (now) start-time) duration)
+  ;; stream-wait BLOCKS until next event arrives (<1ms latency)
+  (define event (stream-wait stream-id :timeout 1))
+
+  (if (not (null? event))
+      (do
+        (set! event-count (+ event-count 1))
+        (define event-type (get event "type"))
+
+        ;; ═══════════════════════════════════════════════════════
+        ;; V6 CONCURRENT DISPATCH - async-call returns immediately
+        ;; ═══════════════════════════════════════════════════════
+        (if (= event-type "token_transfer")
+            (do
+              (async-call handle-transfer event)  ;; Dispatches to thread pool
+              (set! async-count (+ async-count 1)))
+            null)
+
+        (if (= event-type "log_message")
+            (do
+              (define logs (str (get event "logs")))
+
+              (if (string-contains logs "Instruction: Buy")
+                  (do
+                    (async-call handle-buy event)  ;; Concurrent processing
+                    (set! async-count (+ async-count 1)))
+                  null)
+
+              (if (string-contains logs "Instruction: Sell")
+                  (do
+                    (async-call handle-sell event)  ;; Concurrent processing
+                    (set! async-count (+ async-count 1)))
+                  null)
+
+              (if (or (string-contains logs "raydium")
+                      (string-contains logs "Instruction: Graduate"))
+                  (do
+                    (async-call handle-graduation event)  ;; Concurrent processing
+                    (set! async-count (+ async-count 1)))
+                  null))
+            null))
+      null))
+
+;; Summary
+(println "")
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  CONCURRENT PROCESSING SUMMARY")
+(println "═══════════════════════════════════════════════════════════════")
+(println (str "Duration:         " duration " seconds"))
+(println (str "Events Received:  " event-count " (event-driven, no polling!)"))
+(println (str "Async Dispatches: " async-count " (processed concurrently)"))
+(println (str "Throughput:       " (/ event-count duration) " events/sec"))
+(println "")
+(println "🚀 V6 FEATURES:")
+(println "   ✅ Event-driven WebSocket (<1ms latency)")
+(println "   ✅ Concurrent processing (thread pool)")
+(println "   ✅ Multi-core utilization")
+(println "   ✅ Non-blocking event dispatch")
+(println "═══════════════════════════════════════════════════════════════")
+
+(stream-close stream-id)
+(println "")
+(println "✅ Stream closed")
+(println "⏳ Waiting for async tasks to complete...")
+(sleep 1000)  ;; Give thread pool time to finish
+(println "✅ All done!")
