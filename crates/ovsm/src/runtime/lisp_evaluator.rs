@@ -211,6 +211,10 @@ impl LispEvaluator {
                     "hex-encode" => self.eval_hex_encode(args),
                     "sha256" => self.eval_sha256(args),
                     "sha512" => self.eval_sha512(args),
+                    // Binary/byte operations for Borsh decoding
+                    "byte-at" => self.eval_byte_at(args),
+                    "parse-u64-le" => self.eval_parse_u64_le(args),
+                    "bytes-to-hex" => self.eval_bytes_to_hex(args),
                     // Error handling
                     "try" => self.eval_try(args),
                     "error" => self.eval_error(args),
@@ -4225,6 +4229,120 @@ impl LispEvaluator {
         let hash_hex = hex::encode(result);
 
         Ok(Value::String(hash_hex))
+    }
+
+    /// (byte-at string index) - Get byte value at index from string (for binary data)
+    fn eval_byte_at(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "byte-at".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let string_val = self.evaluate_expression(&args[0].value)?;
+        let index_val = self.evaluate_expression(&args[1].value)?;
+
+        let s = match string_val {
+            Value::String(s) => s,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: string_val.type_name().to_string(),
+                })
+            }
+        };
+
+        let idx = match index_val {
+            Value::Int(i) => i as usize,
+            Value::Float(f) => f as usize,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: index_val.type_name().to_string(),
+                })
+            }
+        };
+
+        let bytes = s.as_bytes();
+        if idx >= bytes.len() {
+            return Ok(Value::Null);
+        }
+
+        Ok(Value::Int(bytes[idx] as i64))
+    }
+
+    /// (parse-u64-le bytes offset) - Parse little-endian u64 from bytes starting at offset
+    fn eval_parse_u64_le(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "parse-u64-le".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let bytes_val = self.evaluate_expression(&args[0].value)?;
+        let offset_val = self.evaluate_expression(&args[1].value)?;
+
+        let s = match bytes_val {
+            Value::String(s) => s,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: bytes_val.type_name().to_string(),
+                })
+            }
+        };
+
+        let offset = match offset_val {
+            Value::Int(i) => i as usize,
+            Value::Float(f) => f as usize,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: offset_val.type_name().to_string(),
+                })
+            }
+        };
+
+        let bytes = s.as_bytes();
+        if offset + 8 > bytes.len() {
+            return Err(Error::RuntimeError(format!(
+                "parse-u64-le: offset {} + 8 exceeds byte length {}",
+                offset,
+                bytes.len()
+            )));
+        }
+
+        // Parse little-endian u64
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(&bytes[offset..offset + 8]);
+        let value = u64::from_le_bytes(buf);
+
+        Ok(Value::Int(value as i64))
+    }
+
+    /// (bytes-to-hex bytes) - Convert bytes string to hex string
+    fn eval_bytes_to_hex(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "bytes-to-hex".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let s = match val {
+            Value::String(s) => s,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
+        };
+
+        Ok(Value::String(hex::encode(s.as_bytes())))
     }
 
     /// (log :message msg) - Log message
