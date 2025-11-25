@@ -1,1 +1,0 @@
-{"rustc":15667804273984634056,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[17602887060493258289,"build_script_build",false,9850532688833792585]],"local":[{"RerunIfChanged":{"output":"sbpf-solana-solana/release/build/serde-c7a8be2ee9cfbdee/output","paths":["build.rs"]}}],"rustflags":["-Zremap-cwd-prefix="],"metadata":0,"config":0,"compile_kind":0}

@@ -170,3 +170,4 @@ source/turbo*/
 test/turbo*/
 
 src/services/*.backup-*
+programs/bbs-registry/target/
