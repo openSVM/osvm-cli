@@ -667,6 +667,195 @@ impl IrGenerator {
                     return Ok(Some(dst));
                 }
 
+                // Handle (account-pubkey idx) - get pointer to 32-byte account pubkey
+                // Pubkey is at offset 8 from account start (after dup_info, is_signer, is_writable, executable, padding)
+                // Layout: dup_info(1) + is_signer(1) + is_writable(1) + executable(1) + padding(4) = 8
+                if name == "account-pubkey" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-pubkey index has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // Pubkey offset within account = 8 (after flags and padding)
+                    let pubkey_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(pubkey_offset, 8));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, pubkey_offset));
+
+                    // Return pointer to the pubkey (not the value itself - it's 32 bytes)
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dst, accounts_ptr, total_offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (account-owner idx) - get pointer to 32-byte account owner
+                // Owner is at offset 40 from account start (after pubkey)
+                // Layout: flags(8) + pubkey(32) = 40
+                if name == "account-owner" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-owner index has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // Owner offset within account = 40 (8 + 32)
+                    let owner_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(owner_offset, 40));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, owner_offset));
+
+                    // Return pointer to the owner pubkey (32 bytes)
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dst, accounts_ptr, total_offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (account-is-signer idx) - check if account is signer (1 byte at offset 1)
+                if name == "account-is-signer" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-is-signer index has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // is_signer is at offset 1 from account start
+                    let signer_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(signer_offset, 1));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, signer_offset));
+
+                    let addr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
+
+                    // Load 1 byte (will be 0 or 1)
+                    // Note: sBPF Load always loads 8 bytes, but is_signer is just 1 byte
+                    // The value will be in the low byte, need to mask
+                    let raw = self.alloc_reg();
+                    self.emit(IrInstruction::Load(raw, addr, 0));
+
+                    // Mask to get just the lowest byte
+                    let mask = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(mask, 0xFF));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::And(dst, raw, mask));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (account-is-writable idx) - check if account is writable (1 byte at offset 2)
+                if name == "account-is-writable" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-is-writable index has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // is_writable is at offset 2 from account start
+                    let writable_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(writable_offset, 2));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, writable_offset));
+
+                    let addr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
+
+                    let raw = self.alloc_reg();
+                    self.emit(IrInstruction::Load(raw, addr, 0));
+
+                    let mask = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(mask, 0xFF));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::And(dst, raw, mask));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (mem-load ptr offset) - load 8 bytes from memory
+                // Returns: u64 value at ptr+offset
+                if name == "mem-load" && args.len() == 2 {
+                    let ptr_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-load ptr has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-load offset must be constant")),
+                    };
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load(dst, ptr_reg, offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (mem-load1 ptr offset) - load 1 byte from memory
+                // Returns: u8 value at ptr+offset (zero-extended to u64)
+                if name == "mem-load1" && args.len() == 2 {
+                    let ptr_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-load1 ptr has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-load1 offset must be constant")),
+                    };
+                    // Load 8 bytes then mask to get 1 byte
+                    let raw = self.alloc_reg();
+                    self.emit(IrInstruction::Load(raw, ptr_reg, offset));
+                    let mask = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(mask, 0xFF));
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::And(dst, raw, mask));
+                    return Ok(Some(dst));
+                }
+
                 // Handle (mem-store base offset value) - direct memory store
                 if name == "mem-store" && args.len() == 3 {
                     let base_reg = self.generate_expr(&args[0].value)?
@@ -734,6 +923,17 @@ impl IrGenerator {
 
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Syscall(Some(dst), name.clone(), arg_regs));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (sol_log_pubkey ptr) - log a 32-byte public key
+                // Takes a pointer to 32 bytes and logs it in base58 format
+                if name == "sol_log_pubkey" && args.len() == 1 {
+                    let ptr_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("sol_log_pubkey ptr has no result"))?;
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(Some(dst), "sol_log_pubkey".to_string(), vec![ptr_reg]));
                     return Ok(Some(dst));
                 }
 

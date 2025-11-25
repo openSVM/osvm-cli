@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2025-11-25
+
+### Added
+- 🔧 **sBPF Compiler Account Access Functions** - Full account field access for Solana programs
+  - `account-pubkey` - Get pointer to 32-byte account public key
+  - `account-owner` - Get pointer to 32-byte owner public key
+  - `account-is-signer` - Check if account signed the transaction
+  - `account-is-writable` - Check if account is writable
+- 🔧 **Memory Access Functions**
+  - `mem-load` - Load 8 bytes (u64) from memory pointer + offset
+  - `mem-load1` - Load 1 byte from memory pointer + offset
+- 🔧 **Logging Syscall**
+  - `sol_log_pubkey` - Log 32-byte public key in base58 format
+- 📝 **New Documentation**
+  - `SBPF_COMPILER_BUILTINS.md` - Complete reference for sBPF compiler built-in functions
+
+### Changed
+- 🔧 Account field offsets verified against Solana's deserialize.h
+  - `lamports` at offset 72 (corrected from 80)
+  - `data_len` at offset 80
+  - `data` at offset 88
+  - `pubkey` at offset 8
+  - `owner` at offset 40
+  - `is_signer` at offset 1
+  - `is_writable` at offset 2
+
+### Fixed
+- 🐛 **Critical**: Fixed register clobbering bug where `next_reg` could allocate reserved registers (R6/R7)
+- 🐛 Fixed `set!` to emit Move instructions for proper variable mutation in loops
+- 🐛 Fixed JumpIf/JumpIfNot to use get_reg() for conditions in while loops
+
+### Tested
+- ✅ All account access functions verified on Solana devnet
+- ✅ `sol_log_pubkey` correctly outputs base58 pubkeys
+- ✅ `mem-load` correctly reads memory at pointer offsets
+
 ## [1.0.4] - 2025-11-08
 
 ### Added
