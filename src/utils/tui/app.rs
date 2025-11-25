@@ -26,6 +26,7 @@ pub enum TabIndex {
     Graph = 2,
     Logs = 3,
     SearchResults = 4,
+    BBS = 5,            // Meshtastic BBS for agent-human communication
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -132,6 +133,8 @@ pub struct OsvmApp {
     pub chat_input_active: bool,
     pub chat_scroll: usize,
     pub chat_auto_scroll: bool,  // Auto-scroll to bottom on new messages
+    // BBS interface
+    pub bbs_state: Arc<Mutex<crate::utils::bbs::tui_widgets::BBSTuiState>>,
 }
 
 /// Real-time network statistics
@@ -234,7 +237,7 @@ impl SearchSuggestion {
 impl OsvmApp {
     pub fn new(target_wallet: String) -> Self {
         Self {
-            active_tab: TabIndex::Dashboard,
+            active_tab: TabIndex::Chat,  // Chat is the default tab
             agent_output: Arc::new(Mutex::new(Vec::new())),
             wallet_graph: Arc::new(Mutex::new(WalletGraph::new(target_wallet.clone()))),
             token_volumes: Arc::new(Mutex::new(Vec::new())),
@@ -285,6 +288,8 @@ impl OsvmApp {
             chat_input_active: false,
             chat_scroll: 0,
             chat_auto_scroll: true,
+            // BBS interface initialization
+            bbs_state: Arc::new(Mutex::new(crate::utils::bbs::tui_widgets::BBSTuiState::new())),
         }
     }
 
@@ -1087,6 +1092,7 @@ impl OsvmApp {
                         KeyCode::Char('2') => self.active_tab = TabIndex::Graph,
                         KeyCode::Char('3') => self.active_tab = TabIndex::Logs,
                         KeyCode::Char('4') => self.active_tab = TabIndex::SearchResults,
+                        KeyCode::Char('5') => self.active_tab = TabIndex::BBS,
                         KeyCode::Char('t') | KeyCode::Char('T') => {
                             // Toggle investigation trail visibility in graph view
                             if self.active_tab == TabIndex::Graph {
@@ -1367,19 +1373,23 @@ impl OsvmApp {
 
     fn next_tab(&mut self) {
         self.active_tab = match self.active_tab {
+            TabIndex::Chat => TabIndex::Dashboard,
             TabIndex::Dashboard => TabIndex::Graph,
             TabIndex::Graph => TabIndex::Logs,
             TabIndex::Logs => TabIndex::SearchResults,
-            TabIndex::SearchResults => TabIndex::Dashboard,
+            TabIndex::SearchResults => TabIndex::BBS,
+            TabIndex::BBS => TabIndex::Chat,
         };
     }
 
     fn previous_tab(&mut self) {
         self.active_tab = match self.active_tab {
-            TabIndex::Dashboard => TabIndex::SearchResults,
+            TabIndex::Chat => TabIndex::BBS,
+            TabIndex::Dashboard => TabIndex::Chat,
             TabIndex::Graph => TabIndex::Dashboard,
             TabIndex::Logs => TabIndex::Graph,
             TabIndex::SearchResults => TabIndex::Logs,
+            TabIndex::BBS => TabIndex::SearchResults,
         };
     }
 
@@ -1392,6 +1402,11 @@ impl OsvmApp {
             TabIndex::Graph => self.render_full_graph(f, size),
             TabIndex::Logs => self.render_full_logs(f, size),
             TabIndex::SearchResults => self.render_search_results_tab(f, size),
+            TabIndex::BBS => {
+                if let Ok(mut bbs_state) = self.bbs_state.lock() {
+                    crate::utils::bbs::tui_widgets::render_bbs_tab(f, size, &mut bbs_state);
+                }
+            }
         }
 
         // Render help overlay if active
@@ -1635,6 +1650,11 @@ impl OsvmApp {
         // Tab indicators
         let tabs: Vec<Span> = vec![
             Span::styled("│", Style::default().fg(Color::DarkGray)),
+            if self.active_tab == TabIndex::Chat {
+                Span::styled(" ▣ Chat ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            } else {
+                Span::styled(" □ Chat ", Style::default().fg(Color::DarkGray))
+            },
             if self.active_tab == TabIndex::Dashboard {
                 Span::styled(" ▣ Dashboard ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
             } else {
@@ -2385,7 +2405,7 @@ impl OsvmApp {
             Line::from(Span::styled(" Real-time blockchain investigation TUI ", Style::default().fg(Color::DarkGray))),
             Line::from(""),
             Line::from(Span::styled(" ─── Navigation ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
-            Line::from("   1/2/3/4      Switch views (Dashboard/Graph/Logs/Search)"),
+            Line::from("   0/1/2/3/4    Switch views (Chat/Dashboard/Graph/Logs/Search)"),
             Line::from("   Tab          Cycle through views"),
             Line::from("   ?/F1         Toggle this help"),
             Line::from("   q/Esc        Quit (or close help)"),
@@ -2404,6 +2424,12 @@ impl OsvmApp {
             Line::from("   y            Copy to clipboard (wallet/search results)"),
             Line::from("   Enter        Center graph on selected wallet (hop)"),
             Line::from("   Space        Expand or collapse node"),
+            Line::from(""),
+            Line::from(Span::styled(" ─── Chat View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from("   i            Activate chat input mode"),
+            Line::from("   Enter        Send message (when in input mode)"),
+            Line::from("   Esc          Cancel input"),
+            Line::from("   j/k          Scroll chat history (when not typing)"),
             Line::from(""),
             Line::from(Span::styled(" ─── Dashboard View ──────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   j/k          Scroll AI Insights panel"),

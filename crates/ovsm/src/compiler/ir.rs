@@ -184,9 +184,12 @@ impl IrGenerator {
         // Entry point
         self.emit(IrInstruction::Label("entry".to_string()));
 
+        eprintln!("🔍 IR DEBUG: Generating IR for {} statements", program.statements.len());
+
         // Generate IR for each statement, tracking last result
         let mut _last_result: Option<IrReg> = None;
-        for typed_stmt in &program.statements {
+        for (i, typed_stmt) in program.statements.iter().enumerate() {
+            eprintln!("  Statement {}: {:?}", i, typed_stmt.statement);
             _last_result = self.generate_statement(&typed_stmt.statement)?;
         }
 
@@ -560,6 +563,111 @@ impl IrGenerator {
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(dst, 0));
                     return Ok(Some(dst));
+                }
+
+                // Handle (log :message msg :value val) - keyword-arg logging with sol_log_ syscall
+                if name == "log" {
+                    eprintln!("🔍 IR DEBUG: log handler called with {} args", args.len());
+                    for (i, arg) in args.iter().enumerate() {
+                        eprintln!("  arg[{}]: name={:?}, value type={:?}", i, arg.name, arg.value);
+                    }
+                    // Parse keyword arguments
+                    let mut message_expr: Option<&Expression> = None;
+                    let mut value_expr: Option<&Expression> = None;
+
+                    for arg in args {
+                        if let Some(ref kw) = arg.name {
+                            match kw.as_str() {
+                                "message" => message_expr = Some(&arg.value),
+                                "value" => value_expr = Some(&arg.value),
+                                _ => {} // Ignore unknown keywords
+                            }
+                        }
+                    }
+
+                    // Build the log message
+                    let mut log_parts = Vec::new();
+
+                    // Add message part if present
+                    if let Some(msg_expr) = message_expr {
+                        match msg_expr {
+                            Expression::StringLiteral(s) => {
+                                log_parts.push(s.clone());
+                            }
+                            _ => {
+                                // For non-literals, evaluate and try to convert
+                                // For now, we'll just skip non-string literals
+                                // TODO: Add runtime string formatting
+                                return Err(Error::runtime(
+                                    "log :message must be a string literal for compilation"
+                                ));
+                            }
+                        }
+                    }
+
+                    // Add value part if present
+                    if let Some(val_expr) = value_expr {
+                        match val_expr {
+                            Expression::IntLiteral(n) => {
+                                log_parts.push(n.to_string());
+                            }
+                            Expression::FloatLiteral(f) => {
+                                log_parts.push(f.to_string());
+                            }
+                            Expression::BoolLiteral(b) => {
+                                log_parts.push(b.to_string());
+                            }
+                            Expression::StringLiteral(s) => {
+                                log_parts.push(s.clone());
+                            }
+                            _ => {
+                                // For dynamic values, use sol_log_64_ syscall instead
+                                // Evaluate the value expression
+                                let val_reg = self.generate_expr(val_expr)?
+                                    .ok_or_else(|| Error::runtime("log value has no result"))?;
+
+                                // If we have a message, log it first with sol_log_
+                                if !log_parts.is_empty() {
+                                    let msg = log_parts.join(" ");
+                                    let idx = self.strings.len();
+                                    self.strings.push(msg.clone());
+                                    let msg_reg = self.alloc_reg();
+                                    self.emit(IrInstruction::ConstString(msg_reg, idx));
+                                    self.emit(IrInstruction::Log(msg_reg, msg.len()));
+                                }
+
+                                // Then log the dynamic value with sol_log_64_
+                                let dst = self.alloc_reg();
+                                self.emit(IrInstruction::Syscall(
+                                    Some(dst),
+                                    "sol_log_64_".to_string(),
+                                    vec![val_reg],
+                                ));
+                                return Ok(Some(dst));
+                            }
+                        }
+                    }
+
+                    // If we have any log parts, emit a single Log instruction
+                    if !log_parts.is_empty() {
+                        let full_message = log_parts.join(" ");
+                        let idx = self.strings.len();
+                        self.strings.push(full_message.clone());
+
+                        let msg_reg = self.alloc_reg();
+                        self.emit(IrInstruction::ConstString(msg_reg, idx));
+                        self.emit(IrInstruction::Log(msg_reg, full_message.len()));
+
+                        // Return success register
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, 0));
+                        return Ok(Some(dst));
+                    } else {
+                        // No arguments - just return success
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, 0));
+                        return Ok(Some(dst));
+                    }
                 }
 
                 // Handle (do expr1 expr2 ... exprN) - sequence of expressions, return last

@@ -3,6 +3,7 @@
 pub mod ai_query;
 pub mod audit_handler;
 pub mod balance;
+pub mod bbs_handler;
 pub mod database;
 pub mod deep_research;
 pub mod deploy_handler;

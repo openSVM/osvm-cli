@@ -52,6 +52,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "qa"
             | "ovsm"
             | "mcp"
+            | "bbs"
             | "mount"
             | "snapshot"
             | "stream"
@@ -332,6 +333,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle OVSM command early to avoid config loading that might trigger self-repair
     if sub_command == "ovsm" {
         return commands::ovsm_handler::handle_ovsm_command(sub_matches).await;
+    }
+
+    // Handle BBS command early - it only needs SQLite, no Solana config
+    if sub_command == "bbs" {
+        return commands::bbs_handler::handle_bbs_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
     }
 
     // Handle snapshot command early - it doesn't need keypair or Solana config

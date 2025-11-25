@@ -23,6 +23,7 @@ pub struct BBSTuiState {
     pub input_buffer: String,
     pub scroll_offset: usize,
     pub status_message: String,
+    pub connected: bool,  // Track if we've initialized the connection
 }
 
 impl BBSTuiState {
@@ -36,15 +37,21 @@ impl BBSTuiState {
             input_buffer: String::new(),
             scroll_offset: 0,
             status_message: "Connecting to BBS...".to_string(),
+            connected: false,
         }
     }
 
     /// Initialize BBS connection
     pub fn connect(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.connected {
+            return Ok(());  // Already connected
+        }
+
         let mut conn = db::establish_connection()?;
         db::initialize_database(&mut conn)?;
 
         *self.conn.lock().unwrap() = Some(conn);
+        self.connected = true;
         self.status_message = "Connected to OSVM BBS".to_string();
         self.refresh_boards()?;
 
@@ -73,6 +80,13 @@ impl BBSTuiState {
 
 /// Render BBS TUI
 pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
+    // Lazy initialization: connect to database on first render
+    if !state.connected {
+        if let Err(e) = state.connect() {
+            state.status_message = format!("❌ Connection failed: {}", e);
+        }
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([

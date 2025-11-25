@@ -1,5 +1,5 @@
 use chrono::{Local, MappedLocalTime, TimeZone};
-use super::schema::{board_states, boards, posts, queued_messages, users};
+use super::schema::{board_states, boards, posts, queued_messages, users, moderators};
 use crate::utils::bbs::hex_id_to_num;
 use diesel::prelude::*;
 use regex::Regex;
@@ -32,6 +32,7 @@ pub struct Board {
     pub name: String,
     pub description: String,
     pub created_at_us: i64,
+    pub creator_id: Option<i32>,  // Owner who can delete
 }
 
 impl Board {
@@ -55,6 +56,7 @@ pub struct NewBoard<'a> {
     pub description: &'a str,
     #[validate(range(min = EARLY_2024, max=EARLY_2200))]
     pub created_at_us: &'a i64,
+    pub creator_id: Option<i32>,  // Owner who can delete
 }
 
 #[derive(Debug, Queryable, Selectable)]
@@ -67,11 +69,16 @@ pub struct Post {
     pub user_id: i32,
     pub body: String,
     pub created_at_us: i64,
+    pub parent_id: Option<i32>,  // For reply threading (null = top-level post)
 }
 
 impl Post {
     pub fn created_at(&self) -> String {
         formatted_useconds(self.created_at_us)
+    }
+
+    pub fn is_reply(&self) -> bool {
+        self.parent_id.is_some()
     }
 }
 
@@ -86,6 +93,7 @@ pub struct NewPost<'a> {
     pub body: &'a str,
     #[validate(range(min = EARLY_2024, max=EARLY_2200))]
     pub created_at_us: &'a i64,
+    pub parent_id: Option<i32>,  // For reply threading
 }
 
 #[derive(Debug, Identifiable, Queryable, Selectable)]
@@ -211,4 +219,38 @@ pub struct QueuedMessageNew<'a> {
     pub body: &'a str,
     #[validate(range(min = EARLY_2024, max=EARLY_2200))]
     pub created_at_us: &'a i64,
+}
+
+// ============================================
+// Moderator - for board permission management
+// ============================================
+
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(table_name = crate::utils::bbs::schema::moderators)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct Moderator {
+    pub id: i32,
+    pub user_id: i32,
+    pub board_id: i32,
+    pub granted_by: i32,
+    pub granted_at_us: i64,
+}
+
+impl Moderator {
+    pub fn granted_at(&self) -> String {
+        formatted_useconds(self.granted_at_us)
+    }
+}
+
+#[derive(Insertable, Validate)]
+#[diesel(table_name = moderators)]
+pub struct NewModerator {
+    #[validate(range(min = 1))]
+    pub user_id: i32,
+    #[validate(range(min = 1))]
+    pub board_id: i32,
+    #[validate(range(min = 1))]
+    pub granted_by: i32,
+    #[validate(range(min = EARLY_2024, max=EARLY_2200))]
+    pub granted_at_us: i64,
 }

@@ -1,4 +1,5 @@
 // @generated automatically by Diesel CLI.
+// Extended with reply threading and moderator support
 
 diesel::table! {
     board_states (id) {
@@ -15,6 +16,7 @@ diesel::table! {
         name -> Text,
         description -> Text,
         created_at_us -> BigInt,
+        creator_id -> Nullable<Integer>,  // Owner who can delete (nullable for backwards compat)
     }
 }
 
@@ -25,6 +27,7 @@ diesel::table! {
         user_id -> Integer,
         body -> Text,
         created_at_us -> BigInt,
+        parent_id -> Nullable<Integer>,  // For reply threading (null = top-level post)
     }
 }
 
@@ -54,10 +57,21 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    moderators (id) {
+        id -> Integer,
+        user_id -> Integer,
+        board_id -> Integer,
+        granted_by -> Integer,      // Who granted mod status
+        granted_at_us -> BigInt,
+    }
+}
+
 diesel::joinable!(board_states -> boards (board_id));
 diesel::joinable!(board_states -> users (user_id));
 diesel::joinable!(posts -> boards (board_id));
 diesel::joinable!(posts -> users (user_id));
 diesel::joinable!(users -> boards (in_board));
+// Note: moderators has multiple FK to users, so we define joins manually in queries
 
-diesel::allow_tables_to_appear_in_same_query!(board_states, boards, posts, queued_messages, users,);
+diesel::allow_tables_to_appear_in_same_query!(board_states, boards, posts, queued_messages, users, moderators,);

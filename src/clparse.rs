@@ -7,6 +7,7 @@ use {
 mod agent;
 mod audit;
 mod balance;
+mod bbs;
 mod chat;
 mod database;
 mod deploy;
@@ -263,6 +264,7 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
         )
         // Core commands - using modular builders
         .subcommand(balance::build_balance_command())
+        .subcommand(bbs::build_bbs_command())
         .subcommand(rpc::build_rpc_command())
         .subcommand(examples::build_examples_command())
         .subcommand(chat::build_chat_command())
