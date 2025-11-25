@@ -298,4 +298,115 @@ pub fn build_bbs_command() -> Command {
                         .help("Output in JSON format"),
                 ),
         )
+        // Peer management (federation)
+        .subcommand(
+            Command::new("peers")
+                .about("Manage peer nodes for federation")
+                .long_about(
+                    "Manage connections to other BBS nodes for message federation.\n\
+                    \n\
+                    Federation allows multiple BBS nodes to share messages,\n\
+                    creating a decentralized bulletin board network.\n\
+                    \n\
+                    Discovery methods:\n\
+                    • Manual: Add peers by address\n\
+                    • Local: Auto-discover on LAN (mDNS)\n\
+                    • Bootstrap: Query known servers for peers\n\
+                    • Gossip: Peers share their peer lists",
+                )
+                .arg_required_else_help(true)
+                .subcommand(
+                    Command::new("add")
+                        .about("Add a peer node")
+                        .arg(
+                            Arg::new("address")
+                                .value_name("ADDRESS")
+                                .help("Peer address (e.g., http://192.168.1.100:8080)")
+                                .required(true)
+                                .index(1),
+                        ),
+                )
+                .subcommand(
+                    Command::new("remove")
+                        .about("Remove a peer node")
+                        .arg(
+                            Arg::new("node_id")
+                                .value_name("NODE_ID")
+                                .help("Node ID to remove (e.g., !abcd1234)")
+                                .required(true)
+                                .index(1),
+                        ),
+                )
+                .subcommand(
+                    Command::new("list")
+                        .about("List known peers")
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("sync")
+                        .about("Sync messages from all peers")
+                        .arg(
+                            Arg::new("peer")
+                                .value_name("NODE_ID")
+                                .help("Sync from specific peer only")
+                                .index(1),
+                        ),
+                )
+                .subcommand(
+                    Command::new("discover")
+                        .about("Discover peers automatically")
+                        .arg(
+                            Arg::new("local")
+                                .long("local")
+                                .action(ArgAction::SetTrue)
+                                .help("Discover on local network (mDNS)"),
+                        )
+                        .arg(
+                            Arg::new("bootstrap")
+                                .long("bootstrap")
+                                .action(ArgAction::SetTrue)
+                                .help("Query bootstrap servers"),
+                        ),
+                ),
+        )
+        // HTTP Server (internet mode)
+        .subcommand(
+            Command::new("server")
+                .about("Start HTTP API server for internet-based BBS access")
+                .long_about(
+                    "Start an HTTP server that provides REST API and WebSocket endpoints.\n\
+                    Use this when Meshtastic radio is not available.\n\
+                    \n\
+                    Endpoints:\n\
+                    • GET  /api/boards              - List all boards\n\
+                    • GET  /api/boards/:name        - Get board info\n\
+                    • POST /api/boards              - Create board\n\
+                    • GET  /api/boards/:name/posts  - List posts\n\
+                    • POST /api/boards/:name/posts  - Create post\n\
+                    • POST /api/posts/:id/reply     - Reply to post\n\
+                    • GET  /api/stats               - Statistics\n\
+                    • WS   /ws                      - Real-time updates",
+                )
+                .arg(
+                    Arg::new("host")
+                        .long("host")
+                        .short('H')
+                        .value_name("HOST")
+                        .default_value("0.0.0.0")
+                        .help("Host address to bind to"),
+                )
+                .arg(
+                    Arg::new("port")
+                        .long("port")
+                        .short('P')
+                        .value_name("PORT")
+                        .default_value("8080")
+                        .help("Port to listen on"),
+                ),
+        )
 }

@@ -12,6 +12,8 @@ pub mod message_router;
 pub mod agent_bridge;
 pub mod tui_widgets;
 pub mod meshtastic;
+pub mod http_server;
+pub mod federation;
 
 use std::path::PathBuf;
 use dirs::data_dir;

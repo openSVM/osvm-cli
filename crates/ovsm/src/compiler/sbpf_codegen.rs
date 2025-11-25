@@ -866,7 +866,8 @@ impl SbpfCodegen {
             }
 
             IrInstruction::JumpIf(cond, target) => {
-                let cond_reg = self.reg_alloc.allocate(*cond);
+                // Use get_reg to reload from stack if spilled
+                let cond_reg = self.get_reg(*cond, SbpfReg::R0);
                 let idx = self.instructions.len();
                 self.pending_jumps.push((idx, target.clone()));
                 // Jump if != 0
@@ -874,7 +875,8 @@ impl SbpfCodegen {
             }
 
             IrInstruction::JumpIfNot(cond, target) => {
-                let cond_reg = self.reg_alloc.allocate(*cond);
+                // Use get_reg to reload from stack if spilled
+                let cond_reg = self.get_reg(*cond, SbpfReg::R0);
                 let idx = self.instructions.len();
                 self.pending_jumps.push((idx, target.clone()));
                 // Jump if == 0
@@ -941,12 +943,16 @@ impl SbpfCodegen {
 
             // Syscall: dst = syscall(name, args...)
             IrInstruction::Syscall(dst, name, args) => {
-                // Move args to R1-R5
+                // Move args to R1-R5, handling spilled registers
+                // CRITICAL: Must use get_reg to reload spilled values from stack!
+                let target_regs = [SbpfReg::R1, SbpfReg::R2, SbpfReg::R3, SbpfReg::R4, SbpfReg::R5];
                 for (i, arg) in args.iter().enumerate().take(5) {
-                    let arg_reg = self.reg_alloc.allocate(*arg);
-                    let target = (i + 1) as u8;
-                    if arg_reg as u8 != target {
-                        self.emit(SbpfInstruction::alu64_reg(alu::MOV, target, arg_reg as u8));
+                    let target = target_regs[i];
+                    // Use get_reg to properly reload spilled registers
+                    // Use R0 as scratch since it's caller-saved and not used for syscall args
+                    let arg_reg = self.get_reg(*arg, SbpfReg::R0);
+                    if arg_reg != target {
+                        self.emit(SbpfInstruction::alu64_reg(alu::MOV, target as u8, arg_reg as u8));
                     }
                 }
                 self.emit_syscall(name);
@@ -1085,12 +1091,15 @@ impl SbpfCodegen {
 
     /// Generate comparison: dst = (src1 cmp src2) ? 1 : 0
     fn gen_compare(&mut self, cmp_op: u8, dst: IrReg, src1: IrReg, src2: IrReg) {
-        // Load operands with spill handling
-        let src1_reg = self.get_reg(src1, SbpfReg::R0);
-        let src2_reg = self.get_reg(src2, SbpfReg::R5);
-
+        // CRITICAL: Determine dst register FIRST to avoid register conflicts
         let dst_phys = self.reg_alloc.allocate(dst);
         let actual_dst = if self.reg_alloc.is_spilled(dst) { SbpfReg::R0 } else { dst_phys };
+
+        // Load operands with spill handling
+        // Use R4 for src1 if dst is using R0 (to avoid overwriting src1 when we set dst=0)
+        let src1_scratch = if actual_dst == SbpfReg::R0 { SbpfReg::R4 } else { SbpfReg::R0 };
+        let src1_reg = self.get_reg(src1, src1_scratch);
+        let src2_reg = self.get_reg(src2, SbpfReg::R5);
 
         // Strategy: dst = 0, then conditionally set to 1
         // dst = 0 (default: false)

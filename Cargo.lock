@@ -4917,6 +4917,7 @@ dependencies = [
  "clickhouse",
  "colored",
  "config",
+ "crc32fast",
  "criterion 0.7.0",
  "crossterm 0.29.0",
  "csv",

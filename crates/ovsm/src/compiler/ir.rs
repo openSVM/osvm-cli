@@ -184,6 +184,19 @@ impl IrGenerator {
         // Entry point
         self.emit(IrInstruction::Label("entry".to_string()));
 
+        // CRITICAL: Save the accounts pointer (R1) and instruction data (R2) into
+        // caller-saved registers before any syscalls clobber them.
+        // Virtual reg 1,2 = R1,R2 at entry (accounts, instr data)
+        // Save to virtual reg 6,7 which map to R6,R7 (callee-saved)
+        let saved_accounts = IrReg::new(6);
+        let saved_instr_data = IrReg::new(7);
+        self.emit(IrInstruction::Move(saved_accounts, IrReg::new(1)));
+        self.emit(IrInstruction::Move(saved_instr_data, IrReg::new(2)));
+
+        // Update var_map to use the saved registers
+        self.var_map.insert("accounts".to_string(), saved_accounts);
+        self.var_map.insert("instruction-data".to_string(), saved_instr_data);
+
         eprintln!("🔍 IR DEBUG: Generating IR for {} statements", program.statements.len());
 
         // Generate IR for each statement, tracking last result
@@ -436,12 +449,22 @@ impl IrGenerator {
                 }
 
                 // Handle (set! var value) specially
+                // For mutable variables, we need to emit a Move to update the existing register
                 if name == "set!" && args.len() == 2 {
                     if let Expression::Variable(var_name) = &args[0].value {
+                        // Get the existing register for this variable
+                        let old_reg = self.var_map.get(var_name)
+                            .copied()
+                            .ok_or_else(|| Error::runtime(format!("Cannot set! undefined variable: {}", var_name)))?;
+
+                        // Compute the new value
                         let value_reg = self.generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("Set! value has no result"))?;
-                        self.var_map.insert(var_name.clone(), value_reg);
-                        return Ok(Some(value_reg));
+
+                        // Emit Move instruction to copy new value into old register
+                        self.emit(IrInstruction::Move(old_reg, value_reg));
+
+                        return Ok(Some(old_reg));
                     }
                 }
 
@@ -481,6 +504,128 @@ impl IrGenerator {
                     };
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Load(dst, base_reg, offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (num-accounts) - get number of accounts from saved accounts pointer
+                if name == "num-accounts" && args.is_empty() {
+                    // accounts pointer was saved to virtual register 6 (R6) at entry
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load(dst, accounts_ptr, 0));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (account-lamports idx) - get lamports for account at index
+                // Solana format: after num_accounts (8 bytes), each account has:
+                //   [u8 dup][u8 signer][u8 writable][u8 exec][4 pad][32 pubkey][32 owner][u64 lamports]...
+                //   lamports offset = 8 + 1 + 1 + 1 + 1 + 4 + 32 + 32 = 80 from account start
+                if name == "account-lamports" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-lamports index has no result"))?;
+
+                    // Get accounts base pointer (saved to R6 at entry)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    // Calculate account offset: 8 (for num_accounts) + idx * account_size
+                    // For simplicity, assume fixed account size of 165 bytes (minimum without data)
+                    // Real implementation would need to iterate
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    // For account 0: offset = 8, lamports at offset 80 from account start
+                    // Total: 8 + 80 = 88
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 165)); // Approximate
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // Add lamports offset within account (80 bytes)
+                    let lamports_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(lamports_offset, 80));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, lamports_offset));
+
+                    let addr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load(dst, addr, 0));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (account-data-ptr idx) - get data pointer for account
+                // data_len is at offset 88, data starts at offset 96
+                if name == "account-data-ptr" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-data-ptr index has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 165));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // Data starts at offset 96 from account start
+                    let data_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(data_offset, 96));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, data_offset));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dst, accounts_ptr, total_offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (account-data-len idx) - get data length for account
+                if name == "account-data-len" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-data-len index has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 165));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // data_len is at offset 88 from account start
+                    let len_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(len_offset, 88));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, len_offset));
+
+                    let addr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load(dst, addr, 0));
                     return Ok(Some(dst));
                 }
 
@@ -677,6 +822,38 @@ impl IrGenerator {
                         last_reg = self.generate_expr(&arg.value)?;
                     }
                     return Ok(last_reg);
+                }
+
+                // Handle (while condition body...) - while loop
+                if name == "while" && !args.is_empty() {
+                    let loop_label = self.new_label("while");
+                    let end_label = self.new_label("endwhile");
+
+                    // Loop header
+                    self.emit(IrInstruction::Label(loop_label.clone()));
+
+                    // Evaluate condition
+                    let cond_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("While condition has no result"))?;
+
+                    // Jump to end if condition is false
+                    self.emit(IrInstruction::JumpIfNot(cond_reg, end_label.clone()));
+
+                    // Body - all expressions after the condition
+                    for arg in args.iter().skip(1) {
+                        self.generate_expr(&arg.value)?;
+                    }
+
+                    // Jump back to loop header
+                    self.emit(IrInstruction::Jump(loop_label));
+
+                    // End label
+                    self.emit(IrInstruction::Label(end_label));
+
+                    // While returns 0 (or null)
+                    let result_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(result_reg, 0));
+                    return Ok(Some(result_reg));
                 }
 
                 // Generic tool call

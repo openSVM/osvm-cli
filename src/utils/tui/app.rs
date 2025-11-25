@@ -1079,6 +1079,38 @@ impl OsvmApp {
                         KeyCode::Char('k') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
                             self.chat_scroll = self.chat_scroll.saturating_sub(1);
                         }
+                        // BBS scrolling (j/k for scrolling posts)
+                        KeyCode::Char('j') | KeyCode::Down if self.active_tab == TabIndex::BBS => {
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                bbs.scroll_offset = bbs.scroll_offset.saturating_add(1);
+                            }
+                        }
+                        KeyCode::Char('k') | KeyCode::Up if self.active_tab == TabIndex::BBS => {
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                bbs.scroll_offset = bbs.scroll_offset.saturating_sub(1);
+                            }
+                        }
+                        // BBS board selection (1-9 to select board)
+                        KeyCode::Char(c @ '1'..='9') if self.active_tab == TabIndex::BBS => {
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                let board_idx = c.to_digit(10).unwrap() as usize - 1;
+                                if let Some(board) = bbs.boards.get(board_idx) {
+                                    bbs.current_board = Some(board.id);
+                                    let _ = bbs.load_posts();
+                                    bbs.scroll_offset = 0;
+                                }
+                            }
+                        }
+                        // BBS refresh (r key)
+                        KeyCode::Char('r') if self.active_tab == TabIndex::BBS => {
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                let _ = bbs.refresh_boards();
+                                if bbs.current_board.is_some() {
+                                    let _ = bbs.load_posts();
+                                }
+                            }
+                            self.add_log("🔄 BBS refreshed".to_string());
+                        }
                         KeyCode::Char('?') | KeyCode::F(1) => {
                             self.show_help = !self.show_help;
                             if !self.show_help {
@@ -1669,6 +1701,11 @@ impl OsvmApp {
                 Span::styled(" ▣ Logs ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
             } else {
                 Span::styled(" □ Logs ", Style::default().fg(Color::DarkGray))
+            },
+            if self.active_tab == TabIndex::BBS {
+                Span::styled(" ▣ BBS ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            } else {
+                Span::styled(" □ BBS ", Style::default().fg(Color::DarkGray))
             },
         ];
 
@@ -2405,7 +2442,7 @@ impl OsvmApp {
             Line::from(Span::styled(" Real-time blockchain investigation TUI ", Style::default().fg(Color::DarkGray))),
             Line::from(""),
             Line::from(Span::styled(" ─── Navigation ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
-            Line::from("   0/1/2/3/4    Switch views (Chat/Dashboard/Graph/Logs/Search)"),
+            Line::from("   0/1/2/3/4/5  Switch views (Chat/Dashboard/Graph/Logs/Search/BBS)"),
             Line::from("   Tab          Cycle through views"),
             Line::from("   ?/F1         Toggle this help"),
             Line::from("   q/Esc        Quit (or close help)"),
@@ -2436,6 +2473,11 @@ impl OsvmApp {
             Line::from(""),
             Line::from(Span::styled(" ─── Logs View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   j/k          Scroll line by line"),
+            Line::from(""),
+            Line::from(Span::styled(" ─── BBS View ────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from("   j/k/↑/↓      Scroll posts"),
+            Line::from("   1-9          Select board by number"),
+            Line::from("   r            Refresh boards and posts"),
             Line::from(""),
             Line::from(Span::styled(" ─── Legend ──────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   🔴 Target    Red wallet being investigated"),

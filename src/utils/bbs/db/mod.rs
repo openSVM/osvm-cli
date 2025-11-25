@@ -10,6 +10,7 @@ pub mod boards;
 pub mod posts;
 pub mod queued_messages;
 pub mod moderators;
+pub mod federated;
 
 use crate::utils::bbs::db_path;
 
@@ -127,6 +128,44 @@ pub fn initialize_database(conn: &mut SqliteConnection) -> Result<()> {
         )"#,
     )
     .execute(conn)?;
+
+    // Create federated_messages table (for messages from other nodes)
+    diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS federated_messages (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            message_id TEXT NOT NULL UNIQUE,
+            origin_node TEXT NOT NULL,
+            board TEXT NOT NULL,
+            author_node TEXT NOT NULL,
+            author_name TEXT NOT NULL,
+            body TEXT NOT NULL,
+            parent_id TEXT,
+            created_at BIGINT NOT NULL,
+            received_at BIGINT NOT NULL,
+            signature TEXT
+        )"#,
+    )
+    .execute(conn)?;
+
+    // Create known_peers table (for peer persistence)
+    diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS known_peers (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            node_id TEXT NOT NULL UNIQUE,
+            address TEXT NOT NULL,
+            name TEXT,
+            last_sync BIGINT,
+            last_seen BIGINT,
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            is_bootstrap BOOLEAN NOT NULL DEFAULT FALSE
+        )"#,
+    )
+    .execute(conn)?;
+
+    // Create index on federated_messages for efficient sync queries
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_federated_messages_created ON federated_messages(created_at)"
+    ).execute(conn)?;
 
     Ok(())
 }

@@ -68,6 +68,7 @@ const DT_RELCOUNT: u64 = 0x6ffffffa;
 
 /// Relocation types (Solana BPF standard)
 const R_BPF_64_64: u32 = 1;   // For 64-bit absolute relocations (syscalls)
+const R_BPF_64_RELATIVE: u32 = 8;  // For relative relocations (add MM_PROGRAM_START at load time)
 const R_BPF_64_32: u32 = 10;  // For 32-bit relocations
 
 /// Program header flags
@@ -80,6 +81,8 @@ const TEXT_VADDR: u64 = 0x120;  // .text at 0x120 (matching Solana's working ELF
 const RODATA_VADDR: u64 = 0x150;  // .rodata follows .text
 const STACK_VADDR: u64 = 0x200000000;
 const HEAP_VADDR: u64 = 0x300000000;
+/// MM_PROGRAM_START: Base address added to all program memory at runtime
+const MM_PROGRAM_START: u64 = 0x100000000;
 
 /// Default stack/heap size
 const STACK_SIZE: u64 = 0x1000;
@@ -393,8 +396,12 @@ impl ElfWriter {
         // LDDW is a 16-byte instruction: [8 bytes first half] [8 bytes second half]
         // First half: opcode=0x18, dst, src=0, off=0, imm=low32
         // Second half: opcode=0x00, dst=0, src=0, off=0, imm=high32
+        //
+        // CRITICAL: For SBPFv1, Solana's VM loads programs at MM_PROGRAM_START (0x100000000)
+        // so string addresses must include this base address!
         for load_site in string_loads {
-            let abs_addr = rodata_vaddr + load_site.rodata_offset as u64;
+            // Full runtime address: MM_PROGRAM_START + ELF vaddr + string offset
+            let abs_addr = MM_PROGRAM_START + rodata_vaddr + load_site.rodata_offset as u64;
             let low32 = (abs_addr & 0xFFFF_FFFF) as u32;
             let high32 = (abs_addr >> 32) as u32;
 

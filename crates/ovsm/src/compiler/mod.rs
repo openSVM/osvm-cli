@@ -28,6 +28,7 @@ pub mod elf;
 pub mod verifier;
 pub mod runtime;
 pub mod debug;
+pub mod solana_abi;
 
 pub use types::{OvsmType, TypeChecker, TypeEnv};
 pub use ir::{IrProgram, IrInstruction, IrReg, IrGenerator};
@@ -62,6 +63,8 @@ pub struct CompileOptions {
     pub source_map: bool,
     /// SBPF version to generate (V1 with relocations or V2 with static calls)
     pub sbpf_version: SbpfVersion,
+    /// Enable Solana ABI compliant entrypoint with deserialization
+    pub enable_solana_abi: bool,
 }
 
 impl Default for CompileOptions {
@@ -72,6 +75,7 @@ impl Default for CompileOptions {
             debug_info: false,
             source_map: false,
             sbpf_version: SbpfVersion::V1, // V1 with relocations for comparison
+            enable_solana_abi: false,  // Temporarily disabled while fixing opcode issues
         }
     }
 }
@@ -119,6 +123,11 @@ impl Compiler {
         // Phase 3: Generate IR
         let mut ir_gen = IrGenerator::new();
         let mut ir_program = ir_gen.generate(&typed_program)?;
+
+        // Inject Solana entrypoint wrapper for proper ABI handling
+        if self.options.enable_solana_abi {
+            solana_abi::inject_entrypoint_wrapper(&mut ir_program.instructions);
+        }
 
         // Phase 4: Optimize
         if self.options.opt_level > 0 {
@@ -197,6 +206,11 @@ impl Compiler {
 
         let mut ir_gen = IrGenerator::new();
         let mut ir_program = ir_gen.generate(&typed_program)?;
+
+        // Inject Solana entrypoint wrapper for proper ABI handling
+        if self.options.enable_solana_abi {
+            solana_abi::inject_entrypoint_wrapper(&mut ir_program.instructions);
+        }
 
         if self.options.opt_level > 0 {
             let mut optimizer = Optimizer::new(self.options.opt_level);

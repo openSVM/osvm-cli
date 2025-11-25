@@ -1,5 +1,5 @@
 use chrono::{Local, MappedLocalTime, TimeZone};
-use super::schema::{board_states, boards, posts, queued_messages, users, moderators};
+use super::schema::{board_states, boards, posts, queued_messages, users, moderators, federated_messages, known_peers};
 use crate::utils::bbs::hex_id_to_num;
 use diesel::prelude::*;
 use regex::Regex;
@@ -253,4 +253,70 @@ pub struct NewModerator {
     pub granted_by: i32,
     #[validate(range(min = EARLY_2024, max=EARLY_2200))]
     pub granted_at_us: i64,
+}
+
+// ============================================
+// FederatedMessage - for messages from other nodes
+// ============================================
+
+#[derive(Debug, Queryable, Selectable, Clone)]
+#[diesel(table_name = crate::utils::bbs::schema::federated_messages)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct FederatedMessageDb {
+    pub id: i32,
+    pub message_id: String,      // Unique: origin_node:local_id
+    pub origin_node: String,     // Node that created this message
+    pub board: String,           // Board name (uppercase)
+    pub author_node: String,     // Author's node ID
+    pub author_name: String,     // Author's display name
+    pub body: String,            // Message content
+    pub parent_id: Option<String>, // Parent message_id for replies
+    pub created_at: i64,         // Original creation timestamp (seconds)
+    pub received_at: i64,        // When we received this message (seconds)
+    pub signature: Option<String>, // Optional signature
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = federated_messages)]
+pub struct NewFederatedMessage<'a> {
+    pub message_id: &'a str,
+    pub origin_node: &'a str,
+    pub board: &'a str,
+    pub author_node: &'a str,
+    pub author_name: &'a str,
+    pub body: &'a str,
+    pub parent_id: Option<&'a str>,
+    pub created_at: i64,
+    pub received_at: i64,
+    pub signature: Option<&'a str>,
+}
+
+// ============================================
+// KnownPeer - for peer persistence
+// ============================================
+
+#[derive(Debug, Queryable, Selectable, Clone)]
+#[diesel(table_name = crate::utils::bbs::schema::known_peers)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct KnownPeerDb {
+    pub id: i32,
+    pub node_id: String,
+    pub address: String,
+    pub name: Option<String>,
+    pub last_sync: Option<i64>,
+    pub last_seen: Option<i64>,
+    pub failure_count: i32,
+    pub is_bootstrap: bool,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = known_peers)]
+pub struct NewKnownPeer<'a> {
+    pub node_id: &'a str,
+    pub address: &'a str,
+    pub name: Option<&'a str>,
+    pub last_sync: Option<i64>,
+    pub last_seen: Option<i64>,
+    pub failure_count: i32,
+    pub is_bootstrap: bool,
 }

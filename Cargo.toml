@@ -113,6 +113,7 @@ ab_glyph = "0.2"
 vt100 = "0.15"
 tui-nodes = "0.9.0"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
+crc32fast = "1.5.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

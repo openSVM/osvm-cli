@@ -9,7 +9,7 @@ use colored::*;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::utils::bbs::{db, meshtastic, num_id_to_hex};
+use crate::utils::bbs::{db, meshtastic, http_server, federation, num_id_to_hex};
 
 /// Global radio connection (lazy singleton)
 static RADIO: once_cell::sync::Lazy<Arc<Mutex<Option<meshtastic::MeshtasticRadio>>>> =
@@ -35,6 +35,8 @@ pub async fn handle_bbs_command(matches: &ArgMatches) -> Result<()> {
         Some(("reply", sub_m)) => handle_reply(sub_m).await,
         Some(("agent", sub_m)) => handle_agent(sub_m).await,
         Some(("radio", sub_m)) => handle_radio(sub_m).await,
+        Some(("peers", sub_m)) => handle_peers(sub_m).await,
+        Some(("server", sub_m)) => handle_server(sub_m).await,
         Some(("interactive", sub_m)) => handle_interactive(sub_m).await,
         Some(("stats", sub_m)) => handle_stats(sub_m).await,
         _ => {
@@ -552,6 +554,177 @@ async fn handle_radio(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Global federation manager (lazy singleton)
+static FEDERATION: once_cell::sync::Lazy<Arc<tokio::sync::RwLock<Option<Arc<federation::FederationManager>>>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(tokio::sync::RwLock::new(None)));
+
+/// Get or create federation manager
+async fn get_federation_manager() -> Arc<federation::FederationManager> {
+    let mut guard = FEDERATION.write().await;
+    if guard.is_none() {
+        // Generate node ID from machine ID or random
+        let node_id = format!("!{:08x}", std::process::id());
+        *guard = Some(Arc::new(federation::FederationManager::new(&node_id)));
+    }
+    guard.as_ref().unwrap().clone()
+}
+
+/// Handle peers subcommands (federation)
+async fn handle_peers(matches: &ArgMatches) -> Result<()> {
+    let manager = get_federation_manager().await;
+
+    match matches.subcommand() {
+        Some(("add", sub_m)) => {
+            let address = sub_m.get_one::<String>("address").unwrap();
+
+            println!("{}", "Adding peer...".cyan());
+
+            match manager.add_peer(address).await {
+                Ok(peer) => {
+                    let status_color = match peer.status {
+                        federation::PeerStatus::Online => "●".green(),
+                        federation::PeerStatus::Offline => "●".red(),
+                        _ => "●".yellow(),
+                    };
+                    println!("{} Peer added!", "✓".green());
+                    println!("  Node ID: {}", peer.node_id.cyan());
+                    println!("  Address: {}", peer.address);
+                    println!("  Status: {} {:?}", status_color, peer.status);
+                }
+                Err(e) => {
+                    println!("{} Failed to add peer: {}", "✗".red(), e);
+                }
+            }
+            Ok(())
+        }
+        Some(("remove", sub_m)) => {
+            let node_id = sub_m.get_one::<String>("node_id").unwrap();
+
+            if manager.remove_peer(node_id).await {
+                println!("{} Peer {} removed", "✓".green(), node_id);
+            } else {
+                println!("{} Peer {} not found", "!".yellow(), node_id);
+            }
+            Ok(())
+        }
+        Some(("list", sub_m)) => {
+            let json = sub_m.get_flag("json");
+            let peers = manager.list_peers().await;
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&peers)?);
+            } else {
+                println!("{}", "Known Peers".cyan().bold());
+                println!("{}", "─".repeat(60));
+
+                if peers.is_empty() {
+                    println!("{}", "No peers configured.".dimmed());
+                    println!("  Use 'osvm bbs peers add <address>' to add a peer.");
+                } else {
+                    for peer in peers {
+                        let status_color = match peer.status {
+                            federation::PeerStatus::Online => "●".green(),
+                            federation::PeerStatus::Offline => "●".red(),
+                            federation::PeerStatus::Syncing => "●".yellow(),
+                            federation::PeerStatus::Unknown => "●".dimmed(),
+                            federation::PeerStatus::Error(_) => "●".red(),
+                        };
+                        let last_sync = peer.last_sync
+                            .map(|ts| chrono::DateTime::from_timestamp(ts as i64, 0)
+                                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                                .unwrap_or_else(|| "?".to_string()))
+                            .unwrap_or_else(|| "never".to_string());
+
+                        println!("  {} {} {}", status_color, peer.node_id.cyan(), peer.address);
+                        println!("      Last sync: {} | Failures: {}", last_sync.dimmed(), peer.failure_count);
+                    }
+                }
+
+                println!("\n  Our node ID: {}", manager.node_id.cyan());
+            }
+            Ok(())
+        }
+        Some(("sync", sub_m)) => {
+            let specific_peer = sub_m.get_one::<String>("peer");
+
+            println!("{}", "Syncing with peers...".cyan());
+
+            let peers = if let Some(node_id) = specific_peer {
+                manager.list_peers().await.into_iter()
+                    .filter(|p| &p.node_id == node_id)
+                    .collect()
+            } else {
+                manager.list_peers().await
+            };
+
+            if peers.is_empty() {
+                println!("{}", "No peers to sync with.".yellow());
+                return Ok(());
+            }
+
+            for mut peer in peers {
+                print!("  {} {}...", "↔".cyan(), peer.node_id);
+                let since = peer.last_sync.unwrap_or(0);
+                match manager.sync_from_peer(&mut peer, since).await {
+                    Ok(messages) => {
+                        println!(" {} {} messages", "✓".green(), messages.len());
+                    }
+                    Err(e) => {
+                        println!(" {} {}", "✗".red(), e);
+                    }
+                }
+            }
+            Ok(())
+        }
+        Some(("discover", sub_m)) => {
+            let local = sub_m.get_flag("local");
+            let bootstrap = sub_m.get_flag("bootstrap");
+
+            if !local && !bootstrap {
+                println!("{}", "Specify --local or --bootstrap".yellow());
+                return Ok(());
+            }
+
+            if bootstrap {
+                println!("{}", "Querying bootstrap servers...".cyan());
+                let discovered = manager.discover_from_bootstrap().await;
+                println!("  Discovered {} peers", discovered.len());
+                for peer in discovered {
+                    println!("    {} {}", "→".green(), peer.address);
+                }
+            }
+
+            if local {
+                println!("{}", "Local network discovery (mDNS)...".cyan());
+                println!("  {}", "mDNS discovery not yet implemented".yellow());
+                println!("  Requires 'mdns' feature flag");
+            }
+
+            Ok(())
+        }
+        _ => {
+            println!("{}", "Use 'osvm bbs peers --help' for available commands".yellow());
+            Ok(())
+        }
+    }
+}
+
+/// Handle HTTP server command (internet mode)
+async fn handle_server(matches: &ArgMatches) -> Result<()> {
+    let host = matches.get_one::<String>("host").map(|s| s.as_str()).unwrap_or("0.0.0.0");
+    let port: u16 = matches.get_one::<String>("port")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8080);
+
+    println!("{}", "Starting BBS HTTP Server...".cyan().bold());
+    println!("  Mode: {} (use when radio not available)", "Internet".green());
+    println!("");
+
+    http_server::start_server(host, port)
+        .await
+        .map_err(|e| anyhow!("Server error: {}", e))
 }
 
 /// Handle interactive shell mode
