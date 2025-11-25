@@ -409,4 +409,124 @@ pub fn build_bbs_command() -> Command {
                         .help("Port to listen on"),
                 ),
         )
+        // On-chain registry (Solana devnet)
+        .subcommand(
+            Command::new("registry")
+                .about("On-chain peer registry (Solana devnet)")
+                .long_about(
+                    "Decentralized peer discovery using Solana blockchain.\n\
+                    \n\
+                    BBS nodes can register on-chain for trustless peer discovery.\n\
+                    This enables fully decentralized peer finding without central servers.\n\
+                    \n\
+                    Commands:\n\
+                    • register  - Register this node on Solana devnet\n\
+                    • list      - List all registered nodes\n\
+                    • update    - Update your registration\n\
+                    • heartbeat - Send heartbeat (update last_seen)\n\
+                    • deregister - Remove from registry\n\
+                    • discover  - Fetch peers from registry\n\
+                    \n\
+                    Note: Uses Solana devnet (free, just need to airdrop SOL)",
+                )
+                .arg(
+                    Arg::new("rpc")
+                        .long("rpc")
+                        .value_name("URL")
+                        .help("Custom RPC endpoint (default: devnet)"),
+                )
+                .subcommand(
+                    Command::new("register")
+                        .about("Register this node on-chain")
+                        .arg(
+                            Arg::new("address")
+                                .value_name("ADDRESS")
+                                .help("HTTP address for this node (e.g., http://myip:8080)")
+                                .required(true)
+                                .index(1),
+                        )
+                        .arg(
+                            Arg::new("name")
+                                .value_name("NAME")
+                                .help("Display name for this node")
+                                .required(true)
+                                .index(2),
+                        )
+                        .arg(
+                            Arg::new("keypair")
+                                .long("keypair")
+                                .short('k')
+                                .value_name("PATH")
+                                .help("Path to Solana keypair (default: ~/.config/solana/id.json)"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("list")
+                        .about("List all registered nodes")
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("update")
+                        .about("Update node registration")
+                        .arg(
+                            Arg::new("address")
+                                .long("address")
+                                .short('a')
+                                .value_name("ADDRESS")
+                                .help("New HTTP address"),
+                        )
+                        .arg(
+                            Arg::new("name")
+                                .long("name")
+                                .short('n')
+                                .value_name("NAME")
+                                .help("New display name"),
+                        )
+                        .arg(
+                            Arg::new("keypair")
+                                .long("keypair")
+                                .short('k')
+                                .value_name("PATH")
+                                .help("Path to Solana keypair"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("heartbeat")
+                        .about("Update heartbeat timestamp")
+                        .arg(
+                            Arg::new("keypair")
+                                .long("keypair")
+                                .short('k')
+                                .value_name("PATH")
+                                .help("Path to Solana keypair"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("deregister")
+                        .about("Remove node from on-chain registry")
+                        .arg(
+                            Arg::new("keypair")
+                                .long("keypair")
+                                .short('k')
+                                .value_name("PATH")
+                                .help("Path to Solana keypair"),
+                        )
+                        .arg(
+                            Arg::new("force")
+                                .long("force")
+                                .short('f')
+                                .action(ArgAction::SetTrue)
+                                .help("Skip confirmation"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("discover")
+                        .about("Discover peers from on-chain registry"),
+                ),
+        )
 }

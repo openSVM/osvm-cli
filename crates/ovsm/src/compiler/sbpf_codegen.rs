@@ -588,13 +588,17 @@ impl RegisterAllocator {
         // Pre-map IR virtual regs 1,2 to physical R1,R2 (Solana ABI: accounts, instruction-data)
         alloc.insert(IrReg(1), SbpfReg::R1);
         alloc.insert(IrReg(2), SbpfReg::R2);
+        // Pre-map IR virtual regs 6,7 to physical R6,R7 (callee-saved, used for saved accounts/instr-data)
+        alloc.insert(IrReg(6), SbpfReg::R6);
+        alloc.insert(IrReg(7), SbpfReg::R7);
 
         Self {
             allocation: alloc,
-            // Use R3-R9 for allocation (R0=return, R1-R2=reserved, R10=FP)
+            // Use R3-R5, R8-R9 for allocation (R0=return, R1-R2=ABI, R6-R7=saved builtins, R10=FP)
+            // IMPORTANT: Callee-saved (R8-R9) first to avoid clobbering by syscalls
             available: vec![
-                SbpfReg::R9, SbpfReg::R8, SbpfReg::R7, SbpfReg::R6,
-                SbpfReg::R5, SbpfReg::R4, SbpfReg::R3,
+                SbpfReg::R9, SbpfReg::R8,  // Callee-saved: safe across syscalls
+                SbpfReg::R5, SbpfReg::R4, SbpfReg::R3,  // Caller-saved: clobbered by syscalls
             ],
             spills: HashMap::new(),
             next_spill: -8, // Grow downward from frame pointer

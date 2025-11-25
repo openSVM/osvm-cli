@@ -6,10 +6,11 @@
 use anyhow::{anyhow, Result};
 use clap::ArgMatches;
 use colored::*;
+use solana_sdk::signature::Signer;  // For keypair.pubkey()
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::utils::bbs::{db, meshtastic, http_server, federation, num_id_to_hex};
+use crate::utils::bbs::{db, meshtastic, http_server, federation, registry, num_id_to_hex};
 
 /// Global radio connection (lazy singleton)
 static RADIO: once_cell::sync::Lazy<Arc<Mutex<Option<meshtastic::MeshtasticRadio>>>> =
@@ -36,6 +37,7 @@ pub async fn handle_bbs_command(matches: &ArgMatches) -> Result<()> {
         Some(("agent", sub_m)) => handle_agent(sub_m).await,
         Some(("radio", sub_m)) => handle_radio(sub_m).await,
         Some(("peers", sub_m)) => handle_peers(sub_m).await,
+        Some(("registry", sub_m)) => handle_registry(sub_m).await,
         Some(("server", sub_m)) => handle_server(sub_m).await,
         Some(("interactive", sub_m)) => handle_interactive(sub_m).await,
         Some(("stats", sub_m)) => handle_stats(sub_m).await,
@@ -781,4 +783,252 @@ async fn handle_stats(matches: &ArgMatches) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Handle on-chain registry commands (Solana devnet)
+async fn handle_registry(matches: &ArgMatches) -> Result<()> {
+    let rpc_url = matches.get_one::<String>("rpc").map(|s| s.as_str());
+
+    match matches.subcommand() {
+        Some(("register", sub_m)) => {
+            let address = sub_m.get_one::<String>("address").unwrap();
+            let name = sub_m.get_one::<String>("name").unwrap();
+            let keypair_path = sub_m.get_one::<String>("keypair")
+                .map(|s| s.as_str())
+                .unwrap_or("~/.config/solana/id.json");
+
+            println!("{}", "Registering node on Solana devnet...".cyan());
+
+            // Expand ~ in path
+            let expanded_path = registry::expand_path(keypair_path);
+            let keypair = match registry::load_keypair(&expanded_path) {
+                Ok(kp) => kp,
+                Err(e) => {
+                    println!("{} Failed to load keypair: {}", "✗".red(), e);
+                    println!("\n{}", "To create a keypair:".yellow());
+                    println!("  solana-keygen new --outfile ~/.config/solana/id.json");
+                    println!("  solana airdrop 1 --url devnet");
+                    return Ok(());
+                }
+            };
+
+            let client = match registry::RegistryClient::new(rpc_url) {
+                Ok(c) => c,
+                Err(e) => {
+                    println!("{} Failed to connect: {}", "✗".red(), e);
+                    return Ok(());
+                }
+            };
+
+            // Generate node ID from address
+            let node_id = registry::generate_node_id(address);
+
+            match client.register(&keypair, node_id, address, name) {
+                Ok(sig) => {
+                    println!("{} Node registered on-chain!", "✓".green());
+                    println!("  Node ID: {}", format!("!{:02x}{:02x}{:02x}{:02x}",
+                        node_id[0], node_id[1], node_id[2], node_id[3]).cyan());
+                    println!("  Address: {}", address);
+                    println!("  Name: {}", name);
+                    println!("  Owner: {}", keypair.pubkey());
+                    println!("  Tx: {}", sig.dimmed());
+                }
+                Err(e) => {
+                    println!("{} Registration failed: {}", "✗".red(), e);
+                    println!("\n{}", "Common issues:".yellow());
+                    println!("  • Insufficient SOL for rent (need ~0.002 SOL)");
+                    println!("  • Node already registered (use 'update' instead)");
+                    println!("  • Program not deployed (wait for deployment)");
+                }
+            }
+            Ok(())
+        }
+        Some(("list", sub_m)) => {
+            let json = sub_m.get_flag("json");
+
+            println!("{}", "Querying on-chain registry...".cyan());
+
+            let client = match registry::RegistryClient::new(rpc_url) {
+                Ok(c) => c,
+                Err(e) => {
+                    println!("{} Failed to connect: {}", "✗".red(), e);
+                    return Ok(());
+                }
+            };
+
+            match client.list_nodes() {
+                Ok(nodes) => {
+                    if json {
+                        let output: Vec<_> = nodes.iter().map(|(pda, node)| {
+                            serde_json::json!({
+                                "pda": pda.to_string(),
+                                "node_id": node.get_node_id_string(),
+                                "address": node.get_address(),
+                                "name": node.get_name(),
+                                "owner": node.owner.to_string(),
+                                "registered_at": node.registered_at,
+                                "last_heartbeat": node.last_heartbeat,
+                            })
+                        }).collect();
+                        println!("{}", serde_json::to_string_pretty(&output)?);
+                    } else {
+                        println!("{}", "On-Chain BBS Nodes".cyan().bold());
+                        println!("{}", "─".repeat(70));
+
+                        if nodes.is_empty() {
+                            println!("{}", "No nodes registered yet.".dimmed());
+                            println!("  Use 'osvm bbs registry register' to be the first!");
+                        } else {
+                            for (_pda, node) in nodes {
+                                let heartbeat = registry::format_timestamp(node.last_heartbeat);
+                                println!("  {} {} {}",
+                                    "◉".green(),
+                                    node.get_node_id_string().cyan(),
+                                    node.get_name().bold()
+                                );
+                                println!("      Address: {}", node.get_address());
+                                println!("      Last seen: {}", heartbeat.dimmed());
+                                println!();
+                            }
+                        }
+
+                        println!("  Program: {}", registry::PROGRAM_ID.dimmed());
+                    }
+                }
+                Err(e) => {
+                    println!("{} Failed to query: {}", "✗".red(), e);
+                }
+            }
+            Ok(())
+        }
+        Some(("update", sub_m)) => {
+            let address = sub_m.get_one::<String>("address");
+            let name = sub_m.get_one::<String>("name");
+            let keypair_path = sub_m.get_one::<String>("keypair")
+                .map(|s| s.as_str())
+                .unwrap_or("~/.config/solana/id.json");
+
+            if address.is_none() && name.is_none() {
+                println!("{}", "Nothing to update. Specify --address or --name.".yellow());
+                return Ok(());
+            }
+
+            let expanded_path = registry::expand_path(keypair_path);
+            let keypair = registry::load_keypair(&expanded_path)?;
+
+            let client = registry::RegistryClient::new(rpc_url)?;
+
+            match client.update(&keypair, address.map(|s| s.as_str()), name.map(|s| s.as_str())) {
+                Ok(sig) => {
+                    println!("{} Registration updated!", "✓".green());
+                    if let Some(a) = address {
+                        println!("  New address: {}", a);
+                    }
+                    if let Some(n) = name {
+                        println!("  New name: {}", n);
+                    }
+                    println!("  Tx: {}", sig.dimmed());
+                }
+                Err(e) => {
+                    println!("{} Update failed: {}", "✗".red(), e);
+                }
+            }
+            Ok(())
+        }
+        Some(("heartbeat", sub_m)) => {
+            let keypair_path = sub_m.get_one::<String>("keypair")
+                .map(|s| s.as_str())
+                .unwrap_or("~/.config/solana/id.json");
+
+            let expanded_path = registry::expand_path(keypair_path);
+            let keypair = registry::load_keypair(&expanded_path)?;
+
+            let client = registry::RegistryClient::new(rpc_url)?;
+
+            match client.heartbeat(&keypair) {
+                Ok(sig) => {
+                    println!("{} Heartbeat sent!", "✓".green());
+                    println!("  Tx: {}", sig.dimmed());
+                }
+                Err(e) => {
+                    println!("{} Heartbeat failed: {}", "✗".red(), e);
+                }
+            }
+            Ok(())
+        }
+        Some(("deregister", sub_m)) => {
+            let keypair_path = sub_m.get_one::<String>("keypair")
+                .map(|s| s.as_str())
+                .unwrap_or("~/.config/solana/id.json");
+            let force = sub_m.get_flag("force");
+
+            if !force {
+                println!("{} This will remove your node from the on-chain registry.", "!".yellow());
+                println!("  Use --force to confirm.");
+                return Ok(());
+            }
+
+            let expanded_path = registry::expand_path(keypair_path);
+            let keypair = registry::load_keypair(&expanded_path)?;
+
+            let client = registry::RegistryClient::new(rpc_url)?;
+
+            match client.deregister(&keypair, None) {
+                Ok(sig) => {
+                    println!("{} Node deregistered!", "✓".green());
+                    println!("  Rent returned to: {}", keypair.pubkey());
+                    println!("  Tx: {}", sig.dimmed());
+                }
+                Err(e) => {
+                    println!("{} Deregistration failed: {}", "✗".red(), e);
+                }
+            }
+            Ok(())
+        }
+        Some(("discover", _sub_m)) => {
+            println!("{}", "Discovering peers from on-chain registry...".cyan());
+
+            let client = registry::RegistryClient::new(rpc_url)?;
+            let manager = get_federation_manager().await;
+
+            match client.list_nodes() {
+                Ok(nodes) => {
+                    println!("  Found {} registered nodes", nodes.len());
+
+                    let mut added = 0;
+                    for (_pda, node) in nodes {
+                        let address = node.get_address();
+                        if !address.is_empty() {
+                            if let Ok(_peer) = manager.add_peer(&address).await {
+                                println!("    {} {} {}", "→".green(), node.get_node_id_string().cyan(), address);
+                                added += 1;
+                            }
+                        }
+                    }
+
+                    println!("\n{} Added {} peers from registry", "✓".green(), added);
+                }
+                Err(e) => {
+                    println!("{} Discovery failed: {}", "✗".red(), e);
+                }
+            }
+            Ok(())
+        }
+        _ => {
+            println!("{}", "On-Chain Registry Commands".cyan().bold());
+            println!("{}", "─".repeat(50));
+            println!("  {} - Register this node on Solana devnet", "register".bold());
+            println!("  {} - List all registered nodes", "list".bold());
+            println!("  {} - Update registration (address/name)", "update".bold());
+            println!("  {} - Send heartbeat (update last_seen)", "heartbeat".bold());
+            println!("  {} - Remove registration from chain", "deregister".bold());
+            println!("  {} - Discover and add peers from registry", "discover".bold());
+            println!();
+            println!("  Program ID: {}", registry::PROGRAM_ID.dimmed());
+            println!("  Network: {}", "Solana Devnet".cyan());
+            println!();
+            println!("{}", "Use 'osvm bbs registry --help' for options.".dimmed());
+            Ok(())
+        }
+    }
 }

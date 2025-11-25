@@ -14,6 +14,7 @@ pub mod tui_widgets;
 pub mod meshtastic;
 pub mod http_server;
 pub mod federation;
+pub mod registry;
 
 use std::path::PathBuf;
 use dirs::data_dir;

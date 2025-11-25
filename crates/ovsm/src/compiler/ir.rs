@@ -197,6 +197,13 @@ impl IrGenerator {
         self.var_map.insert("accounts".to_string(), saved_accounts);
         self.var_map.insert("instruction-data".to_string(), saved_instr_data);
 
+        // CRITICAL: Ensure next_reg skips past the reserved registers (6 and 7)
+        // Otherwise alloc_reg() will return IrReg(6) or IrReg(7) for temporaries,
+        // which will clobber the saved accounts/instruction-data pointers!
+        if self.next_reg <= 7 {
+            self.next_reg = 8;
+        }
+
         eprintln!("🔍 IR DEBUG: Generating IR for {} statements", program.statements.len());
 
         // Generate IR for each statement, tracking last result
@@ -518,9 +525,26 @@ impl IrGenerator {
                 }
 
                 // Handle (account-lamports idx) - get lamports for account at index
-                // Solana format: after num_accounts (8 bytes), each account has:
-                //   [u8 dup][u8 signer][u8 writable][u8 exec][4 pad][32 pubkey][32 owner][u64 lamports]...
-                //   lamports offset = 8 + 1 + 1 + 1 + 1 + 4 + 32 + 32 = 80 from account start
+                // Solana serialized format (from sol_deserialize in deserialize.h):
+                // After num_accounts (8 bytes), each account entry:
+                //   +0:  u8  dup_info (0xFF = new, else = index)
+                //   +1:  u8  is_signer
+                //   +2:  u8  is_writable
+                //   +3:  u8  executable
+                //   +4:  4 bytes padding
+                //   +8:  32 bytes pubkey
+                //   +40: 32 bytes owner
+                //   +72: u64 lamports (THE VALUE, not a pointer!)
+                //   +80: u64 data_len
+                //   +88: data_len bytes of data
+                //   +88+data_len: 10240 bytes MAX_PERMITTED_DATA_INCREASE
+                //   +aligned: u64 rent_epoch
+                //
+                // IMPORTANT: Account size is VARIABLE due to data_len!
+                // For idx=0, lamports is at offset 8 + 72 = 80 from input start
+                // For subsequent accounts, we'd need to iterate and sum data_lens
+                //
+                // For now: only support account 0 correctly
                 if name == "account-lamports" && args.len() == 1 {
                     let idx_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-lamports index has no result"))?;
@@ -529,16 +553,24 @@ impl IrGenerator {
                     let accounts_ptr = *self.var_map.get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
-                    // Calculate account offset: 8 (for num_accounts) + idx * account_size
-                    // For simplicity, assume fixed account size of 165 bytes (minimum without data)
-                    // Real implementation would need to iterate
+                    // For account 0: skip num_accounts (8 bytes) + offset within account (72 bytes)
+                    // lamports offset from account start = 1+1+1+1+4+32+32 = 72
+                    // Total for account 0: 8 + 72 = 80
+                    //
+                    // For other accounts, we'd need to scan forward through variable-length entries
+                    // For now, approximate: each account has ~10334 bytes minimum (with MAX_PERMITTED_DATA_INCREASE)
+                    // But this is wrong for accounts with non-zero data_len
+                    //
+                    // Better approach: For account 0, use hardcoded offset 80
+                    // TODO: Implement proper iteration for account > 0
+
                     let eight_reg = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight_reg, 8));
 
-                    // For account 0: offset = 8, lamports at offset 80 from account start
-                    // Total: 8 + 80 = 88
+                    // For accounts with no data: 1+1+1+1+4+32+32+8+8+0+10240+padding(~8)+8 ≈ 10344
+                    // Use a large approximate size for subsequent accounts
                     let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 165)); // Approximate
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
 
                     let account_offset = self.alloc_reg();
                     self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
@@ -546,9 +578,9 @@ impl IrGenerator {
                     let base_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
 
-                    // Add lamports offset within account (80 bytes)
+                    // Add lamports offset within account (72 bytes, not 80!)
                     let lamports_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(lamports_offset, 80));
+                    self.emit(IrInstruction::ConstI64(lamports_offset, 72));
 
                     let total_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(total_offset, base_offset, lamports_offset));
@@ -561,8 +593,9 @@ impl IrGenerator {
                     return Ok(Some(dst));
                 }
 
-                // Handle (account-data-ptr idx) - get data pointer for account
-                // data_len is at offset 88, data starts at offset 96
+                // Handle (account-data-ptr idx) - get pointer to account data
+                // Data starts at offset 88 from account start (after data_len at 80)
+                // For account 0: 8 + 88 = 96 from input start
                 if name == "account-data-ptr" && args.len() == 1 {
                     let idx_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-data-ptr index has no result"))?;
@@ -573,8 +606,9 @@ impl IrGenerator {
                     let eight_reg = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight_reg, 8));
 
+                    // Same approximate account size as lamports
                     let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 165));
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
 
                     let account_offset = self.alloc_reg();
                     self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
@@ -582,9 +616,10 @@ impl IrGenerator {
                     let base_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
 
-                    // Data starts at offset 96 from account start
+                    // Data starts at offset 88 from account start
+                    // = 1+1+1+1+4+32+32+8+8 = 88
                     let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 96));
+                    self.emit(IrInstruction::ConstI64(data_offset, 88));
 
                     let total_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(total_offset, base_offset, data_offset));
@@ -595,6 +630,8 @@ impl IrGenerator {
                 }
 
                 // Handle (account-data-len idx) - get data length for account
+                // data_len is at offset 80 from account start
+                // For account 0: 8 + 80 = 88 from input start
                 if name == "account-data-len" && args.len() == 1 {
                     let idx_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-data-len index has no result"))?;
@@ -606,7 +643,7 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(eight_reg, 8));
 
                     let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 165));
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
 
                     let account_offset = self.alloc_reg();
                     self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
@@ -614,9 +651,10 @@ impl IrGenerator {
                     let base_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
 
-                    // data_len is at offset 88 from account start
+                    // data_len is at offset 80 from account start (right after lamports)
+                    // = 1+1+1+1+4+32+32+8 = 80
                     let len_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(len_offset, 88));
+                    self.emit(IrInstruction::ConstI64(len_offset, 80));
 
                     let total_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(total_offset, base_offset, len_offset));

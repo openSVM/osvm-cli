@@ -1079,37 +1079,114 @@ impl OsvmApp {
                         KeyCode::Char('k') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
                             self.chat_scroll = self.chat_scroll.saturating_sub(1);
                         }
-                        // BBS scrolling (j/k for scrolling posts)
+                        // BBS INPUT MODE ACTIVATION
+                        KeyCode::Char('i') if self.active_tab == TabIndex::BBS => {
+                            let mut should_log = false;
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                if !bbs.input_active {
+                                    bbs.input_active = true;
+                                    should_log = true;
+                                }
+                            }
+                            if should_log {
+                                self.add_log("BBS input activated (press Enter to send, Esc to cancel)".to_string());
+                            }
+                        }
+                        // BBS INPUT HANDLING (when input is active)
+                        KeyCode::Char(c) if self.active_tab == TabIndex::BBS => {
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                if bbs.input_active && !key.modifiers.contains(KeyModifiers::CONTROL) {
+                                    bbs.input_buffer.push(c);
+                                }
+                            }
+                        }
+                        KeyCode::Backspace if self.active_tab == TabIndex::BBS => {
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                if bbs.input_active {
+                                    bbs.input_buffer.pop();
+                                }
+                            }
+                        }
+                        KeyCode::Enter if self.active_tab == TabIndex::BBS => {
+                            let mut message_opt = None;
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                if bbs.input_active && !bbs.input_buffer.trim().is_empty() {
+                                    // TODO: Actually send message to database
+                                    message_opt = Some(bbs.input_buffer.clone());
+                                    bbs.input_buffer.clear();
+                                    bbs.input_active = false;
+                                    // Refresh posts to show new message
+                                    let _ = bbs.load_posts();
+                                }
+                            }
+                            if let Some(message) = message_opt {
+                                self.add_log(format!("📬 Message posted: {}", message));
+                            }
+                        }
+                        KeyCode::Esc if self.active_tab == TabIndex::BBS => {
+                            let mut should_log = false;
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                if bbs.input_active {
+                                    bbs.input_buffer.clear();
+                                    bbs.input_active = false;
+                                    should_log = true;
+                                }
+                            }
+                            if should_log {
+                                self.add_log("BBS input cancelled".to_string());
+                            }
+                        }
+                        // BBS scrolling (j/k for scrolling posts - only when NOT in input mode)
                         KeyCode::Char('j') | KeyCode::Down if self.active_tab == TabIndex::BBS => {
                             if let Ok(mut bbs) = self.bbs_state.lock() {
-                                bbs.scroll_offset = bbs.scroll_offset.saturating_add(1);
+                                if !bbs.input_active {
+                                    bbs.scroll_offset = bbs.scroll_offset.saturating_add(1);
+                                }
                             }
                         }
                         KeyCode::Char('k') | KeyCode::Up if self.active_tab == TabIndex::BBS => {
                             if let Ok(mut bbs) = self.bbs_state.lock() {
-                                bbs.scroll_offset = bbs.scroll_offset.saturating_sub(1);
+                                if !bbs.input_active {
+                                    bbs.scroll_offset = bbs.scroll_offset.saturating_sub(1);
+                                }
                             }
                         }
-                        // BBS board selection (1-9 to select board)
+                        // BBS board selection (1-9 to select board - only when NOT in input mode)
                         KeyCode::Char(c @ '1'..='9') if self.active_tab == TabIndex::BBS => {
+                            let mut log_msg = None;
                             if let Ok(mut bbs) = self.bbs_state.lock() {
-                                let board_idx = c.to_digit(10).unwrap() as usize - 1;
-                                if let Some(board) = bbs.boards.get(board_idx) {
-                                    bbs.current_board = Some(board.id);
-                                    let _ = bbs.load_posts();
-                                    bbs.scroll_offset = 0;
+                                if !bbs.input_active {
+                                    let board_idx = c.to_digit(10).unwrap() as usize - 1;
+                                    if board_idx < bbs.boards.len() {
+                                        let board_id = bbs.boards[board_idx].id;
+                                        let board_name = bbs.boards[board_idx].name.clone();
+                                        bbs.current_board = Some(board_id);
+                                        bbs.selected_board_index = Some(board_idx);
+                                        let _ = bbs.load_posts();
+                                        bbs.scroll_offset = 0;
+                                        log_msg = Some(format!("📋 Switched to board: {}", board_name));
+                                    }
                                 }
+                            }
+                            if let Some(msg) = log_msg {
+                                self.add_log(msg);
                             }
                         }
-                        // BBS refresh (r key)
+                        // BBS refresh (r key - only when NOT in input mode)
                         KeyCode::Char('r') if self.active_tab == TabIndex::BBS => {
+                            let mut should_log = false;
                             if let Ok(mut bbs) = self.bbs_state.lock() {
-                                let _ = bbs.refresh_boards();
-                                if bbs.current_board.is_some() {
-                                    let _ = bbs.load_posts();
+                                if !bbs.input_active {
+                                    let _ = bbs.refresh_boards();
+                                    if bbs.current_board.is_some() {
+                                        let _ = bbs.load_posts();
+                                    }
+                                    should_log = true;
                                 }
                             }
-                            self.add_log("🔄 BBS refreshed".to_string());
+                            if should_log {
+                                self.add_log("🔄 BBS refreshed".to_string());
+                            }
                         }
                         KeyCode::Char('?') | KeyCode::F(1) => {
                             self.show_help = !self.show_help;
@@ -2475,7 +2552,10 @@ impl OsvmApp {
             Line::from("   j/k          Scroll line by line"),
             Line::from(""),
             Line::from(Span::styled(" ─── BBS View ────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
-            Line::from("   j/k/↑/↓      Scroll posts"),
+            Line::from("   i            Activate message input"),
+            Line::from("   Enter        Send message (when typing)"),
+            Line::from("   Esc          Cancel input"),
+            Line::from("   j/k/↑/↓      Scroll posts (when not typing)"),
             Line::from("   1-9          Select board by number"),
             Line::from("   r            Refresh boards and posts"),
             Line::from(""),
