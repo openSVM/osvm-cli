@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2025-11-26
+
+### Added
+- 🔧 **Instruction Data Access Functions** - Access instruction data passed to your program
+  - `instruction-data-len` - Get the length of instruction data in bytes
+  - `instruction-data-ptr` - Get pointer to instruction data buffer
+- ✅ Both functions verified on Solana devnet with test program
+
+### Fixed
+- 🐛 **Critical**: Fixed account size calculation for instruction data offset
+  - Account size is 10336 bytes for zero-data accounts (was incorrectly 10344)
+  - Instruction data is now correctly located after all accounts
+
+### Limitation
+- Instruction data functions assume all accounts have `data_len=0` (standard for wallet accounts)
+- Programs with data-bearing accounts may need a more sophisticated approach
+
 ## [1.0.5] - 2025-11-25
 
 ### Added

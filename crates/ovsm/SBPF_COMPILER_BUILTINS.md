@@ -797,10 +797,59 @@ The compiler reports estimated CU usage:
 
 ---
 
+### `instruction-data-len`
+
+**Signature:** `(instruction-data-len)`
+**Description:** Get the length of instruction data passed to the program
+**Returns:** u64 - Length in bytes
+**Tested:** ✅ Verified on devnet
+**Limitation:** Assumes all accounts have zero data (common case for wallet accounts)
+
+```lisp
+;; Check instruction data length
+(define len (instruction-data-len))
+(sol_log_ "Instruction data length:")
+(sol_log_64_ len)
+```
+
+---
+
+### `instruction-data-ptr`
+
+**Signature:** `(instruction-data-ptr)`
+**Description:** Get pointer to the instruction data buffer
+**Returns:** Pointer to instruction data
+**Tested:** ✅ Verified on devnet
+**Limitation:** Assumes all accounts have zero data
+
+```lisp
+;; Read instruction data
+(define ptr (instruction-data-ptr))
+(define first-byte (mem-load1 ptr 0))
+(sol_log_ "First byte of instruction data:")
+(sol_log_64_ first-byte)
+```
+
+**Example: Parsing Instruction Data**
+```lisp
+(do
+  (define len (instruction-data-len))
+
+  (if (>= len 8)
+      (do
+        (define ptr (instruction-data-ptr))
+        ;; Read first 8 bytes as u64 argument
+        (define arg1 (mem-load ptr 0))
+        (sol_log_ "Argument 1:")
+        (sol_log_64_ arg1))
+      (sol_log_ "Not enough instruction data"))
+  0)
+```
+
+---
+
 ## Future Features (Planned)
 
-- [ ] `instruction-data-len` - Get instruction data length (requires scanning accounts buffer)
-- [ ] `instruction-data-ptr` - Get pointer to instruction data
 - [ ] Cross-Program Invocation (CPI)
 - [ ] Program Derived Addresses (PDAs)
 - [ ] Token Program integration
@@ -816,9 +865,9 @@ The compiler reports estimated CU usage:
 
 ---
 
-**Last Updated:** 2025-11-25
-**OVSM Version:** 1.0.5
-**Compiler Status:** Production-ready for account reading
+**Last Updated:** 2025-11-26
+**OVSM Version:** 1.0.6
+**Compiler Status:** Production-ready for account reading and instruction data
 
 ---
 

@@ -673,10 +673,81 @@ impl IrGenerator {
                     return Ok(Some(dst));
                 }
 
-                // NOTE: instruction-data-len and instruction-data-ptr are NOT YET IMPLEMENTED
-                // In Solana sBPF V1, instruction data is at the END of the accounts buffer,
-                // requiring scanning through variable-length account entries to find it.
-                // TODO: Implement proper instruction data access by iterating through accounts.
+                // Handle (instruction-data-len) - get length of instruction data
+                // In Solana sBPF V1, instruction data comes after ALL accounts in the buffer:
+                //   [num_accounts: 8][account_0...][account_1...]...[account_N][instr_len: 8][instr_data...]
+                //
+                // For accounts with ZERO data (common case: wallet accounts), each account is 10336 bytes:
+                //   dup_info(1) + is_signer(1) + is_writable(1) + executable(1) + padding(4) +
+                //   pubkey(32) + owner(32) + lamports(8) + data_len(8) + data(0) +
+                //   MAX_PERMITTED_DATA_INCREASE(10240) + rent_epoch(8) = 10336 bytes
+                //
+                // LIMITATION: This implementation assumes all accounts have data_len=0.
+                // For programs with data-bearing accounts, use a more sophisticated approach.
+                if name == "instruction-data-len" && args.is_empty() {
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    // Read num_accounts from offset 0
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
+
+                    // Calculate offset to instruction data length:
+                    // offset = 8 + num_accounts * 10336
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336));
+
+                    let accounts_total = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(accounts_total, num_accounts, account_size));
+
+                    let instr_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(instr_offset, eight, accounts_total));
+
+                    // Read instruction data length at that offset
+                    let instr_len_addr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(instr_len_addr, accounts_ptr, instr_offset));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load(dst, instr_len_addr, 0));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (instruction-data-ptr) - get pointer to instruction data
+                // Same calculation as instruction-data-len, but return ptr + 8 (skip length)
+                if name == "instruction-data-ptr" && args.is_empty() {
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    // Read num_accounts from offset 0
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
+
+                    // Calculate offset to instruction data length:
+                    // offset = 8 + num_accounts * 10336
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336));
+
+                    let accounts_total = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(accounts_total, num_accounts, account_size));
+
+                    let instr_len_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(instr_len_offset, eight, accounts_total));
+
+                    // Skip past the length (8 bytes) to get to actual data
+                    let instr_data_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(instr_data_offset, instr_len_offset, eight));
+
+                    // Return pointer to instruction data
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dst, accounts_ptr, instr_data_offset));
+                    return Ok(Some(dst));
+                }
 
                 // Handle (account-data-ptr idx) - get pointer to account data
                 // Data starts at offset 88 from account start (after data_len at 80)
