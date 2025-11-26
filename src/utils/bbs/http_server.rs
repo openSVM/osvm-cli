@@ -341,13 +341,39 @@ async fn create_post(
         Ok(p) => {
             let reply_count = db::posts::reply_count(&mut conn, p.id);
 
-            // Broadcast
+            // Broadcast to local WebSocket clients
             let _ = state.tx.send(BroadcastEvent::NewPost {
                 board: board.name.clone(),
                 post_id: p.id,
                 user: user.short_name.clone(),
                 body: p.body.clone(),
                 parent_id: p.parent_id,
+            });
+
+            // Push to federation peers immediately (non-blocking)
+            let fed_message = FederatedMessage {
+                origin_node: state.node_id.clone(),
+                message_id: format!("{}:{}", state.node_id, p.id),
+                board: board.name.clone(),
+                author_node: node_id.to_string(),
+                author_name: user.short_name.clone(),
+                body: p.body.clone(),
+                timestamp: (p.created_at_us / 1_000_000) as u64,
+                parent_id: p.parent_id.map(|pid| format!("{}:{}", state.node_id, pid)),
+                signature: None,
+            };
+            let federation = state.federation.clone();
+            tokio::spawn(async move {
+                let results = federation.broadcast_message(&fed_message).await;
+                let success_count = results.iter().filter(|(_, ok)| *ok).count();
+                if !results.is_empty() {
+                    tracing::info!(
+                        "Pushed message {} to {} peers ({} successful)",
+                        fed_message.message_id,
+                        results.len(),
+                        success_count
+                    );
+                }
             });
 
             (StatusCode::CREATED, ApiResponse::ok(PostInfo {
@@ -399,13 +425,39 @@ async fn reply_to_post(
         Ok(p) => {
             let reply_count = db::posts::reply_count(&mut conn, p.id);
 
-            // Broadcast
+            // Broadcast to local WebSocket clients
             let _ = state.tx.send(BroadcastEvent::NewPost {
                 board: board.name.clone(),
                 post_id: p.id,
                 user: user.short_name.clone(),
                 body: p.body.clone(),
                 parent_id: p.parent_id,
+            });
+
+            // Push to federation peers immediately (non-blocking)
+            let fed_message = FederatedMessage {
+                origin_node: state.node_id.clone(),
+                message_id: format!("{}:{}", state.node_id, p.id),
+                board: board.name.clone(),
+                author_node: node_id.to_string(),
+                author_name: user.short_name.clone(),
+                body: p.body.clone(),
+                timestamp: (p.created_at_us / 1_000_000) as u64,
+                parent_id: p.parent_id.map(|pid| format!("{}:{}", state.node_id, pid)),
+                signature: None,
+            };
+            let federation = state.federation.clone();
+            tokio::spawn(async move {
+                let results = federation.broadcast_message(&fed_message).await;
+                let success_count = results.iter().filter(|(_, ok)| *ok).count();
+                if !results.is_empty() {
+                    tracing::info!(
+                        "Pushed reply {} to {} peers ({} successful)",
+                        fed_message.message_id,
+                        results.len(),
+                        success_count
+                    );
+                }
             });
 
             (StatusCode::CREATED, ApiResponse::ok(PostInfo {
@@ -712,8 +764,9 @@ pub async fn start_server(host: &str, port: u16) -> Result<(), Box<dyn std::erro
     // Create broadcast channel
     let (tx, _) = broadcast::channel::<BroadcastEvent>(100);
 
-    // Create federation manager
+    // Create federation manager and start background sync
     let federation = Arc::new(FederationManager::new(&node_id));
+    let _sync_handle = federation.clone().start_sync_task();
 
     let state = Arc::new(ServerState {
         tx,

@@ -786,6 +786,154 @@ osvm doctor [--fix]                    # System diagnostics
 osvm user@host --svm sonic             # SSH deployment
 ```
 
+### 📡 BBS System (Decentralized Communication)
+```bash
+# Initialize and manage BBS database
+osvm bbs init                                   # Initialize database with default boards
+osvm bbs init --reset                           # Reset database (destroys all data)
+osvm bbs boards list                            # List all boards
+osvm bbs boards create CUSTOM "Description"    # Create custom board
+
+# Post and read messages
+osvm bbs post GENERAL "Hello!"                  # Post to a board
+osvm bbs post ALERTS "Alert" --title "Warning"  # Post with title
+osvm bbs read GENERAL                           # Read board messages
+osvm bbs read GENERAL --limit 50 --follow       # Follow mode with limit
+osvm bbs reply 42 "Reply to message #42"        # Reply to message
+
+# HTTP API server
+osvm bbs server                                 # Start on default port 8080
+osvm bbs server --host 0.0.0.0 --port 3000     # Custom host/port
+
+# On-chain registry (Solana devnet) - TRUSTLESS PEER DISCOVERY
+osvm bbs registry register "http://ip:8080" "NodeName"  # Register on-chain
+osvm bbs registry list                          # List all registered nodes
+osvm bbs registry list --json                   # JSON output
+osvm bbs registry update --address "http://new-ip:8080" # Update registration
+osvm bbs registry heartbeat                     # Update last_seen timestamp
+osvm bbs registry deregister                    # Remove from registry
+osvm bbs registry discover                      # Discover and add peers from registry
+
+# Federation (peer-to-peer sync)
+osvm bbs peers add http://192.168.1.100:8080   # Add peer manually
+osvm bbs peers list                             # List known peers
+osvm bbs peers sync                             # Sync messages from all peers
+osvm bbs peers discover --local                 # Auto-discover on LAN (mDNS)
+
+# Meshtastic radio (off-grid communication)
+osvm bbs radio connect 192.168.1.100:4403      # Connect via TCP
+osvm bbs radio connect /dev/ttyUSB0 --serial   # Connect via serial
+osvm bbs radio status                           # Check connection status
+osvm bbs radio send "Message"                   # Broadcast message
+osvm bbs radio send "DM" --to !abcd1234        # Direct message to node
+
+# Agent management
+osvm bbs agent register "BotName" --capabilities "research,monitor"
+osvm bbs agent list                             # List registered agents
+osvm bbs agent status self                      # Check own status
+
+# Interactive shell
+osvm bbs interactive                            # Start BBS shell
+osvm bbs stats                                  # Show BBS statistics
+```
+
+**On-Chain Registry Program ID:** `CrCWo8atPHMtDiun76czDood6RnPYVvzxPmoMMP4TSCG` (Devnet - **LIVE**)
+
+**Key Features:**
+- On-chain registry for trustless, censorship-resistant peer discovery
+- Federation for peer-to-peer message sync with deduplication
+- Meshtastic radio for off-grid LoRa mesh communication
+- Agent identity registration for verified AI agent messaging
+- HTTP API with REST endpoints and WebSocket for real-time updates
+
+### 🌐 BBS Federation Architecture (PRODUCTION-READY)
+
+**How Federation Works:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SOLANA DEVNET (Trustless Discovery)              │
+│                                                                     │
+│    ┌─────────────────────────────────────────────────────────────┐  │
+│    │              BBS Registry Program                          │  │
+│    │   Program ID: CrCWo8atPHMtDiun76czDood6RnPYVvzxPmoMMP4TSCG │  │
+│    │                                                             │  │
+│    │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │  │
+│    │   │ NodeA PDA   │  │ NodeB PDA   │  │ NodeC PDA   │        │  │
+│    │   │ addr, name  │  │ addr, name  │  │ addr, name  │        │  │
+│    │   │ heartbeat   │  │ heartbeat   │  │ heartbeat   │        │  │
+│    │   └─────────────┘  └─────────────┘  └─────────────┘        │  │
+│    └─────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                    ┌─────────┴──────────┐
+                    │  osvm bbs registry │
+                    │     discover       │
+                    └─────────┬──────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     HTTP FEDERATION LAYER                           │
+│                                                                     │
+│  ┌─────────────┐         ┌─────────────┐         ┌─────────────┐  │
+│  │   Node A    │◄───────►│   Node B    │◄───────►│   Node C    │  │
+│  │  :8080      │  sync   │  :8081      │  sync   │  :8082      │  │
+│  │             │  push   │             │  push   │             │  │
+│  └─────────────┘         └─────────────┘         └─────────────┘  │
+│                                                                     │
+│  Message Flow:                                                      │
+│  1. User posts on Node A                                           │
+│  2. Instant push to peers via POST /api/federation/receive         │
+│  3. Background sync every 10s via POST /api/federation/sync        │
+│  4. Deduplication by message_id prevents duplicates                │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Federation Endpoints:**
+```
+GET  /api/federation/peers    - List known peers
+POST /api/federation/peers    - Add a peer {"address":"http://..."}
+POST /api/federation/sync     - Request messages since timestamp
+POST /api/federation/receive  - Receive pushed message from peer
+POST /api/federation/announce - Announce presence to peer
+```
+
+**Federation Implementation Details:**
+- **Sync Interval:** 10 seconds (configurable in `federation.rs`)
+- **Instant Push:** New posts/replies immediately pushed to all peers
+- **Deduplication:** Messages identified by `origin_node:local_id`
+- **Gossip:** Peers share their peer lists during sync
+- **Database Tables:** `federated_messages`, `known_peers` (SQLite)
+
+**Quick Start - Two Node Federation:**
+```bash
+# Terminal 1: Start Node A
+osvm bbs server --port 8080
+
+# Terminal 2: Start Node B
+osvm bbs server --port 8081
+
+# Terminal 3: Connect them
+curl -X POST http://localhost:8080/api/federation/peers \
+  -H "Content-Type: application/json" \
+  -d '{"address":"http://localhost:8081"}'
+
+curl -X POST http://localhost:8081/api/federation/peers \
+  -H "Content-Type: application/json" \
+  -d '{"address":"http://localhost:8080"}'
+
+# Post on Node A - appears on Node B instantly!
+curl -X POST http://localhost:8080/api/boards/GENERAL/posts \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello federation!"}'
+```
+
+**Key Files:**
+- `src/utils/bbs/federation.rs` - FederationManager, sync loop, peer management
+- `src/utils/bbs/http_server.rs` - REST/WebSocket API, instant push logic
+- `src/utils/bbs/db/federated.rs` - Database operations for federated messages
+- `src/utils/bbs/registry.rs` - Solana on-chain registry client
+- `programs/bbs-registry/src/lib.rs` - Solana program for peer discovery
+
 ---
 
 ## Configuration Management
@@ -1047,103 +1195,75 @@ osvm ovsm repl
 - why BUILD  release? WE DEBUGGING
 ---
 
-## 🚨 CURRENT KNOWN ISSUES & TECHNICAL DEBT
+## ✅ TUI DASHBOARD STATUS (PRODUCTION-READY)
 
-### TUI Dashboard Issues (NEEDS IMMEDIATE ATTENTION)
+### AI Insights Panel (FULLY IMPLEMENTED)
 
-**Problem:** The TUI dashboard (research mode `--tui`) is not production-ready and lacks actionable insights.
+The TUI dashboard AI Insights panel is now production-ready with comprehensive real-time analysis.
 
-**Critical Issues:**
+**Implemented Features** (`src/utils/tui/app.rs:2604-2799`, `src/utils/tui/graph.rs:2275-2380`):
 
-1. **AI Insights Panel is Broken** (`src/utils/tui/app.rs:2132`)
-   - Currently just displays empty strings from `self.ai_insights` Vec
-   - Vec is never populated by research agent
-   - Shows "Analyzing patterns..." forever with no actual analysis
-   - **Fix Required:** Replace with real-time automated analysis:
-     - Network complexity metrics (edges/nodes ratio)
-     - Whale detection (>100 SOL inflows/outflows)
-     - Wallet behavior patterns (sink/source/throughput)
-     - Token diversity analysis
-     - Risk scoring based on graph structure
-     - Mixer detection alerts
+1. **✅ Risk Scoring System** - Color-coded risk levels (Critical/High/Medium/Low) with 0-100 score
+   - Critical alerts displayed prominently with 🚨 icons
+   - Actionable context provided for each risk level
+   - Human-readable explanations for all risk factors
 
-2. **Graph Visualization Recently Fixed** (`src/utils/tui/graph.rs`)
-   - ✅ FIXED: Columnar layout with inflows left, outflows right
-   - ✅ FIXED: Abbreviated addresses (first 3 + last 3 chars)
-   - ✅ FIXED: All nodes get positions for off-screen edge rendering
-   - ✅ FIXED: Edges draw to off-viewport nodes
-   - **Remaining:** Need better node label positioning at high zoom
+2. **✅ Network Complexity Analysis** (`graph.rs:2281`)
+   - Edges/nodes ratio calculation
+   - >5.0 triggers CRITICAL alert (potential mixer)
+   - 3.0-5.0 elevates risk score
 
-3. **MCP Compression Flag** (`src/services/research_agent.rs`)
-   - ✅ FIXED: All `get_account_transfers` calls now include `compress: true`
-   - Fixed lines: 1462, 1544, 1897, 1915
-   - Ensures MCP server returns compressed data to avoid huge JSON responses
+3. **✅ Whale Detection** (`graph.rs:2323`)
+   - Configurable threshold (default 100 SOL)
+   - Tracks large flow counts and totals
+   - Contributes to risk score
 
-4. **Dashboard Widgets Need Enhancement**
-   - Token Holdings widget shows only top 2 tokens (should show top 5-10)
-   - Transfer Activity needs time-series visualization
-   - SOL Flow needs trend arrows and historical comparison
-   - No anomaly detection or pattern recognition
+4. **✅ Wallet Behavior Classification** (`graph.rs:2187-2271`)
+   - Bot (🤖): Regular intervals, high frequency
+   - Exchange (🏦): High volume, many counterparties
+   - Trader (📈): DEX interactions, moderate volume
+   - Mixer (🌀): Many small I/O, obfuscation patterns
+   - EOA (👤): Human-like patterns
+   - Contract (📜): Program accounts
+   - Dormant (💤): Very low activity
 
-### Implementation Priority for Dashboard
+5. **✅ Circular Flow Detection** (`graph.rs:2113-2185`)
+   - Detects wash trading patterns
+   - Shows cycle length and total amounts
+   - CRITICAL alerts for circular flows
 
-**HIGH PRIORITY (Do This First):**
-```rust
-// src/utils/tui/app.rs - render_ai_insights()
-// Replace lines 2132-2177 with intelligent real-time analysis
+6. **✅ Rapid Transfer Detection** (`graph.rs:2030-2111`)
+   - Configurable time windows and thresholds
+   - Severity levels: Critical/High/Medium/Low
+   - Volume-based and count-based triggers
 
-fn render_ai_insights(&self, f: &mut Frame, area: Rect) {
-    // Calculate insights from actual graph data:
-    let graph = self.wallet_graph.lock().ok();
-    let transfers = self.transfer_events.lock().ok();
-    
-    // 1. Network Complexity: edges/nodes ratio
-    //    - > 5.0 = "HIGHLY CONNECTED - Potential mixer"
-    //    - 2.0-5.0 = "NORMAL - Typical patterns"
-    //    - < 2.0 = "LOW ACTIVITY"
-    
-    // 2. Whale Detection: Check self.total_sol_in/out
-    //    - > 100 SOL = "WHALE ACTIVITY DETECTED"
-    
-    // 3. Flow Pattern: inflows vs outflows ratio
-    //    - > 10 = "SINK WALLET - Accumulating funds"
-    //    - < 0.1 = "SOURCE WALLET - Distributing funds"
-    //    - ~1.0 = "THROUGHPUT - Pass-through wallet"
-    
-    // 4. Token Diversity: token_volumes count
-    //    - > 20 = "PORTFOLIO - Diversified"
-    //    - 5-20 = "TRADER - Active"
-    //    - 1-5 = "FOCUSED"
-    
-    // 5. Risk Score: Composite metric
-    //    - HIGH: complexity > 8.0 OR nodes > 100
-    //    - MEDIUM: complexity > 4.0 OR nodes > 50
-    //    - LOW: Otherwise
-    
-    // All insights should be color-coded and update in real-time
-}
-```
+7. **✅ Token Diversity Analysis** (`graph.rs:2348-2353`)
+   - Tracks unique tokens across transfers
+   - >20 tokens indicates portfolio mixing
 
-**MEDIUM PRIORITY:**
-- Add time-series sparklines for transfer activity
-- Implement anomaly detection (unusual transfer sizes/patterns)
-- Add wallet labeling (DEX, CEX, known programs)
-- Show top counterparty wallets
+8. **✅ Entity Clustering** (`graph.rs:2382-2430`)
+   - Groups related wallets by behavior
+   - Shows cluster sizes and confidence scores
+   - Identifies coordinated wallet activity
 
-**LOW PRIORITY:**
-- Export functionality enhancement
-- Historical comparison features
-- Advanced filtering UI
+9. **✅ Hub Wallet Detection** (`graph.rs:2355-2360`)
+   - Identifies source/sink/hub patterns
+   - Detects potential coordination points
 
-### Graph Layout Details (ALREADY FIXED)
+### Other Dashboard Components (FIXED)
 
-**Current Implementation:**
-- Columnar layout: `-X` = inflows, `+X` = outflows
-- Nodes sorted by transfer amount within columns
-- Spacing: 60 units between columns, 18 units between nodes
-- Center node always at (0,0), selected node becomes new center
-- All nodes get positions (no filtering) for edge rendering
-- Abbreviated labels: `APKhW` from `APKEC3RbiKmsDsg8YJc3b37ZnMZ13CyTVLG47GbSE5hW`
+1. **Graph Visualization** (`src/utils/tui/graph.rs`)
+   - ✅ Columnar layout: `-X` = inflows, `+X` = outflows
+   - ✅ Abbreviated addresses (first 3 + last 3 chars)
+   - ✅ All nodes get positions for edge rendering
+   - ✅ Edges draw to off-viewport nodes
+   - Minor: Node label positioning at high zoom could be improved
+
+2. **MCP Compression** (`src/services/research_agent.rs`)
+   - ✅ All `get_account_transfers` calls include `compress: true`
+
+3. **Token Holdings Widget**
+   - ✅ Shows up to 7 tokens with horizontal bar charts
 
 ### Testing the Dashboard
 
@@ -1152,11 +1272,18 @@ fn render_ai_insights(&self, f: &mut Frame, area: Rect) {
 ./target/release/osvm research <WALLET_ADDRESS> --tui
 
 # What to check:
-# 1. Does AI Insights show real analysis? (NO - needs fix)
-# 2. Do edges render to off-screen nodes? (YES - fixed)
-# 3. Is layout columnar with proper flow? (YES - fixed)
-# 4. Are addresses abbreviated? (YES - fixed)
-# 5. Are insights actionable? (NO - needs fix)
+# 1. Does AI Insights show real analysis? (YES - fully implemented)
+# 2. Do edges render to off-screen nodes? (YES)
+# 3. Is layout columnar with proper flow? (YES)
+# 4. Are addresses abbreviated? (YES)
+# 5. Are insights actionable? (YES - with risk context and recommendations)
 ```
+
+### Future Enhancements (LOW PRIORITY)
+
+- Time-series sparklines for transfer activity trends
+- Wallet labeling (DEX, CEX, known programs from database)
+- Historical comparison features
+- Advanced filtering UI
 
 ---

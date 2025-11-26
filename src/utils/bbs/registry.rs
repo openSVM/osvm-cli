@@ -19,7 +19,7 @@ use std::str::FromStr;
 const SYSTEM_PROGRAM_ID: Pubkey = solana_sdk::pubkey!("11111111111111111111111111111111");
 
 /// BBS Registry Program ID (deployed on devnet)
-pub const PROGRAM_ID: &str = "B6XtpamL7mSefkiRDQb84wT7wBWGLbULjqo5BZZanQyL";
+pub const PROGRAM_ID: &str = "CrCWo8atPHMtDiun76czDood6RnPYVvzxPmoMMP4TSCG";
 
 /// Default devnet RPC URL
 pub const DEVNET_RPC: &str = "https://api.devnet.solana.com";

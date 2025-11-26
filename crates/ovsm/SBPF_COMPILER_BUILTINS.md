@@ -755,11 +755,54 @@ The compiler reports estimated CU usage:
 
 ---
 
+## New in v1.0.5 (Session 2)
+
+### `set-lamports`
+
+**Signature:** `(set-lamports idx value)`
+**Description:** Set the lamport balance of account at index (for SOL transfers)
+**Parameters:**
+- `idx` - Account index (0-based)
+- `value` - New lamport value (u64)
+**Returns:** None
+**Note:** Account must be writable and owned by your program or System Program
+
+```lisp
+;; Transfer SOL: reduce account 0, increase account 1
+(define current-0 (account-lamports 0))
+(define current-1 (account-lamports 1))
+(define transfer-amount 1000000000)  ;; 1 SOL
+
+(set-lamports 0 (- current-0 transfer-amount))
+(set-lamports 1 (+ current-1 transfer-amount))
+```
+
+---
+
+### `account-executable`
+
+**Signature:** `(account-executable idx)`
+**Description:** Check if account is an executable program
+**Parameters:**
+- `idx` - Account index (0-based)
+**Returns:** 1 if executable, 0 if not
+**Tested:** ✅ Verified on devnet
+
+```lisp
+;; Verify account is a program
+(if (account-executable 0)
+    (sol_log_ "Account is executable")
+    (sol_log_ "Account is not a program"))
+```
+
+---
+
 ## Future Features (Planned)
 
+- [ ] `instruction-data-len` - Get instruction data length (requires scanning accounts buffer)
+- [ ] `instruction-data-ptr` - Get pointer to instruction data
 - [ ] Cross-Program Invocation (CPI)
 - [ ] Program Derived Addresses (PDAs)
-- [ ] Account data modification
 - [ ] Token Program integration
 - [ ] Custom error codes
 

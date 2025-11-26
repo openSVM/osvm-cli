@@ -19,6 +19,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use super::db;
+
 /// Default bootstrap servers (can be overridden)
 pub const DEFAULT_BOOTSTRAP_SERVERS: &[&str] = &[
     // Add community bootstrap servers here
@@ -149,7 +151,7 @@ impl FederationManager {
                 .timeout(Duration::from_secs(10))
                 .build()
                 .unwrap_or_default(),
-            sync_interval: Duration::from_secs(60),
+            sync_interval: Duration::from_secs(10),
         }
     }
 
@@ -228,30 +230,42 @@ impl FederationManager {
             limit: 100,
         };
 
+        // API wrapper response format: {"success": bool, "data": SyncResponse}
+        #[derive(Deserialize)]
+        struct ApiResponse {
+            #[allow(dead_code)]
+            success: bool,
+            data: SyncResponse,
+        }
+
         match self.client.post(&url).json(&request).send().await {
             Ok(resp) if resp.status().is_success() => {
-                match resp.json::<SyncResponse>().await {
-                    Ok(sync_resp) => {
-                        peer.status = PeerStatus::Online;
-                        peer.last_sync = Some(now_timestamp());
-                        peer.last_seen = Some(now_timestamp());
-                        peer.failure_count = 0;
+                // Try wrapped format first (from http_server.rs), fall back to direct
+                let body = resp.text().await.map_err(|e| e.to_string())?;
 
-                        // Process gossip - add any new peers
-                        for peer_addr in sync_resp.peers {
-                            if !self.peers.read().await.values().any(|p| p.address == peer_addr) {
-                                let _ = self.add_peer(&peer_addr).await;
-                            }
-                        }
+                let sync_resp = if let Ok(wrapped) = serde_json::from_str::<ApiResponse>(&body) {
+                    wrapped.data
+                } else if let Ok(direct) = serde_json::from_str::<SyncResponse>(&body) {
+                    direct
+                } else {
+                    peer.status = PeerStatus::Error("Parse error: invalid response format".to_string());
+                    peer.failure_count += 1;
+                    return Err("Invalid response format".to_string());
+                };
 
-                        Ok(sync_resp.messages)
-                    }
-                    Err(e) => {
-                        peer.status = PeerStatus::Error(format!("Parse error: {}", e));
-                        peer.failure_count += 1;
-                        Err(e.to_string())
+                peer.status = PeerStatus::Online;
+                peer.last_sync = Some(now_timestamp());
+                peer.last_seen = Some(now_timestamp());
+                peer.failure_count = 0;
+
+                // Process gossip - add any new peers
+                for peer_addr in sync_resp.peers {
+                    if !self.peers.read().await.values().any(|p| p.address == peer_addr) {
+                        let _ = self.add_peer(&peer_addr).await;
                     }
                 }
+
+                Ok(sync_resp.messages)
             }
             Ok(resp) => {
                 let status = resp.status();
@@ -267,12 +281,17 @@ impl FederationManager {
         }
     }
 
-    /// Push a message to all online peers
+    /// Push a message to all online peers (excluding self)
     pub async fn broadcast_message(&self, message: &FederatedMessage) -> Vec<(String, bool)> {
         let peers = self.online_peers().await;
         let mut results = Vec::new();
 
         for peer in peers {
+            // Skip pushing to ourselves
+            if peer.node_id == self.node_id {
+                continue;
+            }
+
             let url = format!("{}/api/federation/receive", peer.address);
             let success = match self.client.post(&url).json(message).send().await {
                 Ok(resp) => resp.status().is_success(),
@@ -323,12 +342,42 @@ impl FederationManager {
                     let since = peer.last_sync.unwrap_or(0);
                     if let Ok(messages) = manager.sync_from_peer(&mut peer, since).await {
                         // Store messages in local database
-                        // This would call into db::posts::create_federated()
-                        tracing::info!(
-                            "Synced {} messages from {}",
-                            messages.len(),
-                            peer.node_id
-                        );
+                        if !messages.is_empty() {
+                            if let Ok(mut conn) = db::establish_connection() {
+                                let mut stored_count = 0;
+                                for msg in &messages {
+                                    // Skip if message already exists (deduplication)
+                                    if db::federated::message_exists(&mut conn, &msg.message_id) {
+                                        continue;
+                                    }
+
+                                    // Store the federated message
+                                    if let Ok(_) = db::federated::store_message(
+                                        &mut conn,
+                                        &msg.message_id,
+                                        &msg.origin_node,
+                                        &msg.board,
+                                        &msg.author_node,
+                                        &msg.author_name,
+                                        &msg.body,
+                                        msg.parent_id.as_deref(),
+                                        msg.timestamp as i64,
+                                        msg.signature.as_deref(),
+                                    ) {
+                                        stored_count += 1;
+                                    }
+                                }
+
+                                if stored_count > 0 {
+                                    tracing::info!(
+                                        "Synced {} new messages from {} ({} total received)",
+                                        stored_count,
+                                        peer.node_id,
+                                        messages.len()
+                                    );
+                                }
+                            }
+                        }
                     }
                     // Update peer in map
                     manager
@@ -368,120 +417,8 @@ pub fn parse_message_id(message_id: &str) -> Option<(String, i32)> {
     None
 }
 
-// ============================================
-// API Endpoints for Federation
-// ============================================
-
-use axum::{
-    extract::State,
-    response::Json,
-    routing::{get, post},
-    Router,
-};
-
-/// Federation API state
-pub struct FederationState {
-    pub manager: Arc<FederationManager>,
-}
-
-/// Add federation routes to router
-pub fn federation_routes(state: Arc<FederationState>) -> Router {
-    Router::new()
-        .route("/api/federation/peers", get(list_peers_handler))
-        .route("/api/federation/peers", post(add_peer_handler))
-        .route("/api/federation/sync", post(sync_handler))
-        .route("/api/federation/receive", post(receive_handler))
-        .route("/api/federation/announce", post(announce_handler))
-        .with_state(state)
-}
-
-#[derive(Deserialize)]
-struct AddPeerRequest {
-    address: String,
-}
-
-async fn list_peers_handler(
-    State(state): State<Arc<FederationState>>,
-) -> Json<Vec<Peer>> {
-    Json(state.manager.list_peers().await)
-}
-
-async fn add_peer_handler(
-    State(state): State<Arc<FederationState>>,
-    Json(req): Json<AddPeerRequest>,
-) -> Json<serde_json::Value> {
-    match state.manager.add_peer(&req.address).await {
-        Ok(peer) => Json(serde_json::json!({
-            "success": true,
-            "peer": peer,
-        })),
-        Err(e) => Json(serde_json::json!({
-            "success": false,
-            "error": e,
-        })),
-    }
-}
-
-async fn sync_handler(
-    State(state): State<Arc<FederationState>>,
-    Json(req): Json<SyncRequest>,
-) -> Json<SyncResponse> {
-    // Get messages from local database since timestamp
-    // This would query db::posts with timestamp filter
-
-    let peers: Vec<String> = state
-        .manager
-        .list_peers()
-        .await
-        .iter()
-        .map(|p| p.address.clone())
-        .collect();
-
-    Json(SyncResponse {
-        node_id: state.manager.node_id.clone(),
-        timestamp: now_timestamp(),
-        messages: Vec::new(), // TODO: Query from database
-        peers,
-    })
-}
-
-async fn receive_handler(
-    State(_state): State<Arc<FederationState>>,
-    Json(message): Json<FederatedMessage>,
-) -> Json<serde_json::Value> {
-    // Store received message in local database
-    // This would call db::posts::create_federated()
-
-    Json(serde_json::json!({
-        "success": true,
-        "message_id": message.message_id,
-    }))
-}
-
-#[derive(Deserialize)]
-struct AnnounceRequest {
-    node_id: String,
-    address: String,
-    name: Option<String>,
-}
-
-async fn announce_handler(
-    State(state): State<Arc<FederationState>>,
-    Json(req): Json<AnnounceRequest>,
-) -> Json<serde_json::Value> {
-    // A peer is announcing itself
-    match state.manager.add_peer(&req.address).await {
-        Ok(_) => Json(serde_json::json!({
-            "success": true,
-            "your_node_id": req.node_id,
-            "our_node_id": state.manager.node_id,
-        })),
-        Err(e) => Json(serde_json::json!({
-            "success": false,
-            "error": e,
-        })),
-    }
-}
+// NOTE: Federation HTTP endpoints are implemented in http_server.rs
+// The routes there have full database integration for sync/receive operations
 
 #[cfg(test)]
 mod tests {

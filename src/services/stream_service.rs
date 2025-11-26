@@ -608,6 +608,7 @@ mod tests {
             success: true,
             fee: 5000,
             signer: "addr".to_string(),
+            program_ids: None,
         };
 
         let failed_tx = SolanaEvent::Transaction {
@@ -617,6 +618,7 @@ mod tests {
             success: false,
             fee: 5000,
             signer: "addr".to_string(),
+            program_ids: None,
         };
 
         assert!(filter.matches(&success_tx));

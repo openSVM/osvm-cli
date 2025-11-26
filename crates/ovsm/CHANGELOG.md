@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `mem-load1` - Load 1 byte from memory pointer + offset
 - 🔧 **Logging Syscall**
   - `sol_log_pubkey` - Log 32-byte public key in base58 format
+- 🔧 **Account Modification**
+  - `set-lamports` - Set lamport balance for SOL transfers
+- 🔧 **Account Flags**
+  - `account-executable` - Check if account is an executable program
 - 📝 **New Documentation**
   - `SBPF_COMPILER_BUILTINS.md` - Complete reference for sBPF compiler built-in functions
 

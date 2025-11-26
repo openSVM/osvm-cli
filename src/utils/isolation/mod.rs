@@ -222,11 +222,11 @@ mod tests {
 
     #[test]
     fn test_isolation_level_for_component_types() {
-        use config::IsolationType;
+        use self::config::IsolationType;
 
         // Validators should use at least MicroVM isolation
         let validator_isolation = IsolationType::MicroVM {
-            hypervisor: config::HypervisorType::Firecracker,
+            hypervisor: self::config::HypervisorType::Firecracker,
             kernel_path: None,
             rootfs_path: None,
         };
@@ -241,7 +241,7 @@ mod tests {
 
         // TEE provides highest security
         let tee_isolation = IsolationType::TEE {
-            tee_type: config::TEEType::IntelSGX,
+            tee_type: self::config::TEEType::IntelSGX,
             enclave_path: None,
         };
         assert_eq!(tee_isolation.level(), IsolationLevel::TEE);

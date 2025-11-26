@@ -593,6 +593,91 @@ impl IrGenerator {
                     return Ok(Some(dst));
                 }
 
+                // Handle (set-lamports idx value) - set lamport balance for account
+                // This is how SOL transfers work - directly modify lamports
+                // IMPORTANT: Account must be writable and owned by your program (or system program)
+                if name == "set-lamports" && args.len() == 2 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("set-lamports index has no result"))?;
+                    let value_reg = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("set-lamports value has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // lamports offset = 72
+                    let lamports_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(lamports_offset, 72));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, lamports_offset));
+
+                    let addr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
+
+                    // Store the new lamports value
+                    self.emit(IrInstruction::Store(addr, value_reg, 0));
+                    return Ok(None); // Store has no result
+                }
+
+                // Handle (account-executable idx) - check if account is executable (1 byte at offset 3)
+                if name == "account-executable" && args.len() == 1 {
+                    let idx_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-executable index has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10344));
+
+                    let account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(account_offset, idx_reg, account_size));
+
+                    let base_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(base_offset, eight_reg, account_offset));
+
+                    // executable is at offset 3 from account start
+                    let exec_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(exec_offset, 3));
+
+                    let total_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(total_offset, base_offset, exec_offset));
+
+                    let addr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
+
+                    let raw = self.alloc_reg();
+                    self.emit(IrInstruction::Load(raw, addr, 0));
+
+                    let mask = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(mask, 0xFF));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::And(dst, raw, mask));
+                    return Ok(Some(dst));
+                }
+
+                // NOTE: instruction-data-len and instruction-data-ptr are NOT YET IMPLEMENTED
+                // In Solana sBPF V1, instruction data is at the END of the accounts buffer,
+                // requiring scanning through variable-length account entries to find it.
+                // TODO: Implement proper instruction data access by iterating through accounts.
+
                 // Handle (account-data-ptr idx) - get pointer to account data
                 // Data starts at offset 88 from account start (after data_len at 80)
                 // For account 0: 8 + 88 = 96 from input start

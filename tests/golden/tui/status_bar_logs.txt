@@ -1,0 +1,2 @@
+ [1]Dashboard [2]Graph [3]Logs │ 42 wallets 156 transfers 99 logs
+ [?/F1]Help [Tab]Switch [j/k]Nav [q/Esc]Quit

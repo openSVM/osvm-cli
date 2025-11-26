@@ -74,6 +74,9 @@ pub struct AiService {
     circuit_breaker: GranularCircuitBreaker,
     template_manager: PromptTemplateManager,
     conversation_history: std::sync::Arc<std::sync::Mutex<Vec<ConversationMessage>>>,
+    /// Fallback to Ollama if primary API fails
+    fallback_url: Option<String>,
+    fallback_model: Option<String>,
 }
 
 impl AiService {
@@ -233,6 +236,17 @@ impl AiService {
             .build()
             .expect("Failed to build HTTP client");
 
+        // Set up fallback to Ollama if not already using OpenAI-compatible endpoint
+        let (fallback_url, fallback_model) = if !use_openai {
+            // Check if Ollama is available as fallback
+            (
+                Some("http://localhost:11434/v1/chat/completions".to_string()),
+                Some(env::var("OLLAMA_MODEL").unwrap_or_else(|_| "qwen3-coder:30b".to_string())),
+            )
+        } else {
+            (None, None)
+        };
+
         Self {
             client,
             api_url,
@@ -241,6 +255,8 @@ impl AiService {
             circuit_breaker,
             template_manager,
             conversation_history: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            fallback_url,
+            fallback_model,
         }
     }
 
@@ -532,8 +548,8 @@ impl AiService {
         only_plan: Option<bool>,
         debug_mode: bool,
     ) -> Result<String> {
-        // Wrap with timeout retry logic
-        let mut response = self
+        // Try primary endpoint with timeout/retry
+        let primary_result = self
             .with_timeout_retry(
                 || {
                     self.query_osvm_ai_internal(
@@ -543,10 +559,44 @@ impl AiService {
                         debug_mode,
                     )
                 },
-                4,
+                2, // Reduced retries for faster fallback
                 debug_mode,
             )
-            .await?;
+            .await;
+
+        // If primary fails, try Ollama fallback with preserved system prompt
+        let mut response = match primary_result {
+            Ok(resp) => resp,
+            Err(e) => {
+                if debug_mode {
+                    debug_warn!("Primary AI endpoint failed: {}. Trying Ollama fallback...", e);
+                }
+
+                // Check if Ollama is available before trying
+                if self.is_ollama_available().await {
+                    debug_print!("🔄 Falling back to local Ollama (system prompt preserved)");
+
+                    // Use Ollama with the SAME system prompt
+                    match self.query_ollama_fallback(question, system_prompt.clone(), debug_mode).await {
+                        Ok(resp) => {
+                            debug_success!("Ollama fallback succeeded");
+                            resp
+                        }
+                        Err(fallback_err) => {
+                            // Both failed - return original error with context
+                            return Err(anyhow::anyhow!(
+                                "Primary AI failed: {}. Ollama fallback also failed: {}",
+                                e,
+                                fallback_err
+                            ));
+                        }
+                    }
+                } else {
+                    debug_warn!("Ollama not available for fallback");
+                    return Err(e);
+                }
+            }
+        };
 
         // Check for truncation and handle continuation if needed
         if self.is_response_truncated(&response) {
@@ -763,6 +813,112 @@ impl AiService {
             Ok(choice.message.content.clone())
         } else {
             anyhow::bail!("No response choices returned from OpenAI API");
+        }
+    }
+
+    /// Query Ollama fallback with system prompt (OpenAI-compatible endpoint)
+    /// This is used when the primary osvm.ai endpoint is unavailable
+    async fn query_ollama_fallback(
+        &self,
+        question: &str,
+        system_prompt: Option<String>,
+        debug_mode: bool,
+    ) -> Result<String> {
+        let fallback_url = self.fallback_url.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("No fallback URL configured")
+        })?;
+
+        let model = self.fallback_model.clone().unwrap_or_else(|| "qwen3-coder:30b".to_string());
+
+        let mut messages = Vec::new();
+
+        // Add system message if provided - THIS PRESERVES THE SYSTEM PROMPT
+        if let Some(ref system) = system_prompt {
+            messages.push(OpenAiMessage {
+                role: "system".to_string(),
+                content: system.clone(),
+            });
+        }
+
+        // Add user message
+        messages.push(OpenAiMessage {
+            role: "user".to_string(),
+            content: question.to_string(),
+        });
+
+        let request_body = OpenAiRequest {
+            model: model.clone(),
+            messages,
+            max_tokens: 4096, // Higher limit for planning responses
+            temperature: 0.7,
+        };
+
+        if debug_mode {
+            debug_print!(
+                "📤 Ollama Fallback Request to {} with model {}",
+                fallback_url,
+                model
+            );
+            if system_prompt.is_some() {
+                debug_print!("  System prompt: {} chars", system_prompt.as_ref().map(|s| s.len()).unwrap_or(0));
+            }
+        }
+
+        // Use a longer timeout for Ollama (model loading can take time)
+        let fallback_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(180))
+            .build()
+            .context("Failed to build fallback client")?;
+
+        let response = fallback_client
+            .post(fallback_url)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to connect to Ollama fallback")?;
+
+        let status = response.status();
+        let response_text = response.text().await?;
+
+        if debug_mode {
+            debug_print!("📥 Ollama Response ({}): {} chars", status, response_text.len());
+        }
+
+        if !status.is_success() {
+            anyhow::bail!(
+                "Ollama fallback request failed with status: {} - Response: {}",
+                status,
+                response_text
+            );
+        }
+
+        let openai_response: OpenAiResponse =
+            serde_json::from_str(&response_text).context("Failed to parse Ollama response")?;
+
+        if let Some(choice) = openai_response.choices.first() {
+            Ok(choice.message.content.clone())
+        } else {
+            anyhow::bail!("No response choices returned from Ollama fallback");
+        }
+    }
+
+    /// Check if Ollama is available (quick health check)
+    async fn is_ollama_available(&self) -> bool {
+        if self.fallback_url.is_none() {
+            return false;
+        }
+
+        // Quick check to see if Ollama is running
+        let check_url = "http://localhost:11434/api/tags";
+        match reqwest::Client::new()
+            .get(check_url)
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await
+        {
+            Ok(resp) => resp.status().is_success(),
+            Err(_) => false,
         }
     }
 

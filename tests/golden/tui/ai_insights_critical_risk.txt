@@ -1,0 +1,25 @@
+╭ 💡  AI Insights ───────────────────────────────────────────────╮
+│ 🚨  CRITICAL: Very high network complexity (8.5 edges/node)    │
+│ 🔄  CIRCULAR FLOW: 4 wallets, 125.50 SOL total                 │
+│ 🔴  MIXER DETECTED: Wallet exhibits mixing behavior            │
+│ ─────────────────────────────                                 │
+│ 🔴  RISK SCORE: 92/100 (Critical)                              │
+│  ⚠ Action: Review mixer patterns, verify source wallets       │
+│  Reasons:                                                     │
+│   ├─ Network complexity ratio of 8.5 indicates mixing         │
+│   ├─ Detected 5 circular flow pattern(s)                      │
+│   ├─ Very high token diversity (28 tokens)                    │
+│   └─ 5 hub wallets - active coordination point                │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+│                                                               │
+╰───────────────────────────────────────────────────────────────╯

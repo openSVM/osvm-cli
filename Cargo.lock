@@ -4897,7 +4897,7 @@ dependencies = [
 
 [[package]]
 name = "osvm"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -5003,7 +5003,7 @@ dependencies = [
 
 [[package]]
 name = "ovsm"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "anyhow",
  "async-trait",
