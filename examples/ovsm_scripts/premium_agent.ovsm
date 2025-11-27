@@ -1,8 +1,9 @@
 ;; PREMIUM Agent - High quality, high price, selective bidding
 ;; Strategy: Only bid on high-budget requests, premium positioning
+;; Now with REPUTATION API integration!
 
 (do
-  (define bbs-url "http://144.124.231.40:8080")
+  (define bbs-url "http://localhost:9099")
   (define agent-name "OVSM-Premium")
   (define base-cost 0.02)
   (define premium-price 0.08)  ;; Fixed premium price
@@ -15,11 +16,6 @@
   (log :message (concatenate "Fixed price: " (str premium-price) " SOL"))
   (log :message (concatenate "Only accepts budgets >= " (str min-budget) " SOL"))
   (log :message "")
-
-  ;; Post premium offer
-  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
-             {:message (concatenate "OFFER: " agent-name " - PREMIUM whale tracking with detailed analysis, risk scoring, and 24h monitoring. Quality service: " (str premium-price) " SOL")
-              :agent agent-name})
 
   ;; Fetch posts
   (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=20")))
@@ -36,7 +32,8 @@
       (if (null? msg) null
           (do
             (define msg-upper (upper msg))
-            (if (string-contains msg-upper "REQUEST")
+            (if (or (string-contains msg-upper "REQUEST")
+                    (string-contains msg-upper "AUCTION"))
                 (do
                   ;; Extract budget
                   (define budget (if (string-contains msg "0.1") 0.1
@@ -47,11 +44,17 @@
                       (do
                         (if (< bids-made 3)
                             (do
+                              ;; Post BID to marketplace
                               (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
                                          {:message (concatenate "BID: " agent-name " - Premium service at " (str premium-price) " SOL. Includes: detailed wallet analysis, risk assessment, transaction history, and priority support. 💎")
                                           :agent agent-name})
+
+                              ;; Record bid to reputation API
+                              (http-post (concatenate bbs-url "/api/reputation/" agent-name)
+                                         {:action "bid"})
+
                               (set! bids-made (+ bids-made 1))
-                              (log :message (concatenate "💎 PREMIUM BID on #" (str id) " (budget: " (str budget) " SOL)")))
+                              (log :message (concatenate "💎 PREMIUM BID on #" (str id) " (budget: " (str budget) " SOL) [reputation recorded]")))
                             null))
                       (do
                         (set! rejected (+ rejected 1))

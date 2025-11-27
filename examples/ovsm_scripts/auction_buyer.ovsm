@@ -1,0 +1,206 @@
+;; REPUTATION-WEIGHTED AUCTION BUYER
+;; ═══════════════════════════════════════════════════════════════════
+;;
+;; Game-Theoretic Auction System:
+;; - Score = effective_price / (1 + reputation_bonus)
+;; - Lower score = better value (cheaper effective price)
+;; - High-reputation agents get bonus that reduces their effective price
+;;
+;; Formula: effective_price = price / (1 + 0.1 * deliveries + 0.05 * (wins/bids))
+;;
+;; Example:
+;;   Agent A: price=0.05, 10 deliveries, 8/10 wins → effective = 0.05/(1+1.0+0.4) = 0.021
+;;   Agent B: price=0.03, 0 deliveries, 0/1 wins → effective = 0.03/(1+0+0) = 0.030
+;;   Winner: Agent A (despite higher nominal price!)
+;;
+;; This breaks race-to-bottom dynamics and rewards reliability.
+
+(do
+  (define bbs-url "http://localhost:9099")
+  (define agent-name "OVSM-AuctionBuyer")
+  (define budget 0.1)
+  (define request-type "whale tracking with alerts")
+
+  (log :message "")
+  (log :message "╔═══════════════════════════════════════════════════════════════╗")
+  (log :message "║      🏛️  REPUTATION-WEIGHTED AUCTION SYSTEM 🏛️               ║")
+  (log :message "╚═══════════════════════════════════════════════════════════════╝")
+  (log :message (concatenate "Buyer: " agent-name))
+  (log :message (concatenate "Budget: " (str budget) " SOL"))
+  (log :message "")
+  (log :message "📜 AUCTION RULES:")
+  (log :message "   Score = price / (1 + reputation_bonus)")
+  (log :message "   reputation_bonus = 0.1 * deliveries + 0.05 * win_rate")
+  (log :message "   LOWEST SCORE WINS (quality-adjusted price)")
+  (log :message "")
+
+  ;; Step 1: Post auction request
+  (define auction-id (str (now)))
+  (define request-msg (concatenate "AUCTION: [" auction-id "] " agent-name " requests " request-type ". Budget: " (str budget) " SOL. REPUTATION-WEIGHTED scoring!"))
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message request-msg :agent agent-name})
+  (log :message (concatenate "📢 Posted AUCTION request: " auction-id))
+  (log :message "")
+
+  ;; Step 2: Fetch reputation data for all agents
+  (log :message "📊 Loading reputation data...")
+  (define rep-resp (http-get (concatenate bbs-url "/api/reputation")))
+  (define rep-data (get (parse-json (get rep-resp "body")) "data"))
+  (define rep-agents (get rep-data "agents"))
+
+  ;; Build reputation lookup map (agent_name -> {deliveries, wins, bids})
+  (define rep-map {})
+  (if (not (null? rep-agents))
+      (for (agent rep-agents)
+        (do
+          (define name (get agent "agent_name"))
+          (define deliveries (get agent "deliveries"))
+          (define wins (get agent "wins"))
+          (define bids (get agent "bids"))
+          (log :message (concatenate "   " name ": " (str deliveries) " deliveries, " (str wins) "/" (str bids) " wins"))))
+      (log :message "   No reputation data yet"))
+  (log :message "")
+
+  ;; Step 3: Wait for bids
+  (log :message "⏳ Waiting 3 seconds for bids...")
+  (sleep 3)
+
+  ;; Step 4: Fetch bids and evaluate with reputation scoring
+  (log :message "")
+  (log :message "🔍 EVALUATING BIDS:")
+  (log :message "─────────────────────────────────────────────────────────────────")
+
+  (define posts-resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=50")))
+  (define posts (get (parse-json (get posts-resp "body")) "data"))
+
+  ;; Evaluation state
+  (define best-bid-id null)
+  (define best-score 999999.0)
+  (define best-agent "")
+  (define best-price 0.0)
+  (define best-effective-price 0.0)
+  (define bids-evaluated 0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define post-id (get post "id"))
+
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+
+            (if (string-contains msg-upper "BID")
+                (do
+                  ;; Extract price from bid
+                  (define price (if (string-contains msg "0.015") 0.015
+                                   (if (string-contains msg "0.02") 0.02
+                                       (if (string-contains msg "0.025") 0.025
+                                           (if (string-contains msg "0.03") 0.03
+                                               (if (string-contains msg "0.035") 0.035
+                                                   (if (string-contains msg "0.04") 0.04
+                                                       (if (string-contains msg "0.045") 0.045
+                                                           (if (string-contains msg "0.05") 0.05
+                                                               (if (string-contains msg "0.06") 0.06
+                                                                   (if (string-contains msg "0.07") 0.07
+                                                                       (if (string-contains msg "0.08") 0.08
+                                                                           (if (string-contains msg "0.09") 0.09 0.1)))))))))))))
+
+                  ;; Only consider bids within budget
+                  (if (<= price budget)
+                      (do
+                        (set! bids-evaluated (+ bids-evaluated 1))
+
+                        ;; Identify agent from bid message
+                        (define bidder-name (if (string-contains msg "Aggressor") "OVSM-Aggressor"
+                                               (if (string-contains msg "Premium") "OVSM-Premium"
+                                                   (if (string-contains msg "Competitor") "OVSM-Competitor"
+                                                       (if (string-contains msg "Equilibrium") "OVSM-Equilibrium"
+                                                           (if (string-contains msg "WhaleTracker") "OVSM-WhaleTracker"
+                                                               (if (string-contains msg "SmartTrader") "OVSM-SmartTrader"
+                                                                   (if (string-contains msg "ReputationAgent") "OVSM-ReputationAgent"
+                                                                       "Unknown"))))))))
+
+                        ;; Get reputation for this agent
+                        (define agent-deliveries 0)
+                        (define agent-wins 0)
+                        (define agent-bids 1)  ;; Avoid division by zero
+
+                        (if (not (null? rep-agents))
+                            (for (agent rep-agents)
+                              (if (= (get agent "agent_name") bidder-name)
+                                  (do
+                                    (set! agent-deliveries (get agent "deliveries"))
+                                    (set! agent-wins (get agent "wins"))
+                                    (define b (get agent "bids"))
+                                    (if (> b 0) (set! agent-bids b) null))
+                                  null))
+                            null)
+
+                        ;; Calculate reputation bonus
+                        ;; bonus = 0.1 * deliveries + 0.05 * win_rate
+                        (define win-rate (/ agent-wins agent-bids))
+                        (define rep-bonus (+ (* 0.1 agent-deliveries) (* 0.05 win-rate)))
+
+                        ;; Calculate effective price (lower is better)
+                        ;; effective = price / (1 + bonus)
+                        (define effective-price (/ price (+ 1.0 rep-bonus)))
+
+                        ;; Score for comparison (lower = better)
+                        (define score effective-price)
+
+                        (log :message (concatenate "   📋 " bidder-name))
+                        (log :message (concatenate "      Price: " (str price) " SOL"))
+                        (log :message (concatenate "      Deliveries: " (str agent-deliveries) ", Win rate: " (str win-rate)))
+                        (log :message (concatenate "      Rep bonus: +" (str rep-bonus)))
+                        (log :message (concatenate "      Effective price: " (str effective-price) " SOL"))
+                        (log :message (concatenate "      SCORE: " (str score)))
+                        (log :message "")
+
+                        ;; Update best if this is better
+                        (if (< score best-score)
+                            (do
+                              (set! best-score score)
+                              (set! best-bid-id post-id)
+                              (set! best-agent bidder-name)
+                              (set! best-price price)
+                              (set! best-effective-price effective-price))
+                            null))
+                      null))
+                null)))))
+
+  (log :message "─────────────────────────────────────────────────────────────────")
+  (log :message (concatenate "Evaluated " (str bids-evaluated) " bids"))
+  (log :message "")
+
+  ;; Step 5: Announce winner
+  (if (not (null? best-bid-id))
+      (do
+        (log :message "🏆 AUCTION WINNER:")
+        (log :message (concatenate "   Agent: " best-agent))
+        (log :message (concatenate "   Nominal Price: " (str best-price) " SOL"))
+        (log :message (concatenate "   Effective Price: " (str best-effective-price) " SOL"))
+        (log :message (concatenate "   Quality Discount: " (str (- best-price best-effective-price)) " SOL saved via reputation"))
+        (log :message "")
+
+        ;; Post acceptance
+        (define accept-msg (concatenate "ACCEPT: " agent-name " awards auction [" auction-id "] to " best-agent " at " (str best-price) " SOL. Effective price after reputation bonus: " (str best-effective-price) " SOL"))
+        (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                   {:message accept-msg :agent agent-name})
+
+        ;; Record win for the agent
+        (http-post (concatenate bbs-url "/api/reputation/" best-agent)
+                   {:action "win" :price best-price})
+
+        (log :message "✅ ACCEPT posted and reputation updated"))
+      (log :message "❌ No valid bids received within budget"))
+
+  (log :message "")
+  {:auction-id auction-id
+   :buyer agent-name
+   :budget budget
+   :bids-evaluated bids-evaluated
+   :winner best-agent
+   :nominal-price best-price
+   :effective-price best-effective-price
+   :score best-score})
