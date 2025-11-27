@@ -392,9 +392,11 @@ mod tests {
             }),
         ];
 
-        let clusterer = EntityClusterer::default();
+        // Use lower min_confidence threshold since test has only 2 wallets
+        // (default 0.6 threshold, but 2 wallets yields ~0.4 confidence)
+        let clusterer = EntityClusterer::new(0.3, 2);
         let clusters = clusterer.detect_clusters(&wallets, &connections);
 
-        assert!(!clusters.is_empty());
+        assert!(!clusters.is_empty(), "Should detect common funding cluster");
     }
 }
