@@ -2,6 +2,13 @@
 //!
 //! Implements the Language Server Protocol for OVSM LISP.
 //! This is the main entry point that handles all LSP requests.
+//!
+//! # Self-Improving Behavior
+//!
+//! The LSP tracks usage patterns and adapts over time:
+//! - Frequently used functions are prioritized in completions
+//! - Accepted completions are boosted in future sessions
+//! - Common investigation sequences are learned and suggested
 
 use crate::ai_completion::{get_blockchain_snippets, AiCompletionProvider};
 use crate::blockchain_types::{
@@ -13,9 +20,11 @@ use crate::documentation::{format_hover, get_documentation};
 use crate::repl::{evaluate_all, evaluate_expression, format_result_inline, generate_code_lenses};
 use crate::semantic_tokens::{get_legend, tokens_to_semantic};
 use crate::symbols::{extract_symbols, SymbolTable};
+use crate::telemetry::{LearningConfig, LearningEngine};
 
 use dashmap::DashMap;
 use ovsm::lexer::Token;
+use std::sync::Arc;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
@@ -28,6 +37,8 @@ pub struct OvsmLanguageServer {
     documents: DashMap<Url, DocumentState>,
     /// AI completion provider
     ai_provider: AiCompletionProvider,
+    /// Self-improving learning engine
+    learning_engine: Arc<LearningEngine>,
 }
 
 /// Cached state for an open document
@@ -43,10 +54,26 @@ struct DocumentState {
 impl OvsmLanguageServer {
     /// Create a new OVSM language server
     pub fn new(client: Client) -> Self {
+        let learning_engine = Arc::new(LearningEngine::new(LearningConfig::default()));
+        tracing::info!("🧠 Learning engine initialized - LSP will adapt to your usage patterns");
+
         Self {
             client,
             documents: DashMap::new(),
             ai_provider: AiCompletionProvider::new(),
+            learning_engine,
+        }
+    }
+
+    /// Create with custom learning config
+    pub fn with_learning_config(client: Client, learning_config: LearningConfig) -> Self {
+        let learning_engine = Arc::new(LearningEngine::new(learning_config));
+
+        Self {
+            client,
+            documents: DashMap::new(),
+            ai_provider: AiCompletionProvider::new(),
+            learning_engine,
         }
     }
 
@@ -123,11 +150,13 @@ impl LanguageServer for OvsmLanguageServer {
                     resolve_provider: Some(false),
                 }),
 
-                // Execute command support for REPL
+                // Execute command support for REPL and learning
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec![
                         "ovsm.runExpression".to_string(),
                         "ovsm.runAll".to_string(),
+                        "ovsm.learningStats".to_string(),
+                        "ovsm.nextSteps".to_string(),
                     ],
                     ..Default::default()
                 }),
@@ -210,6 +239,9 @@ impl LanguageServer for OvsmLanguageServer {
         let Some(word) = get_word_at_position(&doc.content, position) else {
             return Ok(None);
         };
+
+        // Log hover for learning (user is interested in this symbol)
+        self.learning_engine.log_hover(&word).await;
 
         // First, check if it's a built-in function
         if let Some(entry) = get_documentation(&word) {
@@ -351,38 +383,51 @@ impl LanguageServer for OvsmLanguageServer {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
 
-        // Start with built-in completions
-        let mut items: Vec<CompletionItem> = crate::documentation::all_documentation()
-            .map(|(name, entry)| {
-                let kind = match entry.category {
-                    crate::documentation::DocCategory::SpecialForm => {
-                        CompletionItemKind::KEYWORD
-                    }
-                    crate::documentation::DocCategory::ControlFlow => {
-                        CompletionItemKind::KEYWORD
-                    }
-                    crate::documentation::DocCategory::Arithmetic
-                    | crate::documentation::DocCategory::Comparison
-                    | crate::documentation::DocCategory::Logical => {
-                        CompletionItemKind::OPERATOR
-                    }
-                    _ => CompletionItemKind::FUNCTION,
-                };
+        // Get learned boosts for adaptive sorting
+        let learning_engine = self.learning_engine.clone();
 
-                CompletionItem {
-                    label: name.to_string(),
-                    kind: Some(kind),
-                    detail: Some(entry.signature.to_string()),
-                    documentation: Some(Documentation::MarkupContent(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: entry.description.to_string(),
-                    })),
-                    insert_text: Some(name.to_string()),
-                    sort_text: Some(format!("0{}", name)), // Sort builtins first
-                    ..Default::default()
+        // Start with built-in completions
+        let mut items: Vec<CompletionItem> = Vec::new();
+
+        for (name, entry) in crate::documentation::all_documentation() {
+            let kind = match entry.category {
+                crate::documentation::DocCategory::SpecialForm => {
+                    CompletionItemKind::KEYWORD
                 }
-            })
-            .collect();
+                crate::documentation::DocCategory::ControlFlow => {
+                    CompletionItemKind::KEYWORD
+                }
+                crate::documentation::DocCategory::Arithmetic
+                | crate::documentation::DocCategory::Comparison
+                | crate::documentation::DocCategory::Logical => {
+                    CompletionItemKind::OPERATOR
+                }
+                _ => CompletionItemKind::FUNCTION,
+            };
+
+            // Get learned boost for this function
+            let boost = learning_engine.get_completion_boost(name).await;
+            // Convert boost to sort priority (higher boost = lower sort value = appears first)
+            // Base priority is 0 for builtins, subtract boost to prioritize learned items
+            let sort_priority = if boost > 0.1 {
+                format!("00{:03}{}", (100.0 - boost * 100.0) as u32, name)
+            } else {
+                format!("0{}", name)
+            };
+
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(kind),
+                detail: Some(entry.signature.to_string()),
+                documentation: Some(Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: entry.description.to_string(),
+                })),
+                insert_text: Some(name.to_string()),
+                sort_text: Some(sort_priority),
+                ..Default::default()
+            });
+        }
 
         // Add user-defined symbols from the current document
         if let Some(doc) = self.documents.get(&uri) {
@@ -485,6 +530,40 @@ impl LanguageServer for OvsmLanguageServer {
                     items.push(completion);
                 }
             }
+
+            // Add learned next-step suggestions based on previous expressions
+            // Look at the previous expression to suggest what typically comes next
+            if position.line > 0 {
+                let lines: Vec<&str> = doc.content.lines().collect();
+                for i in (0..position.line as usize).rev() {
+                    let line = lines.get(i).unwrap_or(&"");
+                    let func_name = extract_function_name(line.trim());
+                    if !func_name.is_empty() && func_name.chars().next().map_or(false, |c| c.is_alphabetic()) {
+                        // Found a previous function call, get suggestions
+                        let suggestions = learning_engine.get_next_suggestions(&func_name).await;
+                        for (idx, suggestion) in suggestions.into_iter().enumerate() {
+                            items.push(CompletionItem {
+                                label: format!("🧠 {}", suggestion),
+                                kind: Some(CompletionItemKind::SNIPPET),
+                                detail: Some(format!("Learned: typically follows {}", func_name)),
+                                documentation: Some(Documentation::MarkupContent(MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: format!(
+                                        "**Suggested next step**\n\n\
+                                         Based on your usage patterns, `{}` often follows `{}`.\n\n\
+                                         _The LSP learns from your investigation workflows._",
+                                        suggestion, func_name
+                                    ),
+                                })),
+                                insert_text: Some(format!("({})", suggestion)),
+                                sort_text: Some(format!("000{:02}{}", idx, suggestion)), // Highest priority
+                                ..Default::default()
+                            });
+                        }
+                        break; // Only look at the most recent function
+                    }
+                }
+            }
         }
 
         Ok(Some(CompletionResponse::Array(items)))
@@ -544,12 +623,20 @@ impl LanguageServer for OvsmLanguageServer {
                         let result = evaluate_expression(source);
                         let message = format_result_inline(&result);
 
+                        // Extract function name for learning
+                        let func_name = extract_function_name(source);
+                        self.learning_engine.log_execution(&func_name, result.success).await;
+
                         // Show result to user
                         if result.success {
                             self.client
                                 .show_message(MessageType::INFO, &message)
                                 .await;
                         } else {
+                            // Log error for learning
+                            if let Some(ref err) = result.error {
+                                self.learning_engine.log_error("runtime", err).await;
+                            }
                             self.client
                                 .show_message(MessageType::ERROR, &message)
                                 .await;
@@ -608,8 +695,90 @@ impl LanguageServer for OvsmLanguageServer {
                 }
                 Ok(None)
             }
+            "ovsm.learningStats" => {
+                // Return learning statistics
+                let stats = self.learning_engine.get_stats().await;
+                let frequent = self.learning_engine.get_frequent_functions(10).await;
+
+                let message = format!(
+                    "🧠 Learning Stats:\n\
+                     • Events tracked: {}\n\
+                     • Unique functions: {}\n\
+                     • Sequences learned: {}\n\
+                     • Acceptance rate: {:.1}%\n\
+                     • Top functions: {}",
+                    stats.total_events,
+                    stats.unique_functions,
+                    stats.sequences_learned,
+                    stats.avg_acceptance_rate * 100.0,
+                    if frequent.is_empty() {
+                        "(none yet)".to_string()
+                    } else {
+                        frequent.join(", ")
+                    }
+                );
+
+                self.client
+                    .show_message(MessageType::INFO, &message)
+                    .await;
+
+                Ok(Some(serde_json::json!({
+                    "total_events": stats.total_events,
+                    "unique_functions": stats.unique_functions,
+                    "sequences_learned": stats.sequences_learned,
+                    "avg_acceptance_rate": stats.avg_acceptance_rate,
+                    "frequent_functions": frequent
+                })))
+            }
+
+            "ovsm.nextSteps" => {
+                // Get suggested next functions based on last executed function
+                if let Some(current_func) = args.get(0).and_then(|v| v.as_str()) {
+                    let suggestions = self.learning_engine.get_next_suggestions(current_func).await;
+
+                    if suggestions.is_empty() {
+                        self.client
+                            .show_message(MessageType::INFO, "No learned sequences yet. Keep using the REPL!")
+                            .await;
+                    } else {
+                        let message = format!(
+                            "📊 Suggested next steps after {}:\n{}",
+                            current_func,
+                            suggestions.iter().enumerate()
+                                .map(|(i, s)| format!("  {}. {}", i + 1, s))
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        );
+                        self.client
+                            .show_message(MessageType::INFO, &message)
+                            .await;
+                    }
+
+                    return Ok(Some(serde_json::json!({
+                        "suggestions": suggestions
+                    })));
+                }
+                Ok(None)
+            }
+
             _ => Ok(None),
         }
+    }
+}
+
+/// Extract the first function name from an OVSM expression
+/// e.g., "(getBalance wallet)" -> "getBalance"
+fn extract_function_name(source: &str) -> String {
+    let trimmed = source.trim();
+    if trimmed.starts_with('(') {
+        // Find the first word after the opening paren
+        let after_paren = &trimmed[1..];
+        let end = after_paren.find(|c: char| c.is_whitespace() || c == ')').unwrap_or(after_paren.len());
+        after_paren[..end].to_string()
+    } else {
+        // Just a symbol or literal
+        let end = trimmed.find(|c: char| c.is_whitespace()).unwrap_or(trimmed.len());
+        trimmed[..end].to_string()
     }
 }
 
@@ -617,6 +786,12 @@ impl LanguageServer for OvsmLanguageServer {
 mod tests {
     use super::*;
 
-    // Backend tests would require more setup with mock client
-    // These are integration tests that run with the actual server
+    #[test]
+    fn test_extract_function_name() {
+        assert_eq!(extract_function_name("(getBalance wallet)"), "getBalance");
+        assert_eq!(extract_function_name("(+ 1 2 3)"), "+");
+        assert_eq!(extract_function_name("(define x 10)"), "define");
+        assert_eq!(extract_function_name("  (  spaced  )  "), "");
+        assert_eq!(extract_function_name("symbol"), "symbol");
+    }
 }
