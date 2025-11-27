@@ -1,6 +1,6 @@
 use {
     crate::utils::self_repair::read_keypair_with_repair,
-    solana_clap_utils::input_validators::normalize_to_url_if_moniker,
+    crate::utils::validators::normalize_to_url_if_moniker,
     solana_client::rpc_client::RpcClient,
     solana_commitment_config::CommitmentConfig,
     solana_sdk::{native_token::Sol, signature::Signer},
@@ -86,7 +86,7 @@ impl Config {
             .map(|s| s.as_str())
             .unwrap_or("~/.config/osvm/config.yml");
 
-        let cli_config = solana_cli_config::Config::load(cli_config_path).unwrap_or_default();
+        let cli_config = crate::utils::config_loader::Config::load(cli_config_path).unwrap_or_default();
 
         // OSVM uses its own keypair directory, NOT ~/.config/solana/
         // This prevents accidentally touching user's main Solana keypairs

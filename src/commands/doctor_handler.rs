@@ -48,7 +48,7 @@ pub async fn handle_doctor_command(
                                     repairable_errors.push(crate::utils::self_repair::RepairableError::MissingConfigDirectory);
                                 } else if issue.title.contains("keypair missing") {
                                     // Extract keypair path from CLI or config
-                                    let cli_config = solana_cli_config::Config::load(
+                                    let cli_config = crate::utils::config_loader::Config::load(
                                         "~/.config/osvm/config.yml",
                                     )
                                     .unwrap_or_default();

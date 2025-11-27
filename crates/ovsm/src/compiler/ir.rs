@@ -9,6 +9,64 @@ use crate::{Result, Error};
 use super::types::{TypedProgram, TypedStatement, OvsmType};
 use crate::{Statement, Expression, BinaryOp, UnaryOp};
 
+// =============================================================================
+// STRUCT TYPES (compile-time layout)
+// =============================================================================
+
+/// Field type for struct definitions
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldType {
+    U8,   // 1 byte
+    U16,  // 2 bytes
+    U32,  // 4 bytes
+    U64,  // 8 bytes (default for untyped)
+    I8,   // 1 byte signed
+    I16,  // 2 bytes signed
+    I32,  // 4 bytes signed
+    I64,  // 8 bytes signed (default)
+}
+
+impl FieldType {
+    pub fn size(&self) -> i64 {
+        match self {
+            FieldType::U8 | FieldType::I8 => 1,
+            FieldType::U16 | FieldType::I16 => 2,
+            FieldType::U32 | FieldType::I32 => 4,
+            FieldType::U64 | FieldType::I64 => 8,
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "u8" => Some(FieldType::U8),
+            "u16" => Some(FieldType::U16),
+            "u32" => Some(FieldType::U32),
+            "u64" => Some(FieldType::U64),
+            "i8" => Some(FieldType::I8),
+            "i16" => Some(FieldType::I16),
+            "i32" => Some(FieldType::I32),
+            "i64" => Some(FieldType::I64),
+            _ => None,
+        }
+    }
+}
+
+/// A field in a struct definition
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: String,
+    pub field_type: FieldType,
+    pub offset: i64,
+}
+
+/// A struct definition (compile-time metadata)
+#[derive(Debug, Clone)]
+pub struct StructDef {
+    pub name: String,
+    pub fields: Vec<StructField>,
+    pub total_size: i64,
+}
+
 /// Virtual register (infinite supply, mapped to physical during codegen)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IrReg(pub u32);
@@ -75,10 +133,22 @@ pub enum IrInstruction {
     Return(Option<IrReg>),
 
     // Memory operations
-    /// Load from memory: dst = *(base + offset)
+    /// Load from memory: dst = *(base + offset) (64-bit)
     Load(IrReg, IrReg, i64),
-    /// Store to memory: *(base + offset) = src
+    /// Load 1 byte (8-bit) from memory: dst = (u8)*(base + offset)
+    Load1(IrReg, IrReg, i64),
+    /// Load 2 bytes (16-bit) from memory: dst = (u16)*(base + offset)
+    Load2(IrReg, IrReg, i64),
+    /// Load 4 bytes (32-bit) from memory: dst = (u32)*(base + offset)
+    Load4(IrReg, IrReg, i64),
+    /// Store to memory: *(base + offset) = src (64-bit)
     Store(IrReg, IrReg, i64),
+    /// Store 1 byte to memory: *(base + offset) = (u8)src
+    Store1(IrReg, IrReg, i64),
+    /// Store 2 bytes (16-bit) to memory: *(base + offset) = (u16)src
+    Store2(IrReg, IrReg, i64),
+    /// Store 4 bytes (32-bit) to memory: *(base + offset) = (u32)src
+    Store4(IrReg, IrReg, i64),
     /// Allocate heap memory: dst = alloc(size)
     Alloc(IrReg, IrReg),
 
@@ -159,6 +229,8 @@ pub struct IrGenerator {
     strings: Vec<String>,
     /// Generated instructions
     instructions: Vec<IrInstruction>,
+    /// Struct definitions (compile-time metadata for field layout)
+    struct_defs: HashMap<String, StructDef>,
 }
 
 impl IrGenerator {
@@ -169,6 +241,7 @@ impl IrGenerator {
             var_map: HashMap::new(),
             strings: Vec::new(),
             instructions: Vec::new(),
+            struct_defs: HashMap::new(),
         };
         // Pre-allocate registers for Solana builtins (R1=accounts, R2=instruction-data per ABI)
         let accounts_reg = IrReg::new(1);
@@ -472,6 +545,162 @@ impl IrGenerator {
                         self.emit(IrInstruction::Move(old_reg, value_reg));
 
                         return Ok(Some(old_reg));
+                    }
+                }
+
+                // =============================================================
+                // STRUCT MACROS (compile-time layout generation)
+                // =============================================================
+
+                // Handle (define-struct StructName (field1 type1) (field2 type2) ...)
+                // Example: (define-struct MyState (counter u32) (owner u64) (flag u8))
+                // This is a compile-time macro - no code is generated, just metadata
+                if name == "define-struct" && args.len() >= 2 {
+                    if let Expression::Variable(struct_name) = &args[0].value {
+                        let mut fields = Vec::new();
+                        let mut current_offset: i64 = 0;
+
+                        // Parse each field: (field_name type_name)
+                        for field_arg in args.iter().skip(1) {
+                            if let Expression::ToolCall { name: field_name, args: field_args } = &field_arg.value {
+                                if field_args.len() == 1 {
+                                    if let Expression::Variable(type_name) = &field_args[0].value {
+                                        let field_type = FieldType::from_str(type_name)
+                                            .ok_or_else(|| Error::runtime(format!(
+                                                "Unknown field type '{}' in struct '{}'. Valid types: u8, u16, u32, u64, i8, i16, i32, i64",
+                                                type_name, struct_name
+                                            )))?;
+
+                                        fields.push(StructField {
+                                            name: field_name.clone(),
+                                            field_type,
+                                            offset: current_offset,
+                                        });
+
+                                        current_offset += field_type.size();
+                                    }
+                                }
+                            }
+                        }
+
+                        let struct_def = StructDef {
+                            name: struct_name.clone(),
+                            fields,
+                            total_size: current_offset,
+                        };
+
+                        eprintln!("📦 Defined struct '{}' with {} bytes:", struct_name, current_offset);
+                        for field in &struct_def.fields {
+                            eprintln!("   +{}: {} ({:?})", field.offset, field.name, field.field_type);
+                        }
+
+                        self.struct_defs.insert(struct_name.clone(), struct_def);
+
+                        // define-struct produces no runtime value
+                        return Ok(None);
+                    }
+                }
+
+                // Handle (struct-get StructName base_ptr field_name)
+                // Example: (struct-get MyState state_ptr counter)
+                // Generates the appropriate Load1/2/4/8 based on field type
+                if name == "struct-get" && args.len() == 3 {
+                    if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
+                        (&args[0].value, &args[2].value)
+                    {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let field = struct_def.fields.iter()
+                            .find(|f| &f.name == field_name)
+                            .ok_or_else(|| Error::runtime(format!(
+                                "Unknown field '{}' in struct '{}'", field_name, struct_name
+                            )))?;
+
+                        let base_reg = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("struct-get base_ptr has no result"))?;
+
+                        let dst = self.alloc_reg();
+                        let offset = field.offset;
+
+                        // Emit the appropriate load instruction based on field type
+                        match field.field_type {
+                            FieldType::U8 | FieldType::I8 => {
+                                self.emit(IrInstruction::Load1(dst, base_reg, offset));
+                            }
+                            FieldType::U16 | FieldType::I16 => {
+                                self.emit(IrInstruction::Load2(dst, base_reg, offset));
+                            }
+                            FieldType::U32 | FieldType::I32 => {
+                                self.emit(IrInstruction::Load4(dst, base_reg, offset));
+                            }
+                            FieldType::U64 | FieldType::I64 => {
+                                self.emit(IrInstruction::Load(dst, base_reg, offset));
+                            }
+                        }
+
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // Handle (struct-set StructName base_ptr field_name value)
+                // Example: (struct-set MyState state_ptr counter 42)
+                // Generates the appropriate Store1/2/4/8 based on field type
+                if name == "struct-set" && args.len() == 4 {
+                    if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
+                        (&args[0].value, &args[2].value)
+                    {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let field = struct_def.fields.iter()
+                            .find(|f| &f.name == field_name)
+                            .ok_or_else(|| Error::runtime(format!(
+                                "Unknown field '{}' in struct '{}'", field_name, struct_name
+                            )))?;
+
+                        let base_reg = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("struct-set base_ptr has no result"))?;
+
+                        let value_reg = self.generate_expr(&args[3].value)?
+                            .ok_or_else(|| Error::runtime("struct-set value has no result"))?;
+
+                        let offset = field.offset;
+
+                        // Emit the appropriate store instruction based on field type
+                        match field.field_type {
+                            FieldType::U8 | FieldType::I8 => {
+                                self.emit(IrInstruction::Store1(base_reg, value_reg, offset));
+                            }
+                            FieldType::U16 | FieldType::I16 => {
+                                self.emit(IrInstruction::Store2(base_reg, value_reg, offset));
+                            }
+                            FieldType::U32 | FieldType::I32 => {
+                                self.emit(IrInstruction::Store4(base_reg, value_reg, offset));
+                            }
+                            FieldType::U64 | FieldType::I64 => {
+                                self.emit(IrInstruction::Store(base_reg, value_reg, offset));
+                            }
+                        }
+
+                        return Ok(None); // Store has no result
+                    }
+                }
+
+                // Handle (struct-size StructName) - returns the total size of a struct
+                // Example: (struct-size MyState) => 13 (if counter=4 + owner=8 + flag=1)
+                if name == "struct-size" && args.len() == 1 {
+                    if let Expression::Variable(struct_name) = &args[0].value {
+                        // Get the size first to avoid borrow conflict
+                        let total_size = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .total_size;
+
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, total_size));
+                        return Ok(Some(dst));
                     }
                 }
 
@@ -993,7 +1222,7 @@ impl IrGenerator {
                     return Ok(Some(dst));
                 }
 
-                // Handle (mem-load1 ptr offset) - load 1 byte from memory
+                // Handle (mem-load1 ptr offset) - load 1 byte (8-bit) from memory
                 // Returns: u8 value at ptr+offset (zero-extended to u64)
                 if name == "mem-load1" && args.len() == 2 {
                     let ptr_reg = self.generate_expr(&args[0].value)?
@@ -1002,13 +1231,36 @@ impl IrGenerator {
                         Expression::IntLiteral(n) => *n,
                         _ => return Err(Error::runtime("mem-load1 offset must be constant")),
                     };
-                    // Load 8 bytes then mask to get 1 byte
-                    let raw = self.alloc_reg();
-                    self.emit(IrInstruction::Load(raw, ptr_reg, offset));
-                    let mask = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(mask, 0xFF));
                     let dst = self.alloc_reg();
-                    self.emit(IrInstruction::And(dst, raw, mask));
+                    self.emit(IrInstruction::Load1(dst, ptr_reg, offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (mem-load2 ptr offset) - load 2 bytes (16-bit) from memory
+                // Returns: u16 value at ptr+offset (zero-extended to u64)
+                if name == "mem-load2" && args.len() == 2 {
+                    let ptr_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-load2 ptr has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-load2 offset must be constant")),
+                    };
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load2(dst, ptr_reg, offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (mem-load4 ptr offset) - load 4 bytes (32-bit) from memory
+                // Returns: u32 value at ptr+offset (zero-extended to u64)
+                if name == "mem-load4" && args.len() == 2 {
+                    let ptr_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-load4 ptr has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-load4 offset must be constant")),
+                    };
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load4(dst, ptr_reg, offset));
                     return Ok(Some(dst));
                 }
 
@@ -1023,6 +1275,49 @@ impl IrGenerator {
                     let value_reg = self.generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("mem-store value has no result"))?;
                     self.emit(IrInstruction::Store(base_reg, value_reg, offset));
+                    return Ok(None); // Store has no result
+                }
+
+                // Handle (mem-store1 base offset value) - store 1 byte to memory
+                // Stores the low byte of value at ptr+offset
+                if name == "mem-store1" && args.len() == 3 {
+                    let base_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-store1 base has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-store1 offset must be constant")),
+                    };
+                    let value_reg = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("mem-store1 value has no result"))?;
+                    self.emit(IrInstruction::Store1(base_reg, value_reg, offset));
+                    return Ok(None); // Store has no result
+                }
+
+                // Handle (mem-store2 base offset value) - store 2 bytes (16-bit) to memory
+                if name == "mem-store2" && args.len() == 3 {
+                    let base_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-store2 base has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-store2 offset must be constant")),
+                    };
+                    let value_reg = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("mem-store2 value has no result"))?;
+                    self.emit(IrInstruction::Store2(base_reg, value_reg, offset));
+                    return Ok(None); // Store has no result
+                }
+
+                // Handle (mem-store4 base offset value) - store 4 bytes (32-bit) to memory
+                if name == "mem-store4" && args.len() == 3 {
+                    let base_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-store4 base has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-store4 offset must be constant")),
+                    };
+                    let value_reg = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("mem-store4 value has no result"))?;
+                    self.emit(IrInstruction::Store4(base_reg, value_reg, offset));
                     return Ok(None); // Store has no result
                 }
 

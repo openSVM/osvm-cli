@@ -1,0 +1,14 @@
+# Security audit configuration
+#
+# 2025-11-27: All vulnerabilities eliminated!
+# - Removed unused `config` crate (json5 vulnerability)
+# - Replaced `solana-clap-utils` with src/utils/validators.rs (ansi_term, atty vulnerabilities)
+#
+# This file is now empty but kept for documentation purposes.
+
+[advisories]
+ignore = []
+
+# If paste (RUSTSEC-2024-0436) ever becomes a real security issue rather than
+# just "unmaintained", it can be monitored here. Currently it's still functional
+# and used by: ratatui, image, rmp-serde, nalgebra

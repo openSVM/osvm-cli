@@ -1,6 +1,6 @@
 use {
+    crate::utils::validators::{is_url_or_moniker, is_valid_signer},
     clap::{command, Arg, ArgAction, Command},
-    solana_clap_utils::input_validators::{is_url_or_moniker, is_valid_signer},
 };
 
 // Import all modularized command builders (full refactoring - 21 commands)
@@ -162,7 +162,7 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
                 .value_name("PATH")
                 .help("Configuration file to use")
                 .global(true);
-            if let Some(ref config_file) = *solana_cli_config::CONFIG_FILE {
+            if let Some(ref config_file) = *crate::utils::config_loader::CONFIG_FILE {
                 arg = arg.default_value(config_file.as_str());
             }
             arg

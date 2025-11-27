@@ -186,11 +186,17 @@ impl GraphColoringAllocator {
                 defs.push(*dst);
                 uses.push(*src);
             }
-            IrInstruction::Load(dst, base, _) => {
+            IrInstruction::Load(dst, base, _)
+            | IrInstruction::Load1(dst, base, _)
+            | IrInstruction::Load2(dst, base, _)
+            | IrInstruction::Load4(dst, base, _) => {
                 defs.push(*dst);
                 uses.push(*base);
             }
-            IrInstruction::Store(base, src, _) => {
+            IrInstruction::Store(base, src, _)
+            | IrInstruction::Store1(base, src, _)
+            | IrInstruction::Store2(base, src, _)
+            | IrInstruction::Store4(base, src, _) => {
                 uses.push(*base);
                 uses.push(*src);
             }

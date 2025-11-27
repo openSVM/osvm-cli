@@ -144,6 +144,10 @@ pub mod log_monitor;
 pub mod osvm_logger;
 /// Self-repair system for automatic dependency management
 pub mod self_repair;
+/// Input validators for CLI arguments (replaces solana-clap-utils)
+pub mod validators;
+/// Solana CLI config file loader (replaces solana-cli-config)
+pub mod config_loader;
 
 // External dependency wrappers
 
