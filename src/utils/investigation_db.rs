@@ -80,6 +80,24 @@ impl InvestigationDB {
         Ok(home.join(".osvm").join("investigations.db"))
     }
 
+    /// Open investigation database at a specific path (useful for testing)
+    #[cfg(test)]
+    pub fn open_path(path: &std::path::Path) -> Result<Self> {
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .context("Failed to create database directory")?;
+        }
+
+        let conn = Connection::open(path)
+            .context("Failed to open investigation database")?;
+
+        let mut db = Self { conn };
+        db.init_schema()?;
+
+        Ok(db)
+    }
+
     /// Initialize database schema
     fn init_schema(&mut self) -> Result<()> {
         self.conn.execute_batch(
@@ -384,10 +402,18 @@ impl InvestigationDB {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    fn setup_test_db() -> (InvestigationDB, TempDir) {
+        let tmp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = tmp_dir.path().join("test_investigations.db");
+        let db = InvestigationDB::open_path(&db_path).expect("Failed to open test db");
+        (db, tmp_dir)
+    }
 
     #[test]
     fn test_database_operations() {
-        let mut db = InvestigationDB::open().unwrap();
+        let (mut db, _tmp_dir) = setup_test_db();
 
         let inv = Investigation {
             id: None,
