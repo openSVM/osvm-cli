@@ -365,6 +365,8 @@ impl LispEvaluator {
                     "http-get" => self.eval_http_get(args),
                     "http-post" => self.eval_http_post(args),
                     "json-rpc" => self.eval_json_rpc(args),
+                    // LLM operations (AI-powered agents)
+                    "llm-query" => self.eval_llm_query(args),
                     // Streaming operations (real-time blockchain events)
                     "stream-connect" => self.eval_stream_connect(args),
                     "stream-poll" => self.eval_stream_poll(args),
@@ -5999,6 +6001,23 @@ impl LispEvaluator {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(network::json_rpc(&eval_args))
+        })
+    }
+
+    /// (llm-query provider prompt [options]) - Query an LLM
+    ///
+    /// Provider: "ollama", "openai", "anthropic"
+    /// Options: {:model "name" :system "prompt" :temperature 0.7 :max-tokens 1024}
+    fn eval_llm_query(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        use crate::tools::stdlib::llm;
+
+        let mut eval_args = Vec::new();
+        for arg in args {
+            eval_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(llm::llm_query(&eval_args))
         })
     }
 

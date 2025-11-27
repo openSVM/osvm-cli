@@ -175,6 +175,7 @@ pub async fn handle_ovsm_command(
             let opt_level = *compile_matches.get_one::<u8>("opt-level").unwrap_or(&2);
             let verify = compile_matches.get_flag("verify");
             let emit_ir = compile_matches.get_flag("emit-ir");
+            let analyze = compile_matches.get_flag("analyze");
 
             use ovsm::compiler::{Compiler, CompileOptions};
 
@@ -182,6 +183,44 @@ pub async fn handle_ovsm_command(
 
             // Read source
             let source = std::fs::read_to_string(script)?;
+
+            // Run register analysis if requested
+            if analyze {
+                use ovsm::{SExprScanner, SExprParser};
+                use ovsm::compiler::{TypeChecker, IrGenerator, RegAllocAnalyzer};
+
+                println!("\n📊 Running Register Pressure Analysis...\n");
+
+                // Parse
+                let mut scanner = SExprScanner::new(&source);
+                let tokens = scanner.scan_tokens()?;
+                let mut parser = SExprParser::new(tokens);
+                let program = parser.parse()?;
+
+                // Type check
+                let mut type_checker = TypeChecker::new();
+                let typed_program = type_checker.check(&program)?;
+
+                // Generate IR
+                let mut ir_gen = IrGenerator::new();
+                let ir_program = ir_gen.generate(&typed_program)?;
+
+                // Analyze
+                let analyzer = RegAllocAnalyzer::new();
+                let report = analyzer.analyze(&ir_program);
+
+                println!("{}", report.format());
+
+                // Exit if critical issues found
+                let critical_count = report.issues.iter()
+                    .filter(|i| i.severity == "critical")
+                    .count();
+
+                if critical_count > 0 {
+                    eprintln!("\n🚨 {} critical register allocation issue(s) detected!", critical_count);
+                    eprintln!("   These may cause runtime failures. Review before deploying.\n");
+                }
+            }
 
             // Compile
             let options = CompileOptions {

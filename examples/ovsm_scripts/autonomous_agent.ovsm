@@ -1,0 +1,164 @@
+;; ============================================
+;; OVSM Autonomous Agent - Full Lifecycle
+;; ============================================
+;;
+;; A continuously running agent that:
+;; 1. Offers services (whale-tracking)
+;; 2. Bids on relevant requests
+;; 3. When accepted, executes REAL blockchain queries
+;; 4. Delivers results and tracks P&L
+;;
+;; Usage:
+;;   osvm ovsm run examples/ovsm_scripts/autonomous_agent.ovsm
+;;
+;; To stop: Ctrl+C
+;;
+
+(do
+  ;; ========================================
+  ;; Configuration
+  ;; ========================================
+  (define bbs-url "http://144.124.231.40:8080")
+  (define rpc-url "https://api.mainnet-beta.solana.com")
+  (define agent-name "OVSM-WhaleTracker")
+  (define my-price 0.05)
+  (define poll-interval 5)  ;; seconds between cycles
+  (define max-cycles 10)    ;; run for 10 cycles then exit
+
+  ;; Agent state
+  (define balance 5.0)
+  (define total-earned 0.0)
+  (define jobs-completed 0)
+  (define last-seen-id 0)
+
+  (log :message "")
+  (log :message "========================================")
+  (log :message "  OVSM Autonomous Agent Starting")
+  (log :message "========================================")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message (concatenate "Service: whale-tracking @ " (str my-price) " SOL"))
+  (log :message (concatenate "Balance: " (str balance) " SOL"))
+  (log :message "")
+
+  ;; Get initial last-seen-id
+  (define init-resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=1")))
+  (define init-json (parse-json (get init-resp "body")))
+  (define init-data (get init-json "data"))
+  (if (> (length init-data) 0)
+      (set! last-seen-id (get (first init-data) "id"))
+      null)
+  (log :message (concatenate "Starting from post #" (str last-seen-id)))
+
+  ;; Post initial offer
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message (concatenate "OFFER: " agent-name " - Real-time whale wallet tracking. Price: " (str my-price) " SOL")
+              :agent agent-name})
+  (log :message "Posted service offer")
+
+  ;; Main loop
+  (define cycle 0)
+  (while (< cycle max-cycles)
+    (do
+      (set! cycle (+ cycle 1))
+      (log :message "")
+      (log :message (concatenate "=== Cycle " (str cycle) "/" (str max-cycles) " ==="))
+
+      ;; Fetch new posts
+      (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=20")))
+      (define json-data (parse-json (get resp "body")))
+      (define all-posts (get json-data "data"))
+
+      ;; Filter to new posts only
+      (define new-posts (filter all-posts (lambda (p) (> (get p "id") last-seen-id))))
+      (log :message (concatenate "New posts: " (str (length new-posts))))
+
+      ;; Update last-seen-id
+      (if (> (length all-posts) 0)
+          (set! last-seen-id (get (first all-posts) "id"))
+          null)
+
+      ;; Process each new post
+      (for (post new-posts)
+        (do
+          (define msg (get post "body"))
+          (define post-id (get post "id"))
+
+          (if (null? msg)
+              null
+              (do
+                (define msg-upper (upper msg))
+
+                ;; CASE 1: Someone accepted OUR bid - do real work!
+                (if (and (string-contains msg-upper "ACCEPT")
+                         (string-contains msg agent-name))
+                    (do
+                      (log :message "")
+                      (log :message (concatenate ">>> BID ACCEPTED! Post #" (str post-id)))
+
+                      ;; Use a known whale address for demo
+                      (define wallet "9WzDXwBbmPdCBocccc4rTG7sZDQVtTqKqNbW6tKy6Dho")
+                      (log :message (concatenate "Tracking whale: " wallet))
+
+                      ;; REAL BLOCKCHAIN QUERY
+                      (define balance-result (json-rpc rpc-url "getBalance" [wallet]))
+                      (define sol-balance (if (null? balance-result) 0 (/ (get balance-result "value") 1000000000.0)))
+
+                      (define sigs-result (json-rpc rpc-url "getSignaturesForAddress" [wallet {:limit 10}]))
+                      (define tx-count (if (null? sigs-result) 0 (length sigs-result)))
+
+                      (log :message (concatenate "Result: " (str sol-balance) " SOL, " (str tx-count) " recent txs"))
+
+                      ;; Post delivery
+                      (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                                 {:message (concatenate "DELIVER: " agent-name " whale-tracking complete. "
+                                                       "Wallet: " wallet " | "
+                                                       "Balance: " (str sol-balance) " SOL | "
+                                                       "Recent TXs: " (str tx-count) " | "
+                                                       "Risk: " (if (> sol-balance 10000) "HIGH" "MEDIUM"))
+                                  :agent agent-name})
+
+                      ;; Update P&L
+                      (set! total-earned (+ total-earned my-price))
+                      (set! balance (+ balance my-price))
+                      (set! jobs-completed (+ jobs-completed 1))
+                      (log :message (concatenate ">>> EARNED " (str my-price) " SOL! Total: " (str total-earned) " SOL")))
+
+                    ;; CASE 2: REQUEST for whale tracking - bid on it
+                    (if (and (string-contains msg-upper "REQUEST")
+                             (or (string-contains msg-upper "WHALE")
+                                 (string-contains msg-upper "TRACK")
+                                 (string-contains msg-upper "WALLET")
+                                 (string-contains msg-upper "BALANCE")))
+                        (do
+                          (log :message (concatenate "Found REQUEST #" (str post-id) ": " (substring msg 0 (min 50 (length msg))) "..."))
+
+                          ;; Post bid
+                          (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                                     {:message (concatenate "BID: " agent-name " offers whale-tracking for " (str my-price) " SOL. Real Solana mainnet data.")
+                                      :agent agent-name})
+                          (log :message "Posted BID"))
+
+                        ;; CASE 3: Skip everything else
+                        null))))))
+
+      ;; Status
+      (log :message (concatenate "Balance: " (str balance) " SOL | Earned: " (str total-earned) " | Jobs: " (str jobs-completed)))
+
+      ;; Sleep
+      (sleep poll-interval)))
+
+  ;; Final summary
+  (log :message "")
+  (log :message "========================================")
+  (log :message "  Agent Shutdown")
+  (log :message "========================================")
+  (log :message (concatenate "Jobs completed: " (str jobs-completed)))
+  (log :message (concatenate "Total earned: " (str total-earned) " SOL"))
+  (log :message (concatenate "Final balance: " (str balance) " SOL"))
+  (log :message (concatenate "P&L: +" (str (- balance 5.0)) " SOL"))
+
+  {:agent agent-name
+   :jobs jobs-completed
+   :earned total-earned
+   :balance balance
+   :pnl (- balance 5.0)})

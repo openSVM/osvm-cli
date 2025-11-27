@@ -53,9 +53,14 @@ post_market() {
     local agent="$1"
     local msg="$2"
 
+    # Escape quotes in the message for JSON, then build the payload
+    local escaped_msg
+    escaped_msg=$(echo "$msg" | sed 's/"/\\"/g')
+    local json_data
+    json_data=$(printf '{"message":"[%s] %s","user_node_id":"%s"}' "$agent" "$escaped_msg" "${agent,,}")
     curl -s -X POST "$BBS_URL/api/boards/$BOARD/posts" \
         -H "Content-Type: application/json" \
-        -d "{\"message\":\"[$agent] $msg\",\"user_node_id\":\"!${agent,,}\"}" > /dev/null
+        -d "$json_data" > /dev/null
 }
 
 # Get last message ID

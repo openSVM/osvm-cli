@@ -139,6 +139,12 @@ pub fn build_ovsm_command() -> Command {
                         .action(ArgAction::SetTrue)
                         .help("Emit intermediate representation")
                 )
+                .arg(
+                    Arg::new("analyze")
+                        .long("analyze")
+                        .action(ArgAction::SetTrue)
+                        .help("Run register pressure analysis to detect potential spilling issues")
+                )
         )
         .subcommand(
             Command::new("check")

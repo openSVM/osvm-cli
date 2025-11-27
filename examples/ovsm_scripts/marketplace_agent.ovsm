@@ -1,0 +1,98 @@
+;; ============================================
+;; OVSM Marketplace Agent - A Thinking Agent
+;; ============================================
+;;
+;; This agent autonomously participates in the BBS marketplace:
+;; 1. Reads marketplace posts
+;; 2. Uses LLM to decide what to do
+;; 3. Posts bids, offers, or requests
+;; 4. Executes blockchain queries when needed
+;;
+;; Usage:
+;;   osvm ovsm run examples/ovsm_scripts/marketplace_agent.ovsm
+;;
+
+(do
+  ;; ========================================
+  ;; Configuration
+  ;; ========================================
+  (define bbs-url "http://144.124.231.40:8080")
+  (define agent-name "OVSM-Agent")
+  (define my-services ["whale-tracking" "token-analysis"])
+  (define my-balance 5.0)
+
+  ;; LLM config
+  (define llm-provider "ollama")
+  (define llm-model "smollm2:latest")
+
+  ;; System prompt for the agent
+  (define agent-system-prompt
+    "You are an AI agent in a blockchain services marketplace. You provide whale-tracking. You have 5 SOL. When you see REQUEST, decide to BID or SKIP. Reply with just BID or SKIP.")
+
+  ;; ========================================
+  ;; Main Agent Logic
+  ;; ========================================
+
+  (log :message "=== OVSM Marketplace Agent Starting ===")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message (concatenate "Balance: " (str my-balance) " SOL"))
+
+  ;; Announce ourselves
+  (define offer-msg (concatenate "OFFER: " agent-name " provides whale-tracking. Price: 0.05 SOL"))
+  (define post-body {:message offer-msg :agent agent-name})
+  (define post-result (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts") post-body))
+  (log :message (concatenate "Posted offer, status: " (str (get post-result "status"))))
+
+  ;; Fetch recent marketplace posts
+  (log :message "Fetching marketplace posts...")
+  (define fetch-resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=10")))
+  (define fetch-body (get fetch-resp "body"))
+  (define fetch-json (parse-json fetch-body))
+  (define posts (get fetch-json "data"))
+  (log :message (concatenate "Found " (str (length posts)) " posts"))
+
+  ;; Process each post
+  (define processed 0)
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define post-id (get post "id"))
+
+      ;; Skip if null
+      (if (null? msg)
+          null
+          (do
+            ;; Check if it's a request we might handle
+            (if (string-contains (upper msg) "REQUEST")
+                (do
+                  (log :message (concatenate "Found REQUEST in post #" (str post-id)))
+                  (log :message (concatenate "Message: " (if (> (length msg) 60) (concatenate (substring msg 0 60) "...") msg)))
+
+                  ;; Ask LLM what to do
+                  (define prompt (concatenate "Should I bid on this request? " msg))
+                  (define llm-resp (llm-query llm-provider prompt {:model llm-model :system agent-system-prompt}))
+                  (define decision (get llm-resp "response"))
+                  (log :message (concatenate "LLM says: " decision))
+
+                  ;; If LLM says bid, post a bid
+                  (if (string-contains (upper decision) "BID")
+                      (do
+                        (define bid-msg (concatenate "BID: " agent-name " offers to fulfill request #" (str post-id) ". Price: 0.05 SOL"))
+                        (define bid-body {:message bid-msg :agent agent-name})
+                        (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts") bid-body)
+                        (log :message "Posted BID!")
+                        (set! processed (+ processed 1)))
+                      (log :message "Decided to SKIP")))
+                null)))))
+
+  ;; Summary
+  (log :message "")
+  (log :message "=== Agent Summary ===")
+  (log :message (concatenate "Posts seen: " (str (length posts))))
+  (log :message (concatenate "Bids made: " (str processed)))
+
+  ;; Return status
+  {:agent agent-name
+   :posts_seen (length posts)
+   :bids_made processed
+   :balance my-balance})

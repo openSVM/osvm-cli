@@ -29,6 +29,7 @@ pub mod verifier;
 pub mod runtime;
 pub mod debug;
 pub mod solana_abi;
+pub mod regalloc_analyzer;
 
 pub use types::{OvsmType, TypeChecker, TypeEnv};
 pub use ir::{IrProgram, IrInstruction, IrReg, IrGenerator};
@@ -38,6 +39,7 @@ pub use elf::ElfWriter;
 pub use verifier::{Verifier, VerifyResult, VerifyError};
 pub use runtime::{StackFrame, HeapAllocator, StringRuntime, ArrayRuntime};
 pub use debug::{dump_ir, disassemble_sbpf, validate_sbpf, debug_compile, extract_text_section};
+pub use regalloc_analyzer::{RegAllocAnalyzer, RegAllocReport, RegAllocIssue, InstructionAnalysis};
 
 use crate::{SExprScanner as Scanner, SExprParser as Parser, Program, Result, Error};
 

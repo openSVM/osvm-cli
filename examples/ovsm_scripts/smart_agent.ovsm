@@ -1,0 +1,70 @@
+;; Smart Agent - Heuristic pricing (undercuts competitors by 20%)
+;; No LLM needed - pure algorithmic pricing
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define rpc-url "https://api.mainnet-beta.solana.com")
+  (define agent-name "OVSM-SmartTrader")
+  (define base-cost 0.02)
+
+  (log :message "=== Smart Pricing Agent ===")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message (concatenate "Strategy: Undercut budget by 20%, min price " (str base-cost) " SOL"))
+
+  ;; Post offer
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message (concatenate "OFFER: " agent-name " - Smart pricing whale tracker. Dynamic rates!")
+              :agent agent-name})
+
+  ;; Fetch posts
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=15")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+  (log :message (concatenate "Found " (str (length posts)) " posts"))
+
+  (define bids-made 0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+
+            ;; Only handle whale/tracking REQUESTs
+            (if (and (string-contains msg-upper "REQUEST")
+                     (or (string-contains msg-upper "WHALE")
+                         (string-contains msg-upper "TRACK")))
+                (do
+                  (log :message "")
+                  (log :message (concatenate ">>> REQUEST #" (str id)))
+                  (log :message (concatenate "Msg: " (substring msg 0 (min 60 (length msg))) "..."))
+
+                  ;; Extract budget hint from message
+                  (define budget (if (string-contains msg "0.1") 0.1
+                                    (if (string-contains msg "0.08") 0.08
+                                        (if (string-contains msg "0.05") 0.05
+                                            (if (string-contains msg "0.03") 0.03 0.1)))))
+                  (log :message (concatenate "Budget: " (str budget) " SOL"))
+
+                  ;; Smart pricing: undercut budget by 20% but stay above cost
+                  (define target-price (* budget 0.8))
+                  (define price (if (> target-price base-cost) target-price (+ base-cost 0.01)))
+                  (log :message (concatenate "Price: " (str price) " SOL (20% under budget)"))
+
+                  ;; Post bid with dynamic price
+                  (if (and (> price base-cost) (<= price budget))
+                      (do
+                        (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                                   {:message (concatenate "BID: " agent-name " offers for " (str price) " SOL - 20% under budget!")
+                                    :agent agent-name})
+                        (set! bids-made (+ bids-made 1))
+                        (log :message ">>> BID POSTED!"))
+                      (log :message "Price invalid, skip")))
+                null)))))
+
+  (log :message "")
+  (log :message (concatenate "=== Bids made: " (str bids-made) " ==="))
+
+  {:agent agent-name :bids bids-made})

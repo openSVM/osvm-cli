@@ -2,8 +2,8 @@
 
 Reference guide for built-in functions available when compiling OVSM to Solana sBPF bytecode.
 
-**Version:** 1.0.5
-**Last Updated:** 2025-11-25
+**Version:** 1.0.7
+**Last Updated:** 2025-11-27
 **Tested On:** Solana Devnet
 
 ---
@@ -13,13 +13,15 @@ Reference guide for built-in functions available when compiling OVSM to Solana s
 1. [Overview](#overview)
 2. [Account Access Functions](#account-access-functions)
 3. [Memory Operations](#memory-operations)
-4. [Logging Syscalls](#logging-syscalls)
-5. [Control Flow](#control-flow)
-6. [Arithmetic Operations](#arithmetic-operations)
-7. [Comparison Operations](#comparison-operations)
-8. [Built-in Variables](#built-in-variables)
-9. [Complete Examples](#complete-examples)
-10. [Solana Account Memory Layout](#solana-account-memory-layout)
+4. [Instruction Data](#instruction-data)
+5. [Cross-Program Invocation (CPI)](#cross-program-invocation-cpi)
+6. [Logging Syscalls](#logging-syscalls)
+7. [Control Flow](#control-flow)
+8. [Arithmetic Operations](#arithmetic-operations)
+9. [Comparison Operations](#comparison-operations)
+10. [Built-in Variables](#built-in-variables)
+11. [Complete Examples](#complete-examples)
+12. [Solana Account Memory Layout](#solana-account-memory-layout)
 
 ---
 
@@ -276,6 +278,131 @@ Low-level memory access for reading/writing account data.
 ;; Write value to account data
 (define data-ptr (account-data-ptr 0))
 (mem-store data-ptr 0 42)  ; Store 42 at offset 0
+```
+
+---
+
+## Instruction Data
+
+Functions for accessing instruction data passed to your program.
+
+### `instruction-data-len`
+
+**Signature:** `(instruction-data-len)`
+**Description:** Get the length of instruction data in bytes
+**Returns:** u64 - Number of bytes of instruction data
+**Tested:** ✅ Verified on devnet
+
+```lisp
+;; Check if we have enough instruction data
+(if (>= (instruction-data-len) 8)
+    (sol_log_ "Got enough data")
+    (sol_log_ "Need at least 8 bytes"))
+```
+
+---
+
+### `instruction-data-ptr`
+
+**Signature:** `(instruction-data-ptr)`
+**Description:** Get pointer to instruction data buffer
+**Returns:** u64 - Pointer to instruction data
+**Tested:** ✅ Verified on devnet
+
+```lisp
+;; Read first 8 bytes as u64 from instruction data
+(define amount (mem-load (instruction-data-ptr) 0))
+(sol_log_ "Amount from instruction:")
+(sol_log_64_ amount)
+```
+
+---
+
+## Cross-Program Invocation (CPI)
+
+Functions for calling other Solana programs from your OVSM program.
+
+> **Note:** CPI currently has a known issue with heap address loading. The functions compile and deploy correctly, but may fail at runtime due to register spilling of large constant addresses. This is being actively fixed.
+
+### `system-transfer`
+
+**Signature:** `(system-transfer src_idx dest_idx amount)`
+**Description:** Transfer SOL from one account to another via System Program CPI
+**Parameters:**
+- `src_idx` - Account index of source (must be signer)
+- `dest_idx` - Account index of destination
+- `amount` - Lamports to transfer
+**Returns:** u64 - 0 on success, error code on failure
+**Status:** ⚠️ Compiles but runtime issue pending fix
+
+```lisp
+;; Transfer 0.001 SOL from account 0 to account 1
+(define result (system-transfer 0 1 1000000))
+(if (= result 0)
+    (sol_log_ "Transfer successful!")
+    (sol_log_ "Transfer failed"))
+```
+
+---
+
+### `invoke`
+
+**Signature:** `(invoke instruction-ptr account-infos-ptr num-accounts)`
+**Description:** Low-level CPI for calling any program with custom instruction
+**Parameters:**
+- `instruction-ptr` - Pointer to SolInstruction struct (40 bytes)
+- `account-infos-ptr` - Pointer to account infos array
+- `num-accounts` - Number of accounts
+**Returns:** u64 - 0 on success, error code on failure
+**Status:** ⚠️ Advanced use - requires manual struct building
+
+```lisp
+;; For advanced users who build their own instruction structures
+(define result (invoke instr-ptr accts-ptr 2))
+```
+
+---
+
+### `invoke-signed`
+
+**Signature:** `(invoke-signed instr-ptr acct-infos-ptr num-accts signers-seeds-ptr num-signers)`
+**Description:** PDA-signed CPI for program-derived address signing
+**Parameters:**
+- `instr-ptr` - Pointer to SolInstruction struct
+- `acct-infos-ptr` - Pointer to account infos
+- `num-accts` - Number of accounts
+- `signers-seeds-ptr` - Pointer to signer seeds array
+- `num-signers` - Number of PDA signers
+**Returns:** u64 - 0 on success, error code on failure
+**Status:** ⚠️ Advanced use - requires PDA seed setup
+
+---
+
+### CPI Data Structures Reference
+
+When building custom CPI instructions, use these memory layouts:
+
+**SolInstruction (40 bytes):**
+```
++0:  u64 program_id_ptr     ; Pointer to 32-byte program ID
++8:  u64 accounts_ptr       ; Pointer to SolAccountMeta array
++16: u64 account_len        ; Number of accounts
++24: u64 data_ptr           ; Pointer to instruction data
++32: u64 data_len           ; Length of instruction data
+```
+
+**SolAccountMeta (16 bytes):**
+```
++0:  u64 pubkey_ptr         ; Pointer to 32-byte pubkey
++8:  u8  is_writable        ; 1 if writable, 0 otherwise
++9:  u8  is_signer          ; 1 if signer, 0 otherwise
++10: padding (6 bytes)
+```
+
+**System Program Transfer Instruction Data (12 bytes):**
+```
++0:  u32 instruction_index  ; 2 for Transfer
++4:  u64 lamports           ; Amount to transfer
 ```
 
 ---

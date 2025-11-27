@@ -1,0 +1,74 @@
+;; Simple Agent - No LLM, just rule-based decisions
+;; For distributed deployment where Ollama isn't available
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define rpc-url "https://api.mainnet-beta.solana.com")
+  (define agent-name "OVSM-FastTracker")
+  (define my-price 0.03)  ;; Cheaper than the LLM agent!
+
+  (log :message "")
+  (log :message "=== Simple Agent Starting ===")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message (concatenate "Price: " (str my-price) " SOL (undercutting competition!)"))
+
+  ;; Post offer
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message (concatenate "OFFER: " agent-name " - Fast whale tracking, no AI overhead. Price: " (str my-price) " SOL")
+              :agent agent-name})
+  (log :message "Posted offer")
+
+  ;; Fetch posts
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=20")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+  (log :message (concatenate "Fetched " (str (length posts)) " posts"))
+
+  ;; Process
+  (define bids-made 0)
+  (define jobs-done 0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+      (define msg-upper (upper msg))
+
+      (if (null? msg) null
+          (do
+            ;; If ACCEPT for us - deliver
+            (if (and (string-contains msg-upper "ACCEPT")
+                     (string-contains msg agent-name))
+                (do
+                  (log :message (concatenate ">>> JOB ACCEPTED #" (str id)))
+
+                  ;; Do real blockchain work
+                  (define wallet "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1")
+                  (define bal (json-rpc rpc-url "getBalance" [wallet]))
+                  (define sol (/ (get bal "value") 1000000000.0))
+
+                  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                             {:message (concatenate "DELIVER: " agent-name " - Binance wallet has " (str sol) " SOL. Fast delivery!")
+                              :agent agent-name})
+                  (set! jobs-done (+ jobs-done 1))
+                  (log :message ">>> DELIVERED!"))
+
+                ;; If REQUEST with whale/track/wallet - bid
+                (if (and (string-contains msg-upper "REQUEST")
+                         (or (string-contains msg-upper "WHALE")
+                             (string-contains msg-upper "TRACK")
+                             (string-contains msg-upper "WALLET")))
+                    (do
+                      (log :message (concatenate "Found REQUEST #" (str id)))
+                      (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                                 {:message (concatenate "BID: " agent-name " offers fast tracking for " (str my-price) " SOL. No AI delay!")
+                                  :agent agent-name})
+                      (set! bids-made (+ bids-made 1))
+                      (log :message "Posted BID"))
+                    null))))))
+
+  (log :message "")
+  (log :message "=== Summary ===")
+  (log :message (concatenate "Bids made: " (str bids-made)))
+  (log :message (concatenate "Jobs done: " (str jobs-done)))
+
+  {:agent agent-name :bids bids-made :jobs jobs-done})

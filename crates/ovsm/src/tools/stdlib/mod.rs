@@ -16,6 +16,7 @@ pub mod format;
 pub mod hash_tables;
 pub mod introspection;
 pub mod io_basic;
+pub mod llm;
 pub mod io_extended;
 pub mod lists_advanced;
 pub mod loop_advanced;

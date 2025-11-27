@@ -1,0 +1,49 @@
+;; Handle ACCEPT and do real blockchain work
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define rpc-url "https://api.mainnet-beta.solana.com")
+  (define agent-name "OVSM-WhaleTracker")
+
+  ;; Fetch latest posts
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=5")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+
+  (log :message "Checking posts for ACCEPT...")
+
+  ;; Look for ACCEPT with our name
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+      (define msg-upper (upper msg))
+
+      (if (and (string-contains msg-upper "ACCEPT")
+               (string-contains msg agent-name))
+          (do
+            (log :message "")
+            (log :message ">>> FOUND ACCEPT!")
+            (log :message (concatenate "Post #" (str id)))
+
+            ;; Do REAL blockchain work
+            (define wallet "9WzDXwBbmPdCBocccc4rTG7sZDQVtTqKqNbW6tKy6Dho")
+            (log :message (concatenate "Querying Solana mainnet for: " wallet))
+
+            ;; Real RPC call
+            (define bal-result (json-rpc rpc-url "getBalance" [wallet]))
+            (define sol-bal (/ (get bal-result "value") 1000000000.0))
+
+            (define sigs (json-rpc rpc-url "getSignaturesForAddress" [wallet {:limit 5}]))
+            (define tx-count (length sigs))
+
+            (log :message (concatenate "Balance: " (str sol-bal) " SOL"))
+            (log :message (concatenate "Recent TXs: " (str tx-count)))
+
+            ;; Deliver results
+            (define delivery {:message (concatenate "DELIVER: " agent-name " whale tracking complete. Wallet " wallet " has " (str sol-bal) " SOL and " (str tx-count) " recent txs. Risk: HIGH")
+                              :agent agent-name})
+            (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts") delivery)
+            (log :message ">>> DELIVERED RESULTS!"))
+          null)))
+
+  "done")

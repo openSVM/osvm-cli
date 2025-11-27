@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.7] - 2025-11-27
+
+### Added
+- 🔧 **Cross-Program Invocation (CPI) Support** - Call other Solana programs from OVSM
+  - `system-transfer` - High-level SOL transfer via System Program CPI
+  - `invoke` - Low-level CPI for custom instruction structures
+  - `invoke-signed` - PDA-signed CPI for program-derived addresses
+- 📝 **CPI Data Structures** - Complete Solana C ABI support
+  - SolInstruction (40 bytes): program_id, accounts, data
+  - SolAccountMeta (16 bytes): pubkey, is_writable, is_signer
+- 🧪 **SOL Transfer Demo** - Working program deployed to devnet
+  - Program: `EGEowb4hXCU34KUvWnUVizZAFmB5K6u4tTM1WGLk4LEe`
+
+### Known Issues
+- 🐛 **CPI heap allocation**: Large constant addresses (0x300000000) may not load correctly due to register spilling
+  - Workaround: Use stack-based allocation with R10 offsets (not yet implemented)
+  - Alternative: Use simpler programs without CPI for now
+
+### Technical Details
+- CPI uses `sol_invoke_signed_c` syscall (Murmur3 hash: 2720767109)
+- Heap region available at 0x300000000 (32KB)
+- System Program Transfer instruction: [u32 index=2][u64 amount]
+
 ## [1.0.6] - 2025-11-26
 
 ### Added

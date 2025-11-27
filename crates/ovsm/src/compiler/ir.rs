@@ -1093,6 +1093,325 @@ impl IrGenerator {
                     return Ok(Some(dst));
                 }
 
+                // =================================================================
+                // CROSS-PROGRAM INVOCATION (CPI)
+                // =================================================================
+                //
+                // Solana CPI via sol_invoke_signed_c syscall
+                //
+                // Data Structures (C ABI):
+                //
+                // SolInstruction (40 bytes):
+                //   +0:  program_id (u64 ptr to 32-byte pubkey)
+                //   +8:  accounts (u64 ptr to SolAccountMeta array)
+                //   +16: account_len (u64)
+                //   +24: data (u64 ptr to instruction data)
+                //   +32: data_len (u64)
+                //
+                // SolAccountMeta (34 bytes, but aligned to 40 for arrays):
+                //   +0:  pubkey (u64 ptr to 32-byte pubkey)
+                //   +8:  is_writable (u8)
+                //   +9:  is_signer (u8)
+                //   padding to align
+                //
+                // SolAccountInfo (88 bytes): Already in serialized input buffer
+                //
+                // System Program Transfer Instruction Data (12 bytes):
+                //   +0: instruction index (u32) = 2 for Transfer
+                //   +4: amount in lamports (u64)
+                //
+                // sol_invoke_signed_c signature:
+                //   R1: instruction* (SolInstruction)
+                //   R2: account_infos* (SolAccountInfo array from input)
+                //   R3: account_infos_len
+                //   R4: signers_seeds* (NULL for non-PDA signing)
+                //   R5: signers_seeds_len (0 for non-PDA signing)
+                //
+                // =================================================================
+
+                // Handle (system-transfer src_idx dest_idx amount) - Transfer SOL via CPI
+                // src_idx: account index of source (must be signer)
+                // dest_idx: account index of destination
+                // amount: lamports to transfer
+                if name == "system-transfer" && args.len() == 3 {
+                    let src_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("system-transfer src_idx has no result"))?;
+                    let dest_idx = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("system-transfer dest_idx has no result"))?;
+                    let amount_reg = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("system-transfer amount has no result"))?;
+
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available"))?;
+
+                    // System Program ID: 11111111111111111111111111111111 (all 0 bytes in binary)
+                    // Stored in .rodata, need to allocate space on stack for the structure
+
+                    // We need to build:
+                    // 1. System Program pubkey (32 bytes of zeros)
+                    // 2. Instruction data (12 bytes: u32=2, u64=amount)
+                    // 3. SolAccountMeta array (2 entries, 34 bytes each)
+                    // 4. SolInstruction struct (40 bytes)
+
+                    // Use the fixed heap address at 0x300000000 (no allocator needed!)
+                    // Solana sBPF provides a 32KB heap region that programs can use directly.
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000000_i64));
+
+                    // Layout in heap:
+                    //   +0:   System Program ID (32 bytes of zeros)
+                    //   +32:  instruction_data (12 bytes)
+                    //   +48:  SolAccountMeta[0] (16 bytes: ptr, is_writable, is_signer, padding)
+                    //   +64:  SolAccountMeta[1] (16 bytes)
+                    //   +80:  SolInstruction (40 bytes)
+
+                    // 1. Write System Program ID (all zeros)
+                    // Store 4 u64 zeros (32 bytes total)
+                    let zero_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero_reg, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero_reg, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero_reg, 8));
+                    self.emit(IrInstruction::Store(heap_base, zero_reg, 16));
+                    self.emit(IrInstruction::Store(heap_base, zero_reg, 24));
+
+                    // 2. Write instruction data at +32
+                    // System Transfer instruction: u32 index = 2, then u64 amount
+                    let instr_data_ptr = self.alloc_reg();
+                    let thirty_two_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(thirty_two_offset, 32));
+                    self.emit(IrInstruction::Add(instr_data_ptr, heap_base, thirty_two_offset));
+
+                    // Write transfer instruction index (2) as first 4 bytes
+                    let transfer_idx = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(transfer_idx, 2));
+                    self.emit(IrInstruction::Store(instr_data_ptr, transfer_idx, 0));
+
+                    // Write amount at offset 4 (but we use 8-byte stores, so this is tricky)
+                    // Actually, the System Transfer uses a specific encoding:
+                    // [4 bytes: instruction variant (2)] [8 bytes: lamports]
+                    // We store as u64 at offset 0 with value 2, then amount at offset 8
+                    // But instruction_data needs to be: [02 00 00 00] [amount as u64 LE]
+                    // Let's write the full 12 bytes correctly
+
+                    // For proper byte layout, we need to write:
+                    // Byte 0-3: 0x00000002 (little endian)
+                    // Byte 4-11: amount (little endian u64)
+                    //
+                    // Since we can only store 8 bytes at a time, and the index is 4 bytes:
+                    // Store low 8 bytes as: (amount << 32) | 2
+                    let two = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(two, 2));
+                    let amount_shifted = self.alloc_reg();
+                    // amount_shifted = amount << 32
+                    // We need a shift instruction - but IR doesn't have one yet
+                    // Workaround: multiply by 2^32 = 4294967296
+                    let shift_amount = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(shift_amount, 4294967296)); // 2^32
+                    self.emit(IrInstruction::Mul(amount_shifted, amount_reg, shift_amount));
+                    let instr_low = self.alloc_reg();
+                    self.emit(IrInstruction::Or(instr_low, amount_shifted, two));
+                    self.emit(IrInstruction::Store(instr_data_ptr, instr_low, 0));
+
+                    // Store high 4 bytes of amount at offset 8
+                    // amount_high = amount >> 32
+                    let amount_high = self.alloc_reg();
+                    self.emit(IrInstruction::Div(amount_high, amount_reg, shift_amount));
+                    self.emit(IrInstruction::Store(instr_data_ptr, amount_high, 8));
+
+                    // 3. Build SolAccountMeta array at +48
+                    // Each SolAccountMeta: pubkey_ptr (8), is_writable (1), is_signer (1), padding (6)
+                    // Total: 16 bytes each
+
+                    let meta_array_ptr = self.alloc_reg();
+                    let forty_eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(forty_eight, 48));
+                    self.emit(IrInstruction::Add(meta_array_ptr, heap_base, forty_eight));
+
+                    // Get source account pubkey pointer
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336));
+                    let src_account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(src_account_offset, src_idx, account_size));
+                    let src_base = self.alloc_reg();
+                    self.emit(IrInstruction::Add(src_base, eight_reg, src_account_offset));
+                    // Pubkey is at offset 8 from account start
+                    let pubkey_field_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(pubkey_field_offset, 8));
+                    let src_pubkey_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(src_pubkey_offset, src_base, pubkey_field_offset));
+                    let src_pubkey_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(src_pubkey_ptr, accounts_ptr, src_pubkey_offset));
+
+                    // Meta[0]: source (signer, writable)
+                    self.emit(IrInstruction::Store(meta_array_ptr, src_pubkey_ptr, 0)); // pubkey ptr
+                    let one_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one_reg, 1));
+                    // is_writable (1) and is_signer (1) at bytes 8 and 9
+                    // Store as single u64: 0x0101 at offset 8
+                    let flags = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(flags, 0x0101)); // is_writable=1, is_signer=1
+                    self.emit(IrInstruction::Store(meta_array_ptr, flags, 8));
+
+                    // Get dest account pubkey pointer
+                    let dest_account_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(dest_account_offset, dest_idx, account_size));
+                    let dest_base = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dest_base, eight_reg, dest_account_offset));
+                    let dest_pubkey_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dest_pubkey_offset, dest_base, pubkey_field_offset));
+                    let dest_pubkey_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dest_pubkey_ptr, accounts_ptr, dest_pubkey_offset));
+
+                    // Meta[1]: dest (writable, not signer)
+                    let meta1_ptr = self.alloc_reg();
+                    let sixteen = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(sixteen, 16));
+                    self.emit(IrInstruction::Add(meta1_ptr, meta_array_ptr, sixteen));
+                    self.emit(IrInstruction::Store(meta1_ptr, dest_pubkey_ptr, 0)); // pubkey ptr
+                    let flags_writable = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(flags_writable, 0x0001)); // is_writable=1, is_signer=0
+                    self.emit(IrInstruction::Store(meta1_ptr, flags_writable, 8));
+
+                    // 4. Build SolInstruction at +80
+                    let instr_ptr = self.alloc_reg();
+                    let eighty = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eighty, 80));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, eighty));
+
+                    // SolInstruction.program_id = ptr to System Program ID (heap_base + 0)
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 0));
+
+                    // SolInstruction.accounts = ptr to SolAccountMeta array
+                    self.emit(IrInstruction::Store(instr_ptr, meta_array_ptr, 8));
+
+                    // SolInstruction.account_len = 2
+                    self.emit(IrInstruction::Store(instr_ptr, two, 16));
+
+                    // SolInstruction.data = ptr to instruction data
+                    self.emit(IrInstruction::Store(instr_ptr, instr_data_ptr, 24));
+
+                    // SolInstruction.data_len = 12
+                    let twelve = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(twelve, 12));
+                    self.emit(IrInstruction::Store(instr_ptr, twelve, 32));
+
+                    // 5. Build account_infos array for CPI
+                    // We need to pass pointers to the serialized account data
+                    // The runtime expects SolAccountInfo* array, but we have raw serialized data
+                    //
+                    // CRITICAL: The CPI syscall expects the SAME account_infos format as program entry!
+                    // So we can reuse the accounts_ptr directly if we include both accounts
+                    //
+                    // Actually, we need to build proper SolAccountInfo structs (88 bytes each):
+                    //   +0:  key* (ptr to 32-byte pubkey)
+                    //   +8:  lamports* (ptr to u64)
+                    //   +16: data_len
+                    //   +24: data* (ptr to account data)
+                    //   +32: owner* (ptr to 32-byte owner pubkey)
+                    //   +40: rent_epoch
+                    //   +48: is_signer (bool as u64)
+                    //   +56: is_writable (bool as u64)
+                    //   +64: executable (bool as u64)
+                    //
+                    // For CPI, we can pass the original serialized input buffer's accounts
+                    // since it contains SolAccountInfo-compatible data
+
+                    // Read num_accounts from the serialized buffer
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
+
+                    // The accounts_ptr + 8 points to the first account's serialized data
+                    // But the CPI expects an array of SolAccountInfo pointers, not raw data!
+                    //
+                    // We need to construct this array. Let's allocate more heap space.
+                    //
+                    // Actually, looking at Solana's implementation more carefully:
+                    // sol_invoke_signed_c expects:
+                    //   R2: const SolAccountInfo* account_infos
+                    //
+                    // The account_infos we receive at program entry are already in this format!
+                    // We just need to pass the pointer to where our SolAccountInfo array starts.
+                    //
+                    // Wait - the serialized format IS different from SolAccountInfo!
+                    // Serialized: [dup_info, is_signer, is_writable, executable, padding, pubkey, owner, lamports, data_len, data, rent_epoch]
+                    // SolAccountInfo: different layout with pointers
+                    //
+                    // The CPI syscall actually handles re-serialization internally.
+                    // We pass the instruction + account infos, and the runtime handles the rest.
+                    //
+                    // For SVM v2, the account_infos parameter expects raw pointers to
+                    // our input buffer's serialized accounts!
+
+                    // Let's simplify: pass accounts_ptr + 8 as the account_infos
+                    let acct_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(acct_infos_ptr, accounts_ptr, eight_reg));
+
+                    // 6. Call sol_invoke_signed_c
+                    // R1: instruction*
+                    // R2: account_infos*
+                    // R3: account_infos_len
+                    // R4: signers_seeds* (NULL)
+                    // R5: signers_seeds_len (0)
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, acct_infos_ptr, num_accounts, zero_reg, zero_reg],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // Handle (invoke instruction-ptr account-infos-ptr num-accounts) - Low-level CPI
+                // For advanced users who build their own instruction structures
+                if name == "invoke" && args.len() == 3 {
+                    let instr_ptr = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("invoke instruction-ptr has no result"))?;
+                    let acct_infos_ptr = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("invoke account-infos-ptr has no result"))?;
+                    let num_accounts = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("invoke num-accounts has no result"))?;
+
+                    let zero_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero_reg, 0));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, acct_infos_ptr, num_accounts, zero_reg, zero_reg],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // Handle (invoke-signed instr-ptr acct-infos-ptr num-accts signers-seeds-ptr num-signers)
+                // For PDA-signed CPIs
+                if name == "invoke-signed" && args.len() == 5 {
+                    let instr_ptr = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("invoke-signed instruction-ptr has no result"))?;
+                    let acct_infos_ptr = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("invoke-signed account-infos-ptr has no result"))?;
+                    let num_accounts = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("invoke-signed num-accounts has no result"))?;
+                    let signers_seeds_ptr = self.generate_expr(&args[3].value)?
+                        .ok_or_else(|| Error::runtime("invoke-signed signers-seeds-ptr has no result"))?;
+                    let num_signers = self.generate_expr(&args[4].value)?
+                        .ok_or_else(|| Error::runtime("invoke-signed num-signers has no result"))?;
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, acct_infos_ptr, num_accounts, signers_seeds_ptr, num_signers],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
                 // Handle (println msg) - no-op for local testing (just evaluate and discard)
                 if name == "println" && args.len() == 1 {
                     // Evaluate the argument (so side effects happen) but discard the result

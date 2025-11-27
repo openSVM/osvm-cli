@@ -1,0 +1,124 @@
+;; Competitive Agent - Analyzes competitor bids and undercuts them!
+;; Real market-driven pricing based on actual marketplace data
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define agent-name "OVSM-Competitor")
+  (define base-cost 0.015)  ;; Lower cost than others!
+  (define min-margin 0.005) ;; Minimum profit margin
+
+  (log :message "")
+  (log :message "=== COMPETITIVE PRICING AGENT ===")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message (concatenate "Base cost: " (str base-cost) " SOL"))
+  (log :message (concatenate "Strategy: Analyze BIDs, undercut lowest by 10%"))
+  (log :message "")
+
+  ;; Fetch all posts
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=50")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+  (log :message (concatenate "Analyzing " (str (length posts)) " posts..."))
+
+  ;; Extract competitor prices from BIDs
+  (define competitor-prices [])
+  (define requests-found [])
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+
+            ;; Collect REQUEST IDs
+            (if (string-contains msg-upper "REQUEST")
+                (set! requests-found (append requests-found [id]))
+                null)
+
+            ;; Extract prices from BIDs (look for "X.XX SOL" pattern)
+            (if (string-contains msg-upper "BID")
+                (do
+                  ;; Try to extract price - look for common patterns
+                  (define has-price-005 (string-contains msg "0.05"))
+                  (define has-price-003 (string-contains msg "0.03"))
+                  (define has-price-004 (string-contains msg "0.04"))
+                  (define has-price-006 (string-contains msg "0.06"))
+                  (define has-price-008 (string-contains msg "0.08"))
+
+                  (if has-price-003 (set! competitor-prices (append competitor-prices [0.03])) null)
+                  (if has-price-004 (set! competitor-prices (append competitor-prices [0.04])) null)
+                  (if has-price-005 (set! competitor-prices (append competitor-prices [0.05])) null)
+                  (if has-price-006 (set! competitor-prices (append competitor-prices [0.06])) null)
+                  (if has-price-008 (set! competitor-prices (append competitor-prices [0.08])) null))
+                null)))))
+
+  (log :message (concatenate "Found " (str (length requests-found)) " REQUESTs"))
+  (log :message (concatenate "Found " (str (length competitor-prices)) " competitor BIDs with prices"))
+
+  ;; Calculate competitive price
+  (define lowest-competitor 0.05) ;; Default if no competitors
+  (if (> (length competitor-prices) 0)
+      (do
+        ;; Find minimum (manual since we don't have min function)
+        (for (price competitor-prices)
+          (if (< price lowest-competitor)
+              (set! lowest-competitor price)
+              null)))
+      null)
+
+  (log :message (concatenate "Lowest competitor: " (str lowest-competitor) " SOL"))
+
+  ;; Undercut by 10%
+  (define target-price (* lowest-competitor 0.9))
+  (define my-price (if (> target-price (+ base-cost min-margin))
+                       target-price
+                       (+ base-cost min-margin)))
+
+  (log :message (concatenate ">>> MY PRICE: " (str my-price) " SOL (10% under competition)"))
+  (log :message "")
+
+  ;; Post competitive offer
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message (concatenate "OFFER: " agent-name " - Whale tracking at BEST PRICE: " (str my-price) " SOL! Undercutting competition!")
+              :agent agent-name})
+  (log :message "Posted competitive offer!")
+
+  ;; Bid on recent requests with competitive price
+  (define bids-made 0)
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+            (if (and (string-contains msg-upper "REQUEST")
+                     (or (string-contains msg-upper "WHALE")
+                         (string-contains msg-upper "TRACK")))
+                (do
+                  (if (< bids-made 3) ;; Limit to 3 bids
+                      (do
+                        (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                                   {:message (concatenate "BID: " agent-name " offers " (str my-price) " SOL - LOWEST PRICE GUARANTEED!")
+                                    :agent agent-name})
+                        (set! bids-made (+ bids-made 1))
+                        (log :message (concatenate "BID on request #" (str id))))
+                      null))
+                null)))))
+
+  (log :message "")
+  (log :message "=== SUMMARY ===")
+  (log :message (concatenate "Competitor analysis: " (str (length competitor-prices)) " prices found"))
+  (log :message (concatenate "Lowest competitor: " (str lowest-competitor) " SOL"))
+  (log :message (concatenate "My price: " (str my-price) " SOL"))
+  (log :message (concatenate "Margin: " (str (- my-price base-cost)) " SOL"))
+  (log :message (concatenate "Bids placed: " (str bids-made)))
+
+  {:agent agent-name
+   :price my-price
+   :lowest-competitor lowest-competitor
+   :bids bids-made
+   :margin (- my-price base-cost)})
