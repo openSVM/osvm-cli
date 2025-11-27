@@ -2775,8 +2775,20 @@ impl OsvmApp {
                         KeyCode::Char('k') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
                             self.chat_scroll = self.chat_scroll.saturating_sub(1);
                         }
-                        // BBS INPUT MODE ACTIVATION
+                        // BBS INPUT HANDLING (when input is active) - must come BEFORE 'i' handler!
+                        KeyCode::Char(c) if self.active_tab == TabIndex::BBS && {
+                            // Check if input is active (need to peek at state for guard)
+                            self.bbs_state.lock().map(|bbs| bbs.input_active).unwrap_or(false)
+                        } => {
+                            if let Ok(mut bbs) = self.bbs_state.lock() {
+                                if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                                    bbs.input_buffer.push(c);
+                                }
+                            }
+                        }
+                        // BBS INPUT MODE ACTIVATION (only when NOT in input mode)
                         KeyCode::Char('i') if self.active_tab == TabIndex::BBS => {
+                            // Only activate if not already in input mode
                             let mut should_log = false;
                             if let Ok(mut bbs) = self.bbs_state.lock() {
                                 if !bbs.input_active {
@@ -2788,14 +2800,6 @@ impl OsvmApp {
                                 self.add_log("BBS input activated (press Enter to send, Esc to cancel)".to_string());
                             }
                         }
-                        // BBS INPUT HANDLING (when input is active)
-                        KeyCode::Char(c) if self.active_tab == TabIndex::BBS => {
-                            if let Ok(mut bbs) = self.bbs_state.lock() {
-                                if bbs.input_active && !key.modifiers.contains(KeyModifiers::CONTROL) {
-                                    bbs.input_buffer.push(c);
-                                }
-                            }
-                        }
                         KeyCode::Backspace if self.active_tab == TabIndex::BBS => {
                             if let Ok(mut bbs) = self.bbs_state.lock() {
                                 if bbs.input_active {
@@ -2804,19 +2808,27 @@ impl OsvmApp {
                             }
                         }
                         KeyCode::Enter if self.active_tab == TabIndex::BBS => {
-                            let mut message_opt = None;
+                            let mut result_msg = None;
                             if let Ok(mut bbs) = self.bbs_state.lock() {
                                 if bbs.input_active && !bbs.input_buffer.trim().is_empty() {
-                                    // TODO: Actually send message to database
-                                    message_opt = Some(bbs.input_buffer.clone());
+                                    let message = bbs.input_buffer.clone();
+                                    // Actually post the message to the database
+                                    match bbs.post_message(&message) {
+                                        Ok(post_id) => {
+                                            result_msg = Some(format!("📬 Posted (ID: {}): {}", post_id, message));
+                                            // Refresh posts to show the new message
+                                            let _ = bbs.load_posts();
+                                        }
+                                        Err(e) => {
+                                            result_msg = Some(format!("❌ Failed to post: {}", e));
+                                        }
+                                    }
                                     bbs.input_buffer.clear();
                                     bbs.input_active = false;
-                                    // Refresh posts to show new message
-                                    let _ = bbs.load_posts();
                                 }
                             }
-                            if let Some(message) = message_opt {
-                                self.add_log(format!("📬 Message posted: {}", message));
+                            if let Some(msg) = result_msg {
+                                self.add_log(msg);
                             }
                         }
                         KeyCode::Esc if self.active_tab == TabIndex::BBS => {

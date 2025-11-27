@@ -15,6 +15,7 @@ pub mod graph_tui; // Interactive TUI graph viewer for transfer relationships
 pub mod investigation_memory; // Persistent memory with transfer learning
 pub mod isolation_config;
 pub mod ledger_service;
+pub mod mcp_pool; // Dynamic auto-scaling MCP connection pool
 pub mod mcp_service;
 pub mod microvm_launcher;
 pub mod opensvm_api; // OpenSVM IDL & Annotations API client

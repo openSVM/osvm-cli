@@ -80,6 +80,32 @@ impl BBSTuiState {
         }
         Ok(())
     }
+
+    /// Post a message to the current board
+    /// Returns the post ID on success
+    pub fn post_message(&mut self, message: &str) -> Result<i32, Box<dyn std::error::Error>> {
+        let board_id = self.current_board
+            .ok_or_else(|| "No board selected")?;
+
+        let mut conn_guard = self.conn.lock().unwrap();
+        let conn = conn_guard.as_mut()
+            .ok_or_else(|| "Not connected to database")?;
+
+        // Get or create a TUI user (similar to CLI user pattern)
+        let timestamp = db::now_as_useconds();
+        let (user, _created) = db::users::observe(
+            conn,
+            "!tuiuser1",       // node_id
+            Some("TUI"),       // short_name
+            Some("TUI User"),  // long_name
+            timestamp,
+        )?;
+
+        // Create the post
+        let post = db::posts::create(conn, board_id, user.id, message)?;
+
+        Ok(post.id)
+    }
 }
 
 /// Render BBS TUI
@@ -240,5 +266,151 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
 impl Default for BBSTuiState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diesel::prelude::*;
+    use diesel::sqlite::SqliteConnection;
+    use tempfile::tempdir;
+
+    /// Helper to create a test BBSTuiState with an in-memory/temp database
+    fn create_test_state() -> (BBSTuiState, tempfile::TempDir) {
+        let tmp_dir = tempdir().expect("Failed to create temp dir");
+        let db_file = tmp_dir.path().join("test-bbs-tui.db");
+        let db_url = db_file.to_str().unwrap();
+
+        // Create connection and initialize DB
+        let mut conn = SqliteConnection::establish(db_url)
+            .expect("Failed to connect to test database");
+        db::initialize_database(&mut conn).expect("Failed to initialize database");
+
+        // Create a test board and get its ID
+        let board = db::boards::create(&mut conn, "TEST_BOARD", "Test board for TUI")
+            .expect("Failed to create test board");
+        let board_id = board.id;
+
+        // Build state with the connection
+        let mut state = BBSTuiState::new();
+        *state.conn.lock().unwrap() = Some(conn);
+        state.connected = true;
+        // Refresh boards from database instead of cloning
+        let _ = state.refresh_boards();
+        state.current_board = Some(board_id);
+        state.selected_board_index = Some(0);
+
+        (state, tmp_dir)
+    }
+
+    #[test]
+    fn test_post_message_success() {
+        let (mut state, _tmp_dir) = create_test_state();
+
+        // Post a message
+        let result = state.post_message("Hello from TUI test!");
+        assert!(result.is_ok(), "post_message should succeed: {:?}", result);
+
+        let post_id = result.unwrap();
+        assert!(post_id > 0, "Post ID should be positive");
+
+        // Verify the post exists in the database
+        state.load_posts().expect("Failed to load posts");
+        assert_eq!(state.posts.len(), 1, "Should have one post");
+        assert_eq!(state.posts[0].body, "Hello from TUI test!");
+    }
+
+    #[test]
+    fn test_post_message_no_board_selected() {
+        let (mut state, _tmp_dir) = create_test_state();
+
+        // Clear the current board
+        state.current_board = None;
+
+        // Try to post - should fail
+        let result = state.post_message("This should fail");
+        assert!(result.is_err(), "post_message should fail when no board selected");
+
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("No board selected"), "Error should mention no board: {}", err);
+    }
+
+    #[test]
+    fn test_post_message_not_connected() {
+        // Create state without a database connection
+        let mut state = BBSTuiState::new();
+        state.current_board = Some(1);  // Fake board ID
+
+        // Try to post - should fail
+        let result = state.post_message("This should fail");
+        assert!(result.is_err(), "post_message should fail when not connected");
+
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Not connected"), "Error should mention not connected: {}", err);
+    }
+
+    #[test]
+    fn test_post_message_creates_tui_user() {
+        let (mut state, _tmp_dir) = create_test_state();
+
+        // Post a message
+        state.post_message("First message").expect("Failed to post first message");
+
+        // Post another message
+        state.post_message("Second message").expect("Failed to post second message");
+
+        // Both should use the same TUI user
+        state.load_posts().expect("Failed to load posts");
+        assert_eq!(state.posts.len(), 2, "Should have two posts");
+
+        // Both posts should have the same user_id (the TUI user)
+        let user_id_1 = state.posts[0].user_id;
+        let user_id_2 = state.posts[1].user_id;
+        assert_eq!(user_id_1, user_id_2, "Both posts should be from the same TUI user");
+    }
+
+    #[test]
+    fn test_post_message_with_special_characters() {
+        let (mut state, _tmp_dir) = create_test_state();
+
+        // Post with special characters including 'i' (the bug we fixed)
+        let message = "Testing special chars: i, I, 你好, émoji 🎉, quotes \"test\" and 'apostrophe'";
+        let result = state.post_message(message);
+        assert!(result.is_ok(), "post_message should handle special characters");
+
+        state.load_posts().expect("Failed to load posts");
+        assert_eq!(state.posts[0].body, message, "Message should be stored exactly");
+    }
+
+    #[test]
+    fn test_multiple_posts_ordering() {
+        let (mut state, _tmp_dir) = create_test_state();
+
+        // Post multiple messages
+        state.post_message("First").expect("Failed to post");
+        state.post_message("Second").expect("Failed to post");
+        state.post_message("Third").expect("Failed to post");
+
+        // Load and verify ordering (should be newest first based on list_for_board)
+        state.load_posts().expect("Failed to load posts");
+        assert_eq!(state.posts.len(), 3);
+        assert_eq!(state.posts[0].body, "Third", "Newest post should be first");
+        assert_eq!(state.posts[1].body, "Second");
+        assert_eq!(state.posts[2].body, "First", "Oldest post should be last");
+    }
+
+    #[test]
+    fn test_state_new_defaults() {
+        let state = BBSTuiState::new();
+
+        assert!(state.boards.is_empty());
+        assert!(state.current_board.is_none());
+        assert!(state.posts.is_empty());
+        assert!(state.input_buffer.is_empty());
+        assert_eq!(state.scroll_offset, 0);
+        assert!(!state.connected);
+        assert!(!state.input_active);
+        assert_eq!(state.selected_board_index, Some(0));
     }
 }
