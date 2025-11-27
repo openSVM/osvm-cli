@@ -40,6 +40,7 @@ pub async fn handle_bbs_command(matches: &ArgMatches) -> Result<()> {
         Some(("registry", sub_m)) => handle_registry(sub_m).await,
         Some(("server", sub_m)) => handle_server(sub_m).await,
         Some(("interactive", sub_m)) => handle_interactive(sub_m).await,
+        Some(("tui", sub_m)) => handle_tui(sub_m).await,
         Some(("stats", sub_m)) => handle_stats(sub_m).await,
         _ => {
             println!("{}", "Use 'osvm bbs --help' for available commands".yellow());
@@ -736,14 +737,154 @@ async fn handle_interactive(matches: &ArgMatches) -> Result<()> {
     println!("{}", "BBS Interactive Shell".cyan().bold());
     println!("{}", "─".repeat(40));
     println!("  Board: {}", board);
-    println!("\n{} Interactive mode requires a terminal UI.", "!".yellow());
-    println!("  Use 'osvm research <wallet> --tui' and press '5' for BBS tab.");
+    println!("\n{} For full TUI, use: osvm bbs tui", "!".yellow());
     println!("  Or use individual commands:");
     println!("    osvm bbs read {}", board);
     println!("    osvm bbs post {} \"message\"", board);
     println!("    osvm bbs reply <id> \"reply\"", );
 
     Ok(())
+}
+
+/// Handle full-screen TUI mode
+async fn handle_tui(matches: &ArgMatches) -> Result<()> {
+    use crossterm::{
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use ratatui::{backend::CrosstermBackend, Terminal};
+    use std::io;
+    use std::time::Duration;
+
+    let initial_board = matches.get_one::<String>("board").unwrap();
+
+    // Initialize BBS state
+    let mut bbs_state = crate::utils::bbs::tui_widgets::BBSTuiState::new();
+
+    // Connect to database
+    if let Err(e) = bbs_state.connect() {
+        return Err(anyhow!("Failed to connect to BBS database: {}\nRun 'osvm bbs init' first.", e));
+    }
+
+    // Find and select the initial board
+    if let Some(idx) = bbs_state.boards.iter().position(|b| b.name.eq_ignore_ascii_case(initial_board)) {
+        let board_id = bbs_state.boards[idx].id;
+        bbs_state.current_board = Some(board_id);
+        bbs_state.selected_board_index = Some(idx);
+        let _ = bbs_state.load_posts();
+    }
+
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Main event loop
+    let result = run_bbs_tui(&mut terminal, &mut bbs_state);
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    result
+}
+
+/// BBS TUI event loop
+fn run_bbs_tui<B: ratatui::backend::Backend>(
+    terminal: &mut ratatui::Terminal<B>,
+    state: &mut crate::utils::bbs::tui_widgets::BBSTuiState,
+) -> Result<()> {
+    use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+    use std::time::Duration;
+
+    loop {
+        // Draw UI
+        terminal.draw(|f| {
+            crate::utils::bbs::tui_widgets::render_bbs_tab(f, f.area(), state);
+        })?;
+
+        // Handle input
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                // Handle input mode first (when input is active, capture all chars)
+                if state.input_active {
+                    match key.code {
+                        KeyCode::Enter => {
+                            if !state.input_buffer.trim().is_empty() {
+                                if let Err(e) = state.post_message(&state.input_buffer.clone()) {
+                                    state.status_message = format!("Error: {}", e);
+                                } else {
+                                    state.status_message = "Message posted!".to_string();
+                                    let _ = state.load_posts();
+                                }
+                                state.input_buffer.clear();
+                            }
+                            state.input_active = false;
+                        }
+                        KeyCode::Esc => {
+                            state.input_buffer.clear();
+                            state.input_active = false;
+                        }
+                        KeyCode::Backspace => {
+                            state.input_buffer.pop();
+                        }
+                        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            state.input_buffer.push(c);
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
+                // Not in input mode - handle navigation
+                match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        return Ok(());
+                    }
+                    KeyCode::Char('i') => {
+                        state.input_active = true;
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        state.scroll_offset = state.scroll_offset.saturating_add(1);
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        state.scroll_offset = state.scroll_offset.saturating_sub(1);
+                    }
+                    KeyCode::Char('r') => {
+                        let _ = state.refresh_boards();
+                        if state.current_board.is_some() {
+                            let _ = state.load_posts();
+                        }
+                        state.status_message = "Refreshed".to_string();
+                    }
+                    KeyCode::Char(c @ '1'..='9') => {
+                        let board_idx = c.to_digit(10).unwrap() as usize - 1;
+                        if board_idx < state.boards.len() {
+                            let board_id = state.boards[board_idx].id;
+                            let board_name = state.boards[board_idx].name.clone();
+                            state.current_board = Some(board_id);
+                            state.selected_board_index = Some(board_idx);
+                            let _ = state.load_posts();
+                            state.scroll_offset = 0;
+                            state.status_message = format!("Switched to: {}", board_name);
+                        }
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 /// Handle stats command

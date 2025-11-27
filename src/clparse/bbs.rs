@@ -287,6 +287,36 @@ pub fn build_bbs_command() -> Command {
                         .index(1),
                 ),
         )
+        // Full-screen TUI mode
+        .subcommand(
+            Command::new("tui")
+                .about("Start full-screen TUI interface")
+                .long_about(
+                    "Launch a full-screen terminal user interface for the BBS.\n\
+                    \n\
+                    The TUI provides a rich graphical interface with:\n\
+                    • Board list with quick-switch (1-9 keys)\n\
+                    • Scrollable posts view (j/k or arrow keys)\n\
+                    • Vim-style input mode (press 'i' to type, Enter to send, Esc to cancel)\n\
+                    • Real-time status updates\n\
+                    \n\
+                    Keyboard shortcuts:\n\
+                    • i       - Enter input mode to compose a message\n\
+                    • Enter   - Send message (in input mode)\n\
+                    • Esc     - Cancel input / Exit TUI\n\
+                    • j/k     - Scroll posts up/down\n\
+                    • 1-9     - Quick-switch boards\n\
+                    • r       - Refresh posts\n\
+                    • q       - Quit TUI",
+                )
+                .arg(
+                    Arg::new("board")
+                        .value_name("BOARD")
+                        .help("Initial board to open")
+                        .default_value("GENERAL")
+                        .index(1),
+                ),
+        )
         // Stats and info
         .subcommand(
             Command::new("stats")

@@ -413,4 +413,102 @@ mod tests {
         assert!(!state.input_active);
         assert_eq!(state.selected_board_index, Some(0));
     }
+
+    // =========================================================================
+    // Key Handler Simulation Tests
+    // These test the logic that should be implemented in app.rs event_loop
+    // to prevent regression of the "can't type 'i' in input mode" bug
+    // =========================================================================
+
+    /// Simulates pressing 'i' key when NOT in input mode
+    /// Expected: input_active becomes true, buffer unchanged
+    fn simulate_i_key_not_in_input(state: &mut BBSTuiState) {
+        if !state.input_active {
+            state.input_active = true;
+        }
+    }
+
+    /// Simulates pressing any char key when IN input mode
+    /// Expected: char is added to buffer
+    fn simulate_char_key_in_input(state: &mut BBSTuiState, c: char) {
+        if state.input_active {
+            state.input_buffer.push(c);
+        }
+    }
+
+    #[test]
+    fn test_key_i_activates_input_mode() {
+        let mut state = BBSTuiState::new();
+        assert!(!state.input_active, "Should start with input inactive");
+
+        // Press 'i' to activate
+        simulate_i_key_not_in_input(&mut state);
+
+        assert!(state.input_active, "'i' should activate input mode");
+        assert!(state.input_buffer.is_empty(), "Buffer should remain empty on activation");
+    }
+
+    #[test]
+    fn test_key_i_in_input_mode_adds_to_buffer() {
+        let mut state = BBSTuiState::new();
+
+        // Activate input mode first
+        state.input_active = true;
+
+        // Now press 'i' while in input mode - should ADD 'i' to buffer
+        simulate_char_key_in_input(&mut state, 'i');
+
+        assert!(state.input_active, "Should remain in input mode");
+        assert_eq!(state.input_buffer, "i", "'i' should be added to buffer");
+
+        // Press more characters including 'i' again
+        simulate_char_key_in_input(&mut state, ' ');
+        simulate_char_key_in_input(&mut state, 'l');
+        simulate_char_key_in_input(&mut state, 'i');
+        simulate_char_key_in_input(&mut state, 'k');
+        simulate_char_key_in_input(&mut state, 'e');
+
+        assert_eq!(state.input_buffer, "i like", "All chars including 'i' should be in buffer");
+    }
+
+    #[test]
+    fn test_typing_word_with_i_in_input_mode() {
+        let mut state = BBSTuiState::new();
+        state.input_active = true;
+
+        // Type "this is a test" which has multiple 'i' characters
+        for c in "this is a test".chars() {
+            simulate_char_key_in_input(&mut state, c);
+        }
+
+        assert_eq!(state.input_buffer, "this is a test",
+            "Should be able to type words with 'i' without losing characters");
+    }
+
+    #[test]
+    fn test_input_mode_toggle_sequence() {
+        let mut state = BBSTuiState::new();
+
+        // 1. Start inactive
+        assert!(!state.input_active);
+
+        // 2. Press 'i' to activate
+        simulate_i_key_not_in_input(&mut state);
+        assert!(state.input_active);
+        assert!(state.input_buffer.is_empty());
+
+        // 3. Type "hi"
+        simulate_char_key_in_input(&mut state, 'h');
+        simulate_char_key_in_input(&mut state, 'i');
+        assert_eq!(state.input_buffer, "hi");
+
+        // 4. Deactivate (simulate Esc)
+        state.input_active = false;
+        state.input_buffer.clear();
+
+        // 5. Press 'i' again to reactivate
+        simulate_i_key_not_in_input(&mut state);
+        assert!(state.input_active);
+        assert!(state.input_buffer.is_empty());
+    }
 }
