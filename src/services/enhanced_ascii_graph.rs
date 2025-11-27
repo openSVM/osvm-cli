@@ -469,18 +469,25 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "animation frame change bug - bullets not moving"]
     fn test_flow_animation() {
-        let mut canvas = EnhancedCanvas::new(100, 20);
+        // Animation works by drawing at different frame values
+        // The frame counter affects where '•' bullets are placed during draw_flow_arrow()
 
-        canvas.draw_flow_arrow(10, 10, 50, 10, 1_000_000.0, false, 1);
-        canvas.next_frame();
+        // Frame 0: Draw arrow with initial bullet positions
+        let mut canvas1 = EnhancedCanvas::new(100, 20);
+        canvas1.draw_flow_arrow(10, 10, 50, 10, 1_000_000.0, false, 1);
+        let output1 = canvas1.render(false);
 
-        let output1 = canvas.render(false);
-        canvas.next_frame();
-        let output2 = canvas.render(false);
+        // Frame 1: Create new canvas, advance frame, then draw
+        // This simulates redrawing on a new frame (as real animation loop would)
+        let mut canvas2 = EnhancedCanvas::new(100, 20);
+        canvas2.next_frame(); // frame = 1
+        canvas2.draw_flow_arrow(10, 10, 50, 10, 1_000_000.0, false, 1);
+        let output2 = canvas2.render(false);
 
-        // Animation should change output
-        assert_ne!(output1, output2);
+        // Animation should change bullet positions
+        // At frame=0: bullets at positions where (x + 0) % 4 == 0
+        // At frame=1: bullets at positions where (x + 1) % 4 == 0
+        assert_ne!(output1, output2, "Bullet positions should differ between frames");
     }
 }
