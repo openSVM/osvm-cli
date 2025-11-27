@@ -758,6 +758,7 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
     use std::time::Duration;
 
     let initial_board = matches.get_one::<String>("board").unwrap();
+    let mesh_address = matches.get_one::<String>("mesh");
 
     // Initialize BBS state
     let mut bbs_state = crate::utils::bbs::tui_widgets::BBSTuiState::new();
@@ -765,6 +766,12 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
     // Connect to database
     if let Err(e) = bbs_state.connect() {
         return Err(anyhow!("Failed to connect to BBS database: {}\nRun 'osvm bbs init' first.", e));
+    }
+
+    // Try to connect to Meshtastic if --mesh flag provided
+    if let Some(addr) = mesh_address {
+        println!("📻 Connecting to Meshtastic @ {}...", addr);
+        bbs_state.try_connect_meshtastic(Some(addr));
     }
 
     // Find and select the initial board

@@ -315,6 +315,15 @@ pub fn build_bbs_command() -> Command {
                         .help("Initial board to open")
                         .default_value("GENERAL")
                         .index(1),
+                )
+                .arg(
+                    Arg::new("mesh")
+                        .long("mesh")
+                        .short('m')
+                        .value_name("ADDRESS")
+                        .help("Connect to Meshtastic radio (e.g., 192.168.1.100:4403)")
+                        .num_args(0..=1)
+                        .default_missing_value("localhost:4403"),
                 ),
         )
         // Stats and info

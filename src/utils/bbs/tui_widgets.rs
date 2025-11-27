@@ -39,6 +39,8 @@ pub struct AgentStatus {
     pub osvm_agent_online: bool,
     pub last_agent_activity: Option<String>,
     pub agents_listening: usize,
+    pub meshtastic_connected: bool,
+    pub meshtastic_node_id: Option<String>,
 }
 
 impl BBSTuiState {
@@ -120,6 +122,29 @@ impl BBSTuiState {
     /// Get user by ID from cache
     pub fn get_user(&self, user_id: i32) -> Option<&User> {
         self.user_cache.get(&user_id)
+    }
+
+    /// Try to connect to Meshtastic radio (optional)
+    /// This doesn't fail if Meshtastic is unavailable - just sets status
+    pub fn try_connect_meshtastic(&mut self, address: Option<&str>) {
+        use crate::utils::bbs::meshtastic::{MeshtasticRadio, ConnectionState};
+
+        let addr = address.unwrap_or("localhost:4403");
+
+        if let Some(mut radio) = MeshtasticRadio::from_address(addr) {
+            match radio.connect() {
+                Ok(()) => {
+                    self.agent_status.meshtastic_connected = true;
+                    self.agent_status.meshtastic_node_id = Some(format!("!{:08x}", radio.our_node_id()));
+                    self.status_message = format!("📻 Meshtastic connected @ {}", addr);
+                }
+                Err(e) => {
+                    self.agent_status.meshtastic_connected = false;
+                    // Don't show error - mesh is optional
+                    log::debug!("Meshtastic connection failed: {}", e);
+                }
+            }
+        }
     }
 
     /// Initialize BBS connection
@@ -249,10 +274,19 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),  // Board list (smaller)
-            Constraint::Percentage(75),  // Posts (bigger)
+            Constraint::Percentage(25),  // Sidebar (boards + agents)
+            Constraint::Percentage(75),  // Posts
         ])
         .split(chunks[1]);
+
+    // Split sidebar into boards (top) and agent activity (bottom)
+    let sidebar_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(50),  // Boards
+            Constraint::Percentage(50),  // Agent activity
+        ])
+        .split(main_chunks[0]);
 
     // Board list with CLEAR selection indicators
     let boards: Vec<ListItem> = state
@@ -269,7 +303,7 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
             };
 
             ListItem::new(Line::from(vec![
-                Span::styled(format!("{}{} ", prefix, idx + 1), style),  // Show 1-based index
+                Span::styled(format!("{}{} ", prefix, idx + 1), style),
                 Span::styled(&board.name, style),
             ]))
         })
@@ -278,9 +312,74 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
     let board_list = List::new(boards)
         .block(Block::default()
             .borders(Borders::ALL)
-            .title(" Boards (1-9 to select) ")
+            .title(" Boards (1-9) ")
             .border_style(Style::default().fg(Color::Cyan)));
-    f.render_widget(board_list, main_chunks[0]);
+    f.render_widget(board_list, sidebar_chunks[0]);
+
+    // Agent Activity Panel
+    let mut agent_lines: Vec<Line> = Vec::new();
+
+    // Meshtastic status at top
+    let mesh_status = if state.agent_status.meshtastic_connected {
+        Line::from(vec![
+            Span::styled("  📻 ", Style::default().fg(Color::Green)),
+            Span::styled("Mesh: ", Style::default().fg(Color::Green)),
+            Span::styled(
+                state.agent_status.meshtastic_node_id.as_deref().unwrap_or("Connected"),
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            ),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("  📻 ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Mesh: Offline", Style::default().fg(Color::DarkGray)),
+        ])
+    };
+    agent_lines.push(mesh_status);
+    agent_lines.push(Line::from(""));
+
+    // Agent list
+    if state.agents.is_empty() {
+        agent_lines.push(Line::from(Span::styled("  No agents", Style::default().fg(Color::DarkGray))));
+        agent_lines.push(Line::from(""));
+        agent_lines.push(Line::from(Span::styled("  osvm bbs agent", Style::default().fg(Color::Yellow))));
+        agent_lines.push(Line::from(Span::styled("    register <name>", Style::default().fg(Color::Yellow))));
+    } else {
+        agent_lines.push(Line::from(Span::styled(
+            format!("  {} agent{}", state.agents.len(), if state.agents.len() == 1 { "" } else { "s" }),
+            Style::default().fg(Color::Green)
+        )));
+
+        // Show each agent (compact)
+        for agent in state.agents.iter().take(4) {
+            let status_icon = if agent.last_acted_at_us.is_some() { "●" } else { "○" };
+            let status_color = if agent.last_acted_at_us.is_some() { Color::Green } else { Color::DarkGray };
+
+            agent_lines.push(Line::from(vec![
+                Span::styled(format!("  {} ", status_icon), Style::default().fg(status_color)),
+                Span::styled("🤖 ", Style::default().fg(Color::Magenta)),
+                Span::styled(&agent.short_name, Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+            ]));
+        }
+
+        if state.agents.len() > 4 {
+            agent_lines.push(Line::from(Span::styled(
+                format!("  +{} more", state.agents.len() - 4),
+                Style::default().fg(Color::DarkGray)
+            )));
+        }
+    };
+
+    let agent_panel = Paragraph::new(agent_lines)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(" 🤖 Agents ")
+            .border_style(if state.agent_status.agents_listening > 0 {
+                Style::default().fg(Color::Magenta)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            }));
+    f.render_widget(agent_panel, sidebar_chunks[1]);
 
     // Posts area with agent badges
     let post_lines: Vec<Line> = if state.posts.is_empty() {
