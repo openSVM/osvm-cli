@@ -71,6 +71,44 @@ pub fn build_research_command() -> Command {
                 .action(clap::ArgAction::SetTrue)
                 .conflicts_with("stream")
         )
+        .arg(
+            Arg::new("auto")
+                .long("auto")
+                .short('a')
+                .help("Run autonomous investigation in CLI mode (no TUI, no user input)")
+                .long_help(
+                    "Runs a fully autonomous BFS investigation in headless CLI mode.\n\
+                    Prints progress with reasoning and steps to stdout.\n\
+                    Generates a report file at the end.\n\n\
+                    Example: osvm research <WALLET> --auto\n\
+                    Example: osvm research <WALLET> --auto --query \"Is this a MEV bot?\"\n\
+                    Example: osvm research <WALLET> -a -d 3 --save"
+                )
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with_all(["tui", "stream"])
+        )
+        .arg(
+            Arg::new("query")
+                .long("query")
+                .short('q')
+                .help("Investigation query or hypothesis (used with --auto)")
+                .value_name("QUERY")
+                .requires("auto")
+        )
+        .arg(
+            Arg::new("max-wallets")
+                .long("max-wallets")
+                .help("Maximum wallets to explore in autonomous mode (default: 50)")
+                .value_name("COUNT")
+                .default_value("50")
+        )
+        .arg(
+            Arg::new("output")
+                .short('o')
+                .long("output")
+                .help("Output file path for the report (default: ~/.osvm/reports/)")
+                .value_name("PATH")
+        )
         .subcommand(
             Command::new("demo")
                 .about("Run a demonstration of the research agent")

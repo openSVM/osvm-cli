@@ -17,6 +17,7 @@ pub mod isolation_config;
 pub mod ledger_service;
 pub mod mcp_service;
 pub mod microvm_launcher;
+pub mod opensvm_api; // OpenSVM IDL & Annotations API client
 pub mod ovsm_executor; // Phase 2: OVSM execution engine
 pub mod ovsm_service;
 pub mod qa_agent_service;

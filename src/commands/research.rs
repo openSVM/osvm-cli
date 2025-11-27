@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::ArgMatches;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::services::{
@@ -19,8 +20,11 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
 
     // Check if user wants simple OVSM analysis (default) or complex agent-based research
     let use_agent = matches.get_flag("agent");
+    let use_tui = matches.get_flag("tui");
+    let use_auto = matches.get_flag("auto");
 
-    if use_agent {
+    // --auto implies agent mode (shortcut so users don't need --agent --auto)
+    if use_agent || use_tui || use_auto {
         // Use the complex multi-iteration research agent
         return handle_agent_research(matches, wallet).await;
     }
@@ -115,9 +119,14 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
 async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     // Check if TUI mode is requested
     let use_tui = matches.get_flag("tui");
+    let use_auto = matches.get_flag("auto");
 
     if use_tui {
         return handle_tui_research(matches, wallet).await;
+    }
+
+    if use_auto {
+        return handle_auto_research(matches, wallet).await;
     }
 
     crate::tui_log!("🚀 Starting Intelligent Wallet Research for: {}", wallet);
@@ -741,6 +750,604 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
 
     crate::tui_log!("\n✅ TUI session ended");
     Ok(())
+}
+
+/// Handle autonomous CLI research (no TUI, no user input)
+async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
+    use colored::Colorize;
+    use std::collections::{HashSet, VecDeque};
+    use std::io::Write;
+    use crate::services::opensvm_api::OpenSvmApi;
+
+    // Parse options
+    let depth: usize = matches.get_one::<String>("depth")
+        .map(|s| s.parse().unwrap_or(5))
+        .unwrap_or(5);
+    let max_wallets: usize = matches.get_one::<String>("max-wallets")
+        .map(|s| s.parse().unwrap_or(50))
+        .unwrap_or(50);
+    let query = matches.get_one::<String>("query").map(|s| s.as_str());
+    let output_path = matches.get_one::<String>("output").cloned();
+    let save_report = matches.get_flag("save") || output_path.is_some();
+
+    // Print banner
+    println!();
+    println!("{}", "╔══════════════════════════════════════════════════════════════════════════════╗".cyan());
+    println!("{} {} {}",
+        "║".cyan(),
+        "🔍 OSVM AUTONOMOUS INVESTIGATION".bold().white(),
+        "                                      ║".cyan()
+    );
+    println!("{}", "╚══════════════════════════════════════════════════════════════════════════════╝".cyan());
+    println!();
+
+    // Print configuration
+    println!("{} {}", "Target Wallet:".bright_yellow(), wallet.white());
+    println!("{} {}", "Max Depth:".bright_yellow(), depth.to_string().white());
+    println!("{} {}", "Max Wallets:".bright_yellow(), max_wallets.to_string().white());
+    if let Some(q) = query {
+        println!("{} {}", "Query/Hypothesis:".bright_yellow(), q.bright_magenta());
+    }
+    println!();
+
+    // Initialize services
+    print!("{}", "⏳ Initializing MCP service...".dimmed());
+    std::io::stdout().flush()?;
+
+    let mut mcp_service = McpService::new_with_debug(false);
+    let _ = mcp_service.load_config();
+    let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+
+    // Initialize servers and count tools
+    let mut tool_count = 0;
+    {
+        let mut svc = mcp_arc.lock().await;
+        let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+
+        for server_id in &servers {
+            if svc.initialize_server(server_id).await.is_ok() {
+                if let Ok(tools) = svc.list_tools(server_id).await {
+                    tool_count += tools.len();
+                }
+            }
+        }
+    }
+    println!("\r{} {} tools loaded", "✅ MCP initialized:".green(), tool_count);
+
+    // Initialize OpenSVM API for address labels
+    let opensvm_api = OpenSvmApi::new();
+
+    // BFS exploration state
+    let mut discovered: HashSet<String> = HashSet::new(); // All wallets we've seen
+    let mut fetched_count: usize = 0; // Wallets we've actually fetched data for
+    let mut queue: VecDeque<(String, usize)> = VecDeque::new(); // (wallet, depth)
+    let mut all_transfers: Vec<TransferRecord> = Vec::new();
+    let mut findings: Vec<Finding> = Vec::new();
+
+    queue.push_back((wallet.to_string(), 0));
+    discovered.insert(wallet.to_string());
+
+    println!();
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!("{}", "📡 PHASE 1: BFS GRAPH EXPLORATION".bold().cyan());
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!();
+
+    let start_time = std::time::Instant::now();
+
+    // BFS exploration loop
+    while let Some((current_wallet, current_depth)) = queue.pop_front() {
+        // Check fetched count (not discovered) against limit
+        if fetched_count >= max_wallets {
+            println!("{}", format!("⚠️  Reached max wallets limit ({}) - {} in queue remaining",
+                max_wallets, queue.len()).yellow());
+            break;
+        }
+
+        if current_depth >= depth {
+            continue;
+        }
+
+        // Get annotation for current wallet
+        let annotation = opensvm_api.get_annotation(&current_wallet).await.ok().flatten();
+        let label = annotation.as_ref().map(|a| a.label.as_str()).unwrap_or("");
+        let risk = annotation.as_ref().and_then(|a| a.risk.as_deref());
+
+        // Print exploration status
+        let wallet_display = if label.is_empty() {
+            format!("{}...{}", &current_wallet[..8], &current_wallet[current_wallet.len()-6..])
+        } else {
+            format!("{} ({}...{})", label.bright_cyan(), &current_wallet[..4], &current_wallet[current_wallet.len()-4..])
+        };
+
+        let risk_indicator = match risk {
+            Some("malicious") => "🚨".to_string(),
+            Some("suspicious") => "⚠️".to_string(),
+            Some("safe") => "✅".to_string(),
+            _ => "❓".to_string(),
+        };
+
+        fetched_count += 1;
+        print!("{} [{}/{}] {} {} d={} q={}  ",
+            "→".bright_blue(),
+            fetched_count,
+            max_wallets,
+            wallet_display,
+            risk_indicator,
+            current_depth,
+            queue.len()
+        );
+        std::io::stdout().flush()?;
+
+        // Fetch transfers via MCP
+        let transfers = fetch_wallet_transfers(&mcp_arc, &current_wallet).await;
+
+        match transfers {
+            Ok(txs) => {
+                let new_wallets_added = txs.iter()
+                    .filter(|tx| {
+                        let connected = if tx.direction == "IN" { &tx.from } else { &tx.to };
+                        !discovered.contains(connected) && current_depth + 1 < depth
+                    })
+                    .count();
+
+                println!("{}", format!("{} transfers, +{} wallets", txs.len(), new_wallets_added).green());
+
+                // Process transfers
+                for tx in &txs {
+                    all_transfers.push(tx.clone());
+
+                    // Add connected wallets to queue
+                    let connected = if tx.direction == "IN" { &tx.from } else { &tx.to };
+                    if !discovered.contains(connected) && current_depth + 1 < depth {
+                        discovered.insert(connected.clone());
+                        queue.push_back((connected.clone(), current_depth + 1));
+                    }
+
+                    // Check for notable findings
+                    if tx.amount > 10000.0 {
+                        findings.push(Finding {
+                            category: "Large Transfer".to_string(),
+                            severity: "High".to_string(),
+                            description: format!("{:.2} {} {} → {}",
+                                tx.amount, tx.token,
+                                truncate_address(&tx.from),
+                                truncate_address(&tx.to)
+                            ),
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                println!("{}", format!("error: {}", e).red());
+            }
+        }
+    }
+
+    let exploration_time = start_time.elapsed();
+
+    println!();
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!("{}", "📊 PHASE 2: ANALYSIS".bold().cyan());
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!();
+
+    // Calculate statistics
+    let total_inflows: f64 = all_transfers.iter()
+        .filter(|t| t.direction == "IN")
+        .map(|t| t.amount)
+        .sum();
+    let total_outflows: f64 = all_transfers.iter()
+        .filter(|t| t.direction == "OUT")
+        .map(|t| t.amount)
+        .sum();
+
+    let unique_tokens: HashSet<_> = all_transfers.iter().map(|t| &t.token).collect();
+    let unique_counterparties: HashSet<_> = all_transfers.iter()
+        .flat_map(|t| vec![&t.from, &t.to])
+        .collect();
+
+    println!("📈 {}", "Statistics:".bold());
+    println!("   • Wallets fetched: {}", fetched_count.to_string().bright_white());
+    println!("   • Wallets discovered: {}", discovered.len().to_string().bright_white());
+    println!("   • Total transfers: {}", all_transfers.len().to_string().bright_white());
+    println!("   • Unique tokens: {}", unique_tokens.len().to_string().bright_white());
+    println!("   • Unique counterparties: {}", unique_counterparties.len().to_string().bright_white());
+    println!("   • Total inflows: {:.2}", format!("{:.2}", total_inflows).green());
+    println!("   • Total outflows: {:.2}", format!("{:.2}", total_outflows).red());
+    println!("   • Exploration time: {:.2}s", exploration_time.as_secs_f64());
+    println!();
+
+    // Render ASCII graph visualization
+    render_ascii_graph(wallet, &all_transfers);
+
+    // Print findings
+    if !findings.is_empty() {
+        println!("🚨 {}", "Notable Findings:".bold().yellow());
+        for finding in &findings {
+            let severity_color = match finding.severity.as_str() {
+                "Critical" => finding.severity.bright_red(),
+                "High" => finding.severity.red(),
+                "Medium" => finding.severity.yellow(),
+                _ => finding.severity.white(),
+            };
+            println!("   [{:^8}] {} - {}",
+                severity_color,
+                finding.category.bright_cyan(),
+                finding.description
+            );
+        }
+        println!();
+    }
+
+    // Query/hypothesis evaluation
+    if let Some(q) = query {
+        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!("{}", "🧠 PHASE 3: HYPOTHESIS EVALUATION".bold().cyan());
+        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!();
+        println!("📝 {}: {}", "Query".bright_yellow(), q.bright_white());
+        println!();
+
+        // Use AI to evaluate hypothesis
+        let ai_service = Arc::new(Mutex::new(AiService::new_with_debug(false)));
+        let evaluation_prompt = format!(
+            "Based on this wallet investigation data, evaluate the hypothesis/query: '{}'\n\n\
+            Statistics:\n\
+            - Wallets explored: {}\n\
+            - Total transfers: {}\n\
+            - Unique tokens: {}\n\
+            - Total inflows: {:.2}\n\
+            - Total outflows: {:.2}\n\
+            - Notable findings: {}\n\n\
+            Provide a concise evaluation (3-5 sentences) with:\n\
+            1. Whether the hypothesis is supported or refuted\n\
+            2. Key evidence for/against\n\
+            3. Confidence level (low/medium/high)",
+            q,
+            fetched_count,
+            all_transfers.len(),
+            unique_tokens.len(),
+            total_inflows,
+            total_outflows,
+            findings.len()
+        );
+
+        print!("{}", "⏳ AI evaluating hypothesis...".dimmed());
+        std::io::stdout().flush()?;
+
+        let mut ai = ai_service.lock().await;
+        match ai.query_osvm_ai_with_options(&evaluation_prompt, None, Some(true), false).await {
+            Ok(evaluation) => {
+                println!("\r{}", "                              ".dimmed()); // Clear line
+                println!("{}", evaluation.bright_white());
+            }
+            Err(e) => {
+                println!("\r{}", format!("AI evaluation failed: {}", e).red());
+            }
+        }
+        println!();
+    }
+
+    // Generate report
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!("{}", "📋 FINAL REPORT".bold().cyan());
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!();
+
+    let report = generate_auto_report(
+        wallet,
+        fetched_count,
+        &discovered,
+        &all_transfers,
+        &findings,
+        query,
+        exploration_time,
+    );
+
+    // Save report if requested
+    if save_report {
+        let report_path = output_path.unwrap_or_else(|| {
+            let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            let reports_dir = home.join(".osvm").join("reports");
+            std::fs::create_dir_all(&reports_dir).ok();
+            let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+            reports_dir.join(format!("investigation_{}_{}.md", &wallet[..8], timestamp))
+                .to_string_lossy()
+                .to_string()
+        });
+
+        std::fs::write(&report_path, &report)?;
+        println!("{} {}", "📄 Report saved to:".green(), report_path.bright_white());
+    }
+
+    println!();
+    println!("{}", "✅ Investigation complete!".bold().green());
+    println!();
+
+    Ok(())
+}
+
+/// Transfer record for CLI auto mode
+#[derive(Clone, Debug)]
+struct TransferRecord {
+    from: String,
+    to: String,
+    amount: f64,
+    token: String,
+    direction: String,
+    timestamp: Option<String>,
+}
+
+/// Finding record for CLI auto mode
+#[derive(Clone, Debug)]
+struct Finding {
+    category: String,
+    severity: String,
+    description: String,
+}
+
+/// Fetch transfers for a wallet via MCP
+async fn fetch_wallet_transfers(
+    mcp: &Arc<tokio::sync::Mutex<McpService>>,
+    wallet: &str,
+) -> Result<Vec<TransferRecord>> {
+    let mut svc = mcp.lock().await;
+
+    // Try to find a server with get_account_transfers tool
+    let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+
+    for server_id in servers {
+        if svc.initialize_server(&server_id).await.is_err() {
+            continue;
+        }
+
+        // Build request
+        let params = serde_json::json!({
+            "address": wallet,
+            "limit": 100,
+            "compress": true
+        });
+
+        // Try to call get_account_transfers
+        if let Ok(result) = svc.call_tool(&server_id, "get_account_transfers", Some(params.clone())).await {
+            // Parse the result
+            if let Some(data) = result.get("data").and_then(|d| d.as_array()) {
+                let transfers: Vec<TransferRecord> = data.iter()
+                    .filter_map(|tx| {
+                        Some(TransferRecord {
+                            from: tx.get("from")?.as_str()?.to_string(),
+                            to: tx.get("to")?.as_str()?.to_string(),
+                            amount: tx.get("tokenAmount")
+                                .and_then(|v| v.as_str())
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or(0.0),
+                            token: tx.get("tokenSymbol")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("SOL")
+                                .to_string(),
+                            direction: tx.get("transferType")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("OUT")
+                                .to_string(),
+                            timestamp: tx.get("timestamp")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string()),
+                        })
+                    })
+                    .collect();
+
+                return Ok(transfers);
+            }
+        }
+    }
+
+    Ok(Vec::new()) // Return empty if no transfers found
+}
+
+/// Truncate address for display
+fn truncate_address(addr: &str) -> String {
+    if addr.len() > 12 {
+        format!("{}...{}", &addr[..6], &addr[addr.len()-4..])
+    } else {
+        addr.to_string()
+    }
+}
+
+/// Render ASCII graph visualization of wallet flows
+fn render_ascii_graph(target: &str, transfers: &[TransferRecord]) {
+    use colored::Colorize;
+    use std::collections::HashMap;
+
+    // Aggregate flows by counterparty
+    let mut inflows: HashMap<String, (f64, Vec<String>)> = HashMap::new(); // from -> (total, tokens)
+    let mut outflows: HashMap<String, (f64, Vec<String>)> = HashMap::new(); // to -> (total, tokens)
+
+    for tx in transfers {
+        if tx.direction == "IN" {
+            let entry = inflows.entry(tx.from.clone()).or_insert((0.0, Vec::new()));
+            entry.0 += tx.amount;
+            if !entry.1.contains(&tx.token) {
+                entry.1.push(tx.token.clone());
+            }
+        } else {
+            let entry = outflows.entry(tx.to.clone()).or_insert((0.0, Vec::new()));
+            entry.0 += tx.amount;
+            if !entry.1.contains(&tx.token) {
+                entry.1.push(tx.token.clone());
+            }
+        }
+    }
+
+    // Sort by amount and take top 5
+    let mut top_inflows: Vec<_> = inflows.into_iter().collect();
+    top_inflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
+    top_inflows.truncate(5);
+
+    let mut top_outflows: Vec<_> = outflows.into_iter().collect();
+    top_outflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
+    top_outflows.truncate(5);
+
+    let max_lines = top_inflows.len().max(top_outflows.len()).max(1);
+    let target_short = truncate_address(target);
+
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!("{}", "🕸️  WALLET FLOW GRAPH".bold().cyan());
+    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!();
+
+    // Header
+    println!("{}{}{}",
+        "        INFLOWS (sources)".green(),
+        "                    ",
+        "OUTFLOWS (destinations)".red()
+    );
+    println!();
+
+    // Center target box
+    let target_box_width = target_short.len() + 6;
+    let target_line = format!("┌{}┐", "─".repeat(target_box_width));
+    let target_content = format!("│  {}  │", target_short.bright_white().bold());
+    let target_bottom = format!("└{}┘", "─".repeat(target_box_width));
+
+    // Calculate padding for centering
+    let left_col_width = 30;
+    let center_padding = 5;
+    let center_start = left_col_width + center_padding;
+
+    // Print the graph
+    for i in 0..max_lines {
+        // Build left side (inflows)
+        let left = if i < top_inflows.len() {
+            let (addr, (amount, tokens)) = &top_inflows[i];
+            let addr_short = truncate_address(addr);
+            let tokens_str = if tokens.len() > 2 {
+                format!("{},+{}", tokens[0], tokens.len() - 1)
+            } else {
+                tokens.join(",")
+            };
+            format!("{:>12} {:>6} ──▶", addr_short.green(), format!("[{}]", tokens_str).dimmed())
+        } else {
+            " ".repeat(left_col_width)
+        };
+
+        // Build right side (outflows)
+        let right = if i < top_outflows.len() {
+            let (addr, (amount, tokens)) = &top_outflows[i];
+            let addr_short = truncate_address(addr);
+            let tokens_str = if tokens.len() > 2 {
+                format!("{},+{}", tokens[0], tokens.len() - 1)
+            } else {
+                tokens.join(",")
+            };
+            format!("▶── {:>6} {}", format!("[{}]", tokens_str).dimmed(), addr_short.red())
+        } else {
+            String::new()
+        };
+
+        // Print the target box in the middle row
+        let mid_row = max_lines / 2;
+        if i == mid_row.saturating_sub(1) {
+            println!("{:<30}     {}     {}", left, target_line.bright_yellow(), right);
+        } else if i == mid_row {
+            println!("{:<30} ════{}════ {}", left, target_content, right);
+        } else if i == mid_row + 1 {
+            println!("{:<30}     {}     {}", left, target_bottom.bright_yellow(), right);
+        } else {
+            let connector = if i < mid_row.saturating_sub(1) || i > mid_row + 1 {
+                format!("{:^width$}", "│", width = target_box_width + 10)
+            } else {
+                " ".repeat(target_box_width + 10)
+            };
+            println!("{:<30}{}{}", left, connector, right);
+        }
+    }
+
+    println!();
+
+    // Summary line
+    let total_in: f64 = top_inflows.iter().map(|(_, (a, _))| a).sum();
+    let total_out: f64 = top_outflows.iter().map(|(_, (a, _))| a).sum();
+    println!("  {} {} sources | {} {} destinations",
+        format!("←").green(),
+        format!("{} unique", top_inflows.len()).green(),
+        format!("{} unique", top_outflows.len()).red(),
+        format!("→").red()
+    );
+    println!();
+}
+
+/// Generate markdown report for auto mode
+fn generate_auto_report(
+    wallet: &str,
+    fetched_count: usize,
+    discovered: &HashSet<String>,
+    transfers: &[TransferRecord],
+    findings: &[Finding],
+    query: Option<&str>,
+    duration: std::time::Duration,
+) -> String {
+    let mut report = String::new();
+
+    report.push_str(&format!("# Wallet Investigation Report\n\n"));
+    report.push_str(&format!("**Target:** `{}`\n\n", wallet));
+    report.push_str(&format!("**Generated:** {}\n\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+
+    if let Some(q) = query {
+        report.push_str(&format!("**Query/Hypothesis:** {}\n\n", q));
+    }
+
+    report.push_str("---\n\n");
+    report.push_str("## Summary\n\n");
+    report.push_str(&format!("| Metric | Value |\n"));
+    report.push_str(&format!("|--------|-------|\n"));
+    report.push_str(&format!("| Wallets Fetched | {} |\n", fetched_count));
+    report.push_str(&format!("| Wallets Discovered | {} |\n", discovered.len()));
+    report.push_str(&format!("| Total Transfers | {} |\n", transfers.len()));
+    report.push_str(&format!("| Exploration Time | {:.2}s |\n\n", duration.as_secs_f64()));
+
+    // Token breakdown
+    let mut token_volumes: std::collections::HashMap<String, (f64, f64)> = std::collections::HashMap::new();
+    for tx in transfers {
+        let entry = token_volumes.entry(tx.token.clone()).or_insert((0.0, 0.0));
+        if tx.direction == "IN" {
+            entry.0 += tx.amount;
+        } else {
+            entry.1 += tx.amount;
+        }
+    }
+
+    report.push_str("## Token Flow\n\n");
+    report.push_str("| Token | Inflows | Outflows |\n");
+    report.push_str("|-------|---------|----------|\n");
+    for (token, (inflow, outflow)) in &token_volumes {
+        report.push_str(&format!("| {} | {:.4} | {:.4} |\n", token, inflow, outflow));
+    }
+    report.push_str("\n");
+
+    // Findings
+    if !findings.is_empty() {
+        report.push_str("## Notable Findings\n\n");
+        for finding in findings {
+            report.push_str(&format!("- **[{}]** {} - {}\n",
+                finding.severity, finding.category, finding.description));
+        }
+        report.push_str("\n");
+    }
+
+    // Discovered wallets
+    report.push_str("## Discovered Wallets\n\n");
+    for (i, w) in discovered.iter().take(20).enumerate() {
+        report.push_str(&format!("{}. `{}`\n", i + 1, w));
+    }
+    if discovered.len() > 20 {
+        report.push_str(&format!("\n*...and {} more wallets*\n", discovered.len() - 20));
+    }
+
+    report.push_str("\n---\n");
+    report.push_str("*Generated by OSVM Autonomous Investigation*\n");
+
+    report
 }
 
 /// Run a quick test of the research agent
