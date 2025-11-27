@@ -1,0 +1,404 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AGENT ESCROW & SLASHING PROGRAM
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; Economic Model:
+;;; - Agents stake SOL as collateral when accepting tasks
+;;; - Successful delivery: agent receives stake + reward
+;;; - Failed/rejected delivery: stake is slashed to requester
+;;; - Timeout: partial slash based on time elapsed
+;;;
+;;; Accounts Layout:
+;;;   0: Escrow PDA account (data: status, amount, deadline, etc.)
+;;;   1: Agent wallet (signer when accepting/delivering)
+;;;   2: Requester wallet (signer when creating/rejecting)
+;;;   3: System Program (for CPI transfers)
+;;;
+;;; Instruction Data Format:
+;;;   byte 0: instruction discriminator
+;;;     0 = CreateTask (requester deposits reward)
+;;;     1 = AcceptTask (agent stakes collateral)
+;;;     2 = ConfirmDelivery (requester approves)
+;;;     3 = RejectDelivery (requester slashes agent)
+;;;     4 = Timeout (anyone can call after deadline)
+;;;     5 = Cancel (requester cancels before acceptance)
+;;;   bytes 1-8: amount (lamports) for CreateTask/AcceptTask
+;;;   bytes 9-16: deadline (unix timestamp) for CreateTask
+;;;
+;;; Escrow Account Data Layout (88 bytes):
+;;;   offset 0:   u8 status (0=Empty, 1=Created, 2=Accepted, 3=Completed, 4=Rejected, 5=Cancelled)
+;;;   offset 1:   u8 padding
+;;;   offset 2-7: u8[6] padding for alignment
+;;;   offset 8:   u64 reward_amount (lamports deposited by requester)
+;;;   offset 16:  u64 stake_amount (lamports staked by agent)
+;;;   offset 24:  u64 deadline (unix timestamp)
+;;;   offset 32:  u64 created_at (unix timestamp)
+;;;   offset 40:  u64 accepted_at (unix timestamp)
+;;;   offset 48:  32 bytes requester pubkey
+;;;   offset 80:  32 bytes agent pubkey (zero if not accepted)
+;;;
+;;; Status Enum:
+;;;   0 = Empty (uninitialized)
+;;;   1 = Created (awaiting agent)
+;;;   2 = Accepted (agent working)
+;;;   3 = Completed (success, paid out)
+;;;   4 = Rejected (slashed)
+;;;   5 = Cancelled (refunded)
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== AGENT ESCROW PROGRAM ===")
+
+  ;; Read instruction discriminator (first byte)
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (sol_log_ "Instruction:")
+  (sol_log_64_ discriminator)
+
+  ;; Get escrow account data pointer
+  (define escrow_ptr (account-data-ptr 0))
+  (define current_status (mem-load1 escrow_ptr 0))
+  (sol_log_ "Current status:")
+  (sol_log_64_ current_status)
+
+  ;; Status constants
+  (define STATUS_EMPTY 0)
+  (define STATUS_CREATED 1)
+  (define STATUS_ACCEPTED 2)
+  (define STATUS_COMPLETED 3)
+  (define STATUS_REJECTED 4)
+  (define STATUS_CANCELLED 5)
+
+  ;; Instruction constants
+  (define INSTR_CREATE 0)
+  (define INSTR_ACCEPT 1)
+  (define INSTR_CONFIRM 2)
+  (define INSTR_REJECT 3)
+  (define INSTR_TIMEOUT 4)
+  (define INSTR_CANCEL 5)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: CREATE TASK
+  ;; Requester deposits reward into escrow
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_CREATE)
+    (do
+      (sol_log_ ">>> CREATE TASK <<<")
+
+      ;; Verify escrow is empty
+      (if (!= current_status STATUS_EMPTY)
+        (do
+          (sol_log_ "ERROR: Escrow not empty")
+          1)
+        (do
+          ;; Verify requester is signer (account 2)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Requester must sign")
+              2)
+            (do
+              ;; Read reward amount from instruction data (bytes 1-8)
+              (define reward_amount (mem-load instr_ptr 1))
+              (sol_log_ "Reward amount:")
+              (sol_log_64_ reward_amount)
+
+              ;; Read deadline from instruction data (bytes 9-16)
+              (define deadline (mem-load instr_ptr 9))
+              (sol_log_ "Deadline:")
+              (sol_log_64_ deadline)
+
+              ;; Transfer reward from requester to escrow
+              (sol_log_ "Transferring reward to escrow...")
+              (define transfer_result (system-transfer 2 0 reward_amount))
+
+              (if (!= transfer_result 0)
+                (do
+                  (sol_log_ "ERROR: Transfer failed")
+                  3)
+                (do
+                  ;; Update escrow account data
+                  (sol_log_ "Updating escrow state...")
+
+                  ;; Set status = Created (1)
+                  (mem-store escrow_ptr 0 STATUS_CREATED)
+
+                  ;; Set reward_amount at offset 8
+                  (mem-store escrow_ptr 8 reward_amount)
+
+                  ;; Set deadline at offset 24
+                  (mem-store escrow_ptr 24 deadline)
+
+                  ;; TODO: Set created_at timestamp (need clock sysvar)
+                  ;; For now, use 0 placeholder
+                  (mem-store escrow_ptr 32 0)
+
+                  ;; Store requester pubkey at offset 48
+                  ;; Copy 32 bytes from account 2's pubkey
+                  (define requester_pk (account-pubkey 2))
+                  ;; Copy first 8 bytes
+                  (mem-store escrow_ptr 48 (mem-load requester_pk 0))
+                  (mem-store escrow_ptr 56 (mem-load requester_pk 8))
+                  (mem-store escrow_ptr 64 (mem-load requester_pk 16))
+                  (mem-store escrow_ptr 72 (mem-load requester_pk 24))
+
+                  (sol_log_ "Task created successfully!")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: ACCEPT TASK
+  ;; Agent stakes collateral and accepts the task
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_ACCEPT)
+    (do
+      (sol_log_ ">>> ACCEPT TASK <<<")
+
+      ;; Verify escrow is in Created status
+      (if (!= current_status STATUS_CREATED)
+        (do
+          (sol_log_ "ERROR: Task not available")
+          4)
+        (do
+          ;; Verify agent is signer (account 1)
+          (if (= (account-is-signer 1) 0)
+            (do
+              (sol_log_ "ERROR: Agent must sign")
+              5)
+            (do
+              ;; Read stake amount from instruction data (bytes 1-8)
+              (define stake_amount (mem-load instr_ptr 1))
+              (sol_log_ "Stake amount:")
+              (sol_log_64_ stake_amount)
+
+              ;; Minimum stake should be at least 10% of reward
+              ;; (This is enforced off-chain for flexibility)
+
+              ;; Transfer stake from agent to escrow
+              (sol_log_ "Agent staking collateral...")
+              (define stake_result (system-transfer 1 0 stake_amount))
+
+              (if (!= stake_result 0)
+                (do
+                  (sol_log_ "ERROR: Stake transfer failed")
+                  6)
+                (do
+                  ;; Update escrow state
+                  (sol_log_ "Updating escrow state...")
+
+                  ;; Set status = Accepted (2)
+                  (mem-store escrow_ptr 0 STATUS_ACCEPTED)
+
+                  ;; Set stake_amount at offset 16
+                  (mem-store escrow_ptr 16 stake_amount)
+
+                  ;; TODO: Set accepted_at timestamp
+                  (mem-store escrow_ptr 40 0)
+
+                  ;; Store agent pubkey at offset 80
+                  (define agent_pk (account-pubkey 1))
+                  (mem-store escrow_ptr 80 (mem-load agent_pk 0))
+
+                  (sol_log_ "Task accepted by agent!")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: CONFIRM DELIVERY
+  ;; Requester approves - agent gets stake + reward
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_CONFIRM)
+    (do
+      (sol_log_ ">>> CONFIRM DELIVERY <<<")
+
+      ;; Verify escrow is in Accepted status
+      (if (!= current_status STATUS_ACCEPTED)
+        (do
+          (sol_log_ "ERROR: Task not in progress")
+          7)
+        (do
+          ;; Verify requester is signer (account 2)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Requester must sign")
+              8)
+            (do
+              ;; Read amounts from escrow data
+              (define reward_amount (mem-load escrow_ptr 8))
+              (define stake_amount (mem-load escrow_ptr 16))
+              (define total_payout (+ reward_amount stake_amount))
+
+              (sol_log_ "Total payout to agent:")
+              (sol_log_64_ total_payout)
+
+              ;; Transfer total (reward + stake) from escrow to agent
+              (sol_log_ "Paying agent...")
+              (define payout_result (system-transfer 0 1 total_payout))
+
+              (if (!= payout_result 0)
+                (do
+                  (sol_log_ "ERROR: Payout failed")
+                  9)
+                (do
+                  ;; Update status to Completed
+                  (mem-store escrow_ptr 0 STATUS_COMPLETED)
+
+                  (sol_log_ "Delivery confirmed! Agent paid.")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: REJECT DELIVERY
+  ;; Requester rejects - agent's stake is slashed to requester
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_REJECT)
+    (do
+      (sol_log_ ">>> REJECT DELIVERY (SLASH) <<<")
+
+      ;; Verify escrow is in Accepted status
+      (if (!= current_status STATUS_ACCEPTED)
+        (do
+          (sol_log_ "ERROR: Task not in progress")
+          10)
+        (do
+          ;; Verify requester is signer (account 2)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Requester must sign")
+              11)
+            (do
+              ;; Read amounts from escrow data
+              (define reward_amount (mem-load escrow_ptr 8))
+              (define stake_amount (mem-load escrow_ptr 16))
+
+              ;; Requester gets their reward back + agent's stake
+              (define requester_payout (+ reward_amount stake_amount))
+
+              (sol_log_ "Slashing agent! Requester receives:")
+              (sol_log_64_ requester_payout)
+
+              ;; Transfer all funds to requester
+              (sol_log_ "Transferring slash to requester...")
+              (define slash_result (system-transfer 0 2 requester_payout))
+
+              (if (!= slash_result 0)
+                (do
+                  (sol_log_ "ERROR: Slash transfer failed")
+                  12)
+                (do
+                  ;; Update status to Rejected
+                  (mem-store escrow_ptr 0 STATUS_REJECTED)
+
+                  (sol_log_ "Agent slashed! Stake forfeited.")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 4: TIMEOUT
+  ;; Anyone can call after deadline - partial refund based on elapsed time
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_TIMEOUT)
+    (do
+      (sol_log_ ">>> TIMEOUT <<<")
+
+      ;; Verify escrow is in Accepted status
+      (if (!= current_status STATUS_ACCEPTED)
+        (do
+          (sol_log_ "ERROR: Task not in progress")
+          13)
+        (do
+          ;; Get current timestamp from Clock sysvar
+          (define current_time (get-clock-timestamp))
+          (sol_log_ "Current time:")
+          (sol_log_64_ current_time)
+
+          ;; Read deadline from escrow data
+          (define deadline (mem-load escrow_ptr 24))
+          (sol_log_ "Deadline:")
+          (sol_log_64_ deadline)
+
+          ;; Check if deadline has passed
+          (if (< current_time deadline)
+            (do
+              (sol_log_ "ERROR: Deadline not yet passed")
+              20)
+            (do
+              ;; Read amounts from escrow data
+              (define reward_amount (mem-load escrow_ptr 8))
+              (define stake_amount (mem-load escrow_ptr 16))
+
+              ;; Timeout splits: requester gets reward back, agent loses stake
+              ;; (More sophisticated: could split stake based on % time elapsed)
+
+              (sol_log_ "Task timed out! Returning reward to requester...")
+              (sol_log_64_ reward_amount)
+
+              ;; Transfer reward back to requester
+              (define refund_result (system-transfer 0 2 reward_amount))
+
+              (if (!= refund_result 0)
+                (do
+                  (sol_log_ "ERROR: Refund failed")
+                  14)
+                (do
+                  ;; Agent's stake is burned (stays in escrow forever)
+                  ;; Or could go to a DAO treasury
+
+                  ;; Update status
+                  (mem-store escrow_ptr 0 STATUS_REJECTED)
+
+                  (sol_log_ "Timeout processed. Agent stake forfeited.")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 5: CANCEL
+  ;; Requester cancels before agent accepts - full refund
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_CANCEL)
+    (do
+      (sol_log_ ">>> CANCEL TASK <<<")
+
+      ;; Verify escrow is in Created status (not yet accepted)
+      (if (!= current_status STATUS_CREATED)
+        (do
+          (sol_log_ "ERROR: Cannot cancel - already accepted or not created")
+          15)
+        (do
+          ;; Verify requester is signer (account 2)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Requester must sign")
+              16)
+            (do
+              ;; Read reward amount
+              (define reward_amount (mem-load escrow_ptr 8))
+
+              (sol_log_ "Cancelling task. Refunding:")
+              (sol_log_64_ reward_amount)
+
+              ;; Transfer reward back to requester
+              (define cancel_result (system-transfer 0 2 reward_amount))
+
+              (if (!= cancel_result 0)
+                (do
+                  (sol_log_ "ERROR: Cancel refund failed")
+                  17)
+                (do
+                  ;; Update status
+                  (mem-store escrow_ptr 0 STATUS_CANCELLED)
+
+                  (sol_log_ "Task cancelled. Reward refunded.")
+                  0)))))))
+    null)
+
+  ;; Unknown instruction
+  (if (> discriminator 5)
+    (do
+      (sol_log_ "ERROR: Unknown instruction")
+      99)
+    null)
+
+  ;; Default success
+  (sol_log_ "=== ESCROW COMPLETE ===")
+  0)

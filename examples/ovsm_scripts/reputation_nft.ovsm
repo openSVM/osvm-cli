@@ -1,0 +1,345 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; REPUTATION NFT PROGRAM (Soulbound) v2.0
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; Purpose:
+;;; - Mint soulbound (non-transferable) NFTs representing agent reputation
+;;; - Track provenance: task completions, FAILURES, disputes resolved, ratings
+;;; - Enable verifiable on-chain reputation for AI agents
+;;; - Implement reputation decay and dynamic collateral requirements
+;;;
+;;; v2.0 Enhancements:
+;;; - ADD_TASK_FAILED: Negative reputation with 2x penalty multiplier
+;;; - Reputation Decay: effective_rating decays based on days since last activity
+;;; - GET_REQUIRED_COLLATERAL: Returns SOL required based on reputation score
+;;;
+;;; Accounts Layout:
+;;;   0: Reputation NFT account
+;;;   1: Agent wallet (owner)
+;;;   2: Authority (registry/escrow program)
+;;;
+;;; Instructions:
+;;;   0 = MintNFT
+;;;   1 = AddTaskComplete (positive)
+;;;   2 = AddDisputeResult
+;;;   3 = AddRating
+;;;   4 = VerifyReputation (with decay!)
+;;;   5 = AddTaskFailed (NEGATIVE - NEW!)
+;;;   6 = GetRequiredCollateral (NEW!)
+;;;
+;;; NFT Account Data Layout (256 bytes):
+;;;   offset 0:   u8 initialized
+;;;   offset 1:   u8 version (now 2)
+;;;   offset 8:   u64 tasks_completed
+;;;   offset 16:  u64 tasks_failed (NOW USED!)
+;;;   offset 24:  u64 disputes_won
+;;;   offset 32:  u64 disputes_lost
+;;;   offset 40:  u64 total_ratings
+;;;   offset 48:  u64 rating_sum
+;;;   offset 56:  u64 total_value_delivered
+;;;   offset 64:  u64 total_value_failed (negative - stake lost)
+;;;   offset 72:  u64 mint_timestamp
+;;;   offset 80:  u64 last_activity_timestamp
+;;;   offset 88:  32 bytes owner_pubkey
+;;;   offset 120: 32 bytes mint_authority
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== REPUTATION NFT v2 ===")
+
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (define nft_ptr (account-data-ptr 0))
+  (define initialized (mem-load1 nft_ptr 0))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: MINT NFT
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> MINT NFT <<<")
+      (if (!= initialized 0)
+        (do (sol_log_ "ERROR: Already minted") 1)
+        (do
+          (if (= (account-is-signer 1) 0)
+            (do (sol_log_ "ERROR: Agent must sign") 2)
+            (do
+              (mem-store nft_ptr 0 1)
+              (mem-store nft_ptr 1 2)  ;; Version 2
+              (mem-store nft_ptr 8 0)
+              (mem-store nft_ptr 16 0)
+              (mem-store nft_ptr 24 0)
+              (mem-store nft_ptr 32 0)
+              (mem-store nft_ptr 40 0)
+              (mem-store nft_ptr 48 0)
+              (mem-store nft_ptr 56 0)
+              (mem-store nft_ptr 64 0)
+              (define now (get-clock-timestamp))
+              (mem-store nft_ptr 72 now)
+              (mem-store nft_ptr 80 now)
+              (define owner_pk (account-pubkey 1))
+              (mem-store nft_ptr 88 (mem-load owner_pk 0))
+              (mem-store nft_ptr 96 (mem-load owner_pk 8))
+              (mem-store nft_ptr 104 (mem-load owner_pk 16))
+              (mem-store nft_ptr 112 (mem-load owner_pk 24))
+              (sol_log_ "NFT minted v2!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: ADD TASK COMPLETE (Positive)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> ADD TASK COMPLETE <<<")
+      (if (!= initialized 1)
+        (do (sol_log_ "ERROR: Not init") 10)
+        (do
+          (if (= (account-is-signer 2) 0)
+            (do (sol_log_ "ERROR: Auth req") 11)
+            (do
+              (define value (mem-load instr_ptr 1))
+              (define tasks (mem-load nft_ptr 8))
+              (mem-store nft_ptr 8 (+ tasks 1))
+              (define total_val (mem-load nft_ptr 56))
+              (mem-store nft_ptr 56 (+ total_val value))
+              (mem-store nft_ptr 80 (get-clock-timestamp))
+              (sol_log_ "Task+1:")
+              (sol_log_64_ (+ tasks 1))
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: ADD DISPUTE RESULT
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 2)
+    (do
+      (sol_log_ ">>> DISPUTE RESULT <<<")
+      (if (!= initialized 1)
+        (do (sol_log_ "ERROR: Not init") 20)
+        (do
+          (if (= (account-is-signer 2) 0)
+            (do (sol_log_ "ERROR: Auth req") 21)
+            (do
+              (define result (mem-load1 instr_ptr 1))
+              (if (= result 1)
+                (do
+                  (define won (mem-load nft_ptr 24))
+                  (mem-store nft_ptr 24 (+ won 1))
+                  (sol_log_ "Dispute WON")
+                  0)
+                (do
+                  (define lost (mem-load nft_ptr 32))
+                  (mem-store nft_ptr 32 (+ lost 1))
+                  (sol_log_ "Dispute LOST")
+                  0))
+              (mem-store nft_ptr 80 (get-clock-timestamp))
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: ADD RATING
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 3)
+    (do
+      (sol_log_ ">>> ADD RATING <<<")
+      (if (!= initialized 1)
+        (do (sol_log_ "ERROR: Not init") 30)
+        (do
+          (if (= (account-is-signer 2) 0)
+            (do (sol_log_ "ERROR: Auth req") 31)
+            (do
+              (define rating (mem-load1 instr_ptr 1))
+              (if (< rating 1)
+                (do (sol_log_ "ERROR: 1-5") 32)
+                (if (> rating 5)
+                  (do (sol_log_ "ERROR: 1-5") 32)
+                  (do
+                    (define total_r (mem-load nft_ptr 40))
+                    (mem-store nft_ptr 40 (+ total_r 1))
+                    (define sum (mem-load nft_ptr 48))
+                    (mem-store nft_ptr 48 (+ sum rating))
+                    (mem-store nft_ptr 80 (get-clock-timestamp))
+                    (sol_log_ "Rating:")
+                    (sol_log_64_ rating)
+                    0))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 4: VERIFY REPUTATION (WITH DECAY!)
+  ;; Reputation decays: effective = raw * (1 - days_inactive/30)
+  ;; If inactive > 30 days, reputation effectively goes to 0
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 4)
+    (do
+      (sol_log_ ">>> VERIFY REPUTATION <<<")
+      (if (!= initialized 1)
+        (do (sol_log_ "ERROR: Not init") 40)
+        (do
+          (define min_tasks (mem-load1 instr_ptr 1))
+          (define min_rating_x10 (mem-load1 instr_ptr 2))
+
+          ;; Get raw stats
+          (define tasks_ok (mem-load nft_ptr 8))
+          (define tasks_fail (mem-load nft_ptr 16))
+          (define total_r (mem-load nft_ptr 40))
+          (define sum (mem-load nft_ptr 48))
+
+          ;; Calculate raw average rating x10
+          (define raw_avg_x10 (if (> total_r 0)
+                                (/ (* sum 10) total_r)
+                                0))
+
+          ;; Apply decay based on inactivity
+          (define now (get-clock-timestamp))
+          (define last_active (mem-load nft_ptr 80))
+          (define seconds_inactive (- now last_active))
+          (define days_inactive (/ seconds_inactive 86400))
+
+          (sol_log_ "Days inactive:")
+          (sol_log_64_ days_inactive)
+
+          ;; Decay formula: effective = raw * (30 - days) / 30
+          ;; Capped: if days >= 30, effective = 0
+          (define decayed_avg_x10
+            (if (>= days_inactive 30)
+              0
+              (/ (* raw_avg_x10 (- 30 days_inactive)) 30)))
+
+          ;; Net tasks = completed - (failed * 2)  (2x penalty!)
+          (define net_tasks (- tasks_ok (* tasks_fail 2)))
+
+          (sol_log_ "Raw avg x10:")
+          (sol_log_64_ raw_avg_x10)
+          (sol_log_ "Decayed avg x10:")
+          (sol_log_64_ decayed_avg_x10)
+          (sol_log_ "Net tasks (fail*2 penalty):")
+          (sol_log_64_ net_tasks)
+
+          ;; Check thresholds against DECAYED values
+          (if (< net_tasks min_tasks)
+            (do (sol_log_ "FAIL: Net tasks too low") 41)
+            (if (< decayed_avg_x10 min_rating_x10)
+              (do (sol_log_ "FAIL: Decayed rating too low") 42)
+              (do (sol_log_ "PASS: Verified!") 0))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 5: ADD TASK FAILED (NEGATIVE REPUTATION!)
+  ;; Failed tasks count DOUBLE against reputation
+  ;; Also records value lost (stake slashed)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 5)
+    (do
+      (sol_log_ ">>> ADD TASK FAILED <<<")
+      (if (!= initialized 1)
+        (do (sol_log_ "ERROR: Not init") 50)
+        (do
+          (if (= (account-is-signer 2) 0)
+            (do (sol_log_ "ERROR: Auth req") 51)
+            (do
+              ;; Read value lost from instruction (bytes 1-8)
+              (define value_lost (mem-load instr_ptr 1))
+              (sol_log_ "Value lost:")
+              (sol_log_64_ value_lost)
+
+              ;; Increment tasks_failed (offset 16)
+              (define failed (mem-load nft_ptr 16))
+              (mem-store nft_ptr 16 (+ failed 1))
+
+              ;; Add to total value failed (offset 64)
+              (define total_lost (mem-load nft_ptr 64))
+              (mem-store nft_ptr 64 (+ total_lost value_lost))
+
+              ;; Update last activity
+              (mem-store nft_ptr 80 (get-clock-timestamp))
+
+              (sol_log_ "FAILURE recorded!")
+              (sol_log_ "Total failures:")
+              (sol_log_64_ (+ failed 1))
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 6: GET REQUIRED COLLATERAL
+  ;; Returns lamports of collateral required based on reputation
+  ;; Formula: base_collateral * (1 + failure_ratio) * decay_factor
+  ;; High reputation = less collateral needed
+  ;; Low/no reputation = maximum collateral (1 SOL)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 6)
+    (do
+      (sol_log_ ">>> GET REQUIRED COLLATERAL <<<")
+      (if (!= initialized 1)
+        (do
+          ;; No reputation = maximum collateral (1 SOL)
+          (sol_log_ "No reputation: Max collateral")
+          (sol_log_64_ 1000000000)  ;; 1 SOL in lamports
+          1000000000)
+        (do
+          ;; Read base collateral from instruction (bytes 1-8)
+          (define base_collateral (mem-load instr_ptr 1))
+
+          ;; Get stats
+          (define tasks_ok (mem-load nft_ptr 8))
+          (define tasks_fail (mem-load nft_ptr 16))
+          (define total_r (mem-load nft_ptr 40))
+          (define sum (mem-load nft_ptr 48))
+
+          ;; Calculate trust score (0-100)
+          ;; = (completed - failed*2) / total * 100
+          (define total_tasks (+ tasks_ok tasks_fail))
+          (define trust_score
+            (if (= total_tasks 0)
+              0
+              (/ (* (- tasks_ok (* tasks_fail 2)) 100) total_tasks)))
+
+          ;; Calculate rating factor (avg/5, scaled to 100)
+          (define rating_factor
+            (if (= total_r 0)
+              0
+              (/ (* sum 20) total_r)))  ;; sum/total * 100/5 = sum*20/total
+
+          ;; Combined reputation (0-100)
+          (define combined_rep (/ (+ trust_score rating_factor) 2))
+
+          ;; Apply decay
+          (define now (get-clock-timestamp))
+          (define last_active (mem-load nft_ptr 80))
+          (define days_inactive (/ (- now last_active) 86400))
+          (define decay_factor
+            (if (>= days_inactive 30)
+              0
+              (/ (* combined_rep (- 30 days_inactive)) 30)))
+
+          ;; Required collateral formula:
+          ;; High rep (100) = base_collateral * 0.1 (90% reduction)
+          ;; Low rep (0) = base_collateral * 1.0 (no reduction)
+          ;; Formula: base * (100 - decay_factor) / 100
+          (define required (/ (* base_collateral (- 100 decay_factor)) 100))
+
+          ;; Minimum collateral = 10% of base
+          (define min_collateral (/ base_collateral 10))
+          (define final_collateral
+            (if (< required min_collateral)
+              min_collateral
+              required))
+
+          (sol_log_ "Trust score:")
+          (sol_log_64_ trust_score)
+          (sol_log_ "Decay factor:")
+          (sol_log_64_ decay_factor)
+          (sol_log_ "Required collateral:")
+          (sol_log_64_ final_collateral)
+
+          final_collateral)))
+    null)
+
+  ;; Unknown
+  (if (> discriminator 6)
+    (do (sol_log_ "ERROR: Unknown") 99)
+    null)
+
+  (sol_log_ "=== NFT COMPLETE ===")
+  0)

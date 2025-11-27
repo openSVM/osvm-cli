@@ -1,0 +1,169 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; BASIC STRATEGY - Simple Task Execution Strategy
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; PURPOSE:
+;;; A simple strategy program that can be invoked by the Strategy Registry.
+;;; This demonstrates the pattern for writing pluggable agent strategies.
+;;;
+;;; MINIMUM REPUTATION: 5000 (50% - entry level)
+;;; FEE: 1000 lamports (0.000001 SOL)
+;;;
+;;; BEHAVIOR:
+;;; - Accepts task parameters via instruction data
+;;; - Performs simple validation
+;;; - Logs execution details
+;;; - Returns success/failure
+;;;
+;;; ACCOUNTS:
+;;;   0: Agent Authority (signer)
+;;;   1: Task Data Account (optional, for complex tasks)
+;;;   2: Result Account (writable, stores execution result)
+;;;
+;;; INSTRUCTION DATA:
+;;;   byte 0: instruction discriminator
+;;;     0 = Execute (main execution)
+;;;     1 = Query (check if task can be handled)
+;;;   bytes 1-8: task_type (numeric task category)
+;;;   bytes 9-16: task_value (numeric parameter)
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== BASIC STRATEGY PROGRAM ===")
+
+  ;; Read instruction data
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (sol_log_ "Instruction:")
+  (sol_log_64_ discriminator)
+
+  ;; Strategy metadata (would be stored in program constants)
+  (define STRATEGY_NAME "BasicStrategy")
+  (define STRATEGY_VERSION 1)
+  (define MIN_REPUTATION 5000)
+  (define STRATEGY_FEE 1000)
+
+  ;; Supported task types
+  (define TASK_COMPUTE 1)      ;; Simple computation
+  (define TASK_VALIDATE 2)     ;; Data validation
+  (define TASK_TRANSFORM 3)    ;; Data transformation
+
+  ;; Error codes
+  (define ERR_UNSUPPORTED_TASK 1)
+  (define ERR_NOT_SIGNER 2)
+  (define ERR_INVALID_VALUE 3)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: EXECUTE
+  ;; Main execution path - perform the task
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> EXECUTE TASK <<<")
+
+      ;; Verify agent is signer (account 0)
+      (if (= (account-is-signer 0) 0)
+        (do
+          (sol_log_ "ERROR: Agent must sign")
+          ERR_NOT_SIGNER)
+        (do
+          ;; Read task parameters
+          (define task_type (mem-load instr_ptr 1))
+          (define task_value (mem-load instr_ptr 9))
+
+          (sol_log_ "Task type:")
+          (sol_log_64_ task_type)
+          (sol_log_ "Task value:")
+          (sol_log_64_ task_value)
+
+          ;; Execute based on task type
+          (if (= task_type TASK_COMPUTE)
+            (do
+              (sol_log_ "Executing COMPUTE task...")
+              ;; Simple computation: double the value
+              (define result (* task_value 2))
+              (sol_log_ "Result:")
+              (sol_log_64_ result)
+
+              ;; Store result at account 2 offset 0
+              (define result_ptr (account-data-ptr 2))
+              (mem-store result_ptr 0 result)
+
+              (sol_log_ "COMPUTE task completed!")
+              0)
+            (if (= task_type TASK_VALIDATE)
+              (do
+                (sol_log_ "Executing VALIDATE task...")
+                ;; Simple validation: check value is in range [1, 1000000]
+                (define is_valid (and (>= task_value 1) (<= task_value 1000000)))
+
+                (define result_ptr (account-data-ptr 2))
+                (if is_valid
+                  (do
+                    (mem-store result_ptr 0 1)  ;; 1 = valid
+                    (sol_log_ "Validation: PASSED")
+                    0)
+                  (do
+                    (mem-store result_ptr 0 0)  ;; 0 = invalid
+                    (sol_log_ "Validation: FAILED")
+                    0)))
+              (if (= task_type TASK_TRANSFORM)
+                (do
+                  (sol_log_ "Executing TRANSFORM task...")
+                  ;; Simple transform: convert to basis points (multiply by 100)
+                  (define result (* task_value 100))
+                  (sol_log_ "Transformed value:")
+                  (sol_log_64_ result)
+
+                  (define result_ptr (account-data-ptr 2))
+                  (mem-store result_ptr 0 result)
+
+                  (sol_log_ "TRANSFORM task completed!")
+                  0)
+                ;; Unknown task type
+                (do
+                  (sol_log_ "ERROR: Unsupported task type")
+                  ERR_UNSUPPORTED_TASK)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: QUERY
+  ;; Check if this strategy can handle a given task type
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> QUERY CAPABILITY <<<")
+
+      (define task_type (mem-load instr_ptr 1))
+      (sol_log_ "Querying for task type:")
+      (sol_log_64_ task_type)
+
+      ;; Check if we support this task type
+      (define supported (or (= task_type TASK_COMPUTE)
+                            (or (= task_type TASK_VALIDATE)
+                                (= task_type TASK_TRANSFORM))))
+
+      (if supported
+        (do
+          (sol_log_ "Task type: SUPPORTED")
+          (sol_log_ "Min reputation:")
+          (sol_log_64_ MIN_REPUTATION)
+          (sol_log_ "Fee:")
+          (sol_log_64_ STRATEGY_FEE)
+          1)  ;; Return 1 = supported
+        (do
+          (sol_log_ "Task type: NOT SUPPORTED")
+          0)))  ;; Return 0 = not supported
+    null)
+
+  ;; Unknown instruction
+  (if (> discriminator 1)
+    (do
+      (sol_log_ "ERROR: Unknown instruction")
+      99)
+    null)
+
+  ;; Default success
+  (sol_log_ "=== BASIC STRATEGY COMPLETE ===")
+  0)

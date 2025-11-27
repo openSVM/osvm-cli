@@ -229,9 +229,9 @@ fn now_timestamp() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
+    use tempfile::{tempdir, TempDir};
 
-    fn setup_test_db() -> SqliteConnection {
+    fn setup_test_db() -> (SqliteConnection, TempDir) {
         let tmp_dir = tempdir().expect("Failed to create temp dir");
         let db_file = tmp_dir.path().join("test-federation.db");
         let db_url = db_file.to_str().unwrap();
@@ -242,12 +242,12 @@ mod tests {
         crate::utils::bbs::db::initialize_database(&mut conn)
             .expect("Failed to initialize database");
 
-        conn
+        (conn, tmp_dir)
     }
 
     #[test]
     fn test_store_and_get_message() {
-        let mut conn = setup_test_db();
+        let (mut conn, _tmp_dir) = setup_test_db();
 
         let msg = store_message(
             &mut conn,
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_peer_operations() {
-        let mut conn = setup_test_db();
+        let (mut conn, _tmp_dir) = setup_test_db();
 
         // Upsert peer
         let peer = upsert_peer(

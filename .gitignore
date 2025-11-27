@@ -1,6 +1,16 @@
 /target/
 /program/target/
 /guest/mcp_vsock_wrapper/target/
+programs/agent-escrow/target/
+programs/*/Cargo.lock
+
+# Compiled binaries in examples
+examples/ovsm_scripts/*.so
+
+# Editor plugin build artifacts
+editors/tree-sitter-ovsm/node_modules/
+editors/tree-sitter-ovsm/build/
+editors/vscode/*.vsix
 .cline/
 .ledger
 .vscode/*

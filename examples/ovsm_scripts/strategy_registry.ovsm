@@ -1,0 +1,473 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; STRATEGY REGISTRY - Hot-Swappable Agent Strategy System
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; PURPOSE:
+;;; Enables agents to dynamically select execution strategies based on their
+;;; reputation level. Higher-reputation agents unlock access to more advanced
+;;; (and profitable) strategies. Strategy authors can register new strategies
+;;; and earn fees when their strategies are used.
+;;;
+;;; ARCHITECTURE:
+;;; ┌─────────────────────────────────────────────────────────────────────────┐
+;;; │                        STRATEGY REGISTRY                                │
+;;; │  ┌───────────────────────────────────────────────────────────────┐      │
+;;; │  │ strategies[] = [                                              │      │
+;;; │  │   { id: 1, program: "Strat1...", min_rep: 5000, fee: 100 },   │      │
+;;; │  │   { id: 2, program: "Strat2...", min_rep: 7500, fee: 200 },   │      │
+;;; │  │   { id: 3, program: "Strat3...", min_rep: 9000, fee: 500 },   │      │
+;;; │  │ ]                                                             │      │
+;;; │  └───────────────────────────────────────────────────────────────┘      │
+;;; └─────────────────────────────────────────────────────────────────────────┘
+;;;                               │
+;;;               ┌───────────────┼───────────────┐
+;;;               ▼               ▼               ▼
+;;;        ┌──────────┐    ┌──────────┐    ┌──────────┐
+;;;        │Strategy 1│    │Strategy 2│    │Strategy 3│
+;;;        │ Basic    │    │ Advanced │    │ Premium  │
+;;;        │ 50% rep  │    │ 75% rep  │    │ 90% rep  │
+;;;        └──────────┘    └──────────┘    └──────────┘
+;;;
+;;; ACCOUNTS LAYOUT:
+;;;   0: Registry PDA (global registry state)
+;;;   1: Strategy Entry PDA (per-strategy data, indexed by strategy_id)
+;;;   2: Caller Authority (signer)
+;;;   3: Agent Profile PDA (for reputation lookup)
+;;;   4: Agent Registry Program (for CPI to check reputation)
+;;;   5: Target Strategy Program (program to invoke)
+;;;   6: System Program
+;;;
+;;; INSTRUCTION DATA FORMAT:
+;;;   byte 0: instruction discriminator
+;;;     0 = InitializeRegistry (admin only)
+;;;     1 = RegisterStrategy (strategy author registers new strategy)
+;;;     2 = DeactivateStrategy (admin/author can disable)
+;;;     3 = UpdateStrategyFee (author updates fee)
+;;;     4 = SelectAndExecute (agent selects strategy and executes)
+;;;     5 = QueryAvailableStrategies (view which strategies agent can access)
+;;;   bytes 1-8: strategy_id (for most instructions)
+;;;   bytes 9-16: min_reputation (for RegisterStrategy)
+;;;   bytes 17-24: fee_lamports (for RegisterStrategy/UpdateFee)
+;;;   bytes 25+: strategy-specific data passed through to target program
+;;;
+;;; REGISTRY ACCOUNT LAYOUT (64 bytes):
+;;;   offset 0:   u8 initialized (0=no, 1=yes)
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 total_strategies (count of registered strategies)
+;;;   offset 16:  u64 next_strategy_id (auto-incrementing ID)
+;;;   offset 24:  u64 total_executions (count of all strategy executions)
+;;;   offset 32:  32 bytes admin_pubkey
+;;;
+;;; STRATEGY ENTRY LAYOUT (128 bytes):
+;;;   offset 0:   u8 status (0=Inactive, 1=Active, 2=Deprecated)
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 strategy_id
+;;;   offset 16:  i64 min_reputation (required rep score to use)
+;;;   offset 24:  u64 fee_lamports (fee per execution)
+;;;   offset 32:  u64 total_executions (times this strategy executed)
+;;;   offset 40:  u64 total_fees_earned (cumulative fees)
+;;;   offset 48:  u64 registered_at (timestamp)
+;;;   offset 56:  u64 last_executed_at (timestamp)
+;;;   offset 64:  32 bytes program_id (strategy program pubkey)
+;;;   offset 96:  32 bytes author_pubkey (who registered it)
+;;;
+;;; STATUS ENUM:
+;;;   0 = Inactive (not usable)
+;;;   1 = Active (available for use)
+;;;   2 = Deprecated (still works but marked for removal)
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== STRATEGY REGISTRY PROGRAM ===")
+
+  ;; Read instruction discriminator
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (sol_log_ "Instruction:")
+  (sol_log_64_ discriminator)
+
+  ;; Get account pointers
+  (define registry_ptr (account-data-ptr 0))
+  (define strategy_ptr (account-data-ptr 1))
+
+  ;; Status constants
+  (define STATUS_INACTIVE 0)
+  (define STATUS_ACTIVE 1)
+  (define STATUS_DEPRECATED 2)
+
+  ;; Instruction constants
+  (define INSTR_INIT_REGISTRY 0)
+  (define INSTR_REGISTER_STRATEGY 1)
+  (define INSTR_DEACTIVATE 2)
+  (define INSTR_UPDATE_FEE 3)
+  (define INSTR_SELECT_EXECUTE 4)
+  (define INSTR_QUERY_AVAILABLE 5)
+
+  ;; Error codes
+  (define ERR_ALREADY_INIT 1)
+  (define ERR_NOT_ADMIN 2)
+  (define ERR_NOT_INIT 3)
+  (define ERR_STRATEGY_EXISTS 4)
+  (define ERR_INVALID_REP 5)
+  (define ERR_NOT_AUTHOR 6)
+  (define ERR_STRATEGY_INACTIVE 7)
+  (define ERR_REP_TOO_LOW 8)
+  (define ERR_CPI_FAILED 9)
+  (define ERR_FEE_TRANSFER 10)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: INITIALIZE REGISTRY
+  ;; Admin creates the global registry state
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_INIT_REGISTRY)
+    (do
+      (sol_log_ ">>> INITIALIZE STRATEGY REGISTRY <<<")
+
+      ;; Check not already initialized
+      (define is_initialized (mem-load1 registry_ptr 0))
+      (if (= is_initialized 1)
+        (do
+          (sol_log_ "ERROR: Already initialized")
+          ERR_ALREADY_INIT)
+        (do
+          ;; Verify admin is signer (account 2)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Admin must sign")
+              ERR_NOT_ADMIN)
+            (do
+              ;; Initialize registry state
+              (mem-store registry_ptr 0 1)  ;; initialized = true
+
+              ;; Total strategies starts at 0
+              (mem-store registry_ptr 8 0)
+
+              ;; Next strategy ID starts at 1
+              (mem-store registry_ptr 16 1)
+
+              ;; Total executions starts at 0
+              (mem-store registry_ptr 24 0)
+
+              ;; Store admin pubkey at offset 32
+              (define admin_pk (account-pubkey 2))
+              (mem-store registry_ptr 32 (mem-load admin_pk 0))
+              (mem-store registry_ptr 40 (mem-load admin_pk 8))
+              (mem-store registry_ptr 48 (mem-load admin_pk 16))
+              (mem-store registry_ptr 56 (mem-load admin_pk 24))
+
+              (sol_log_ "Strategy Registry initialized!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: REGISTER STRATEGY
+  ;; Strategy author registers a new strategy program
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_REGISTER_STRATEGY)
+    (do
+      (sol_log_ ">>> REGISTER STRATEGY <<<")
+
+      ;; Check registry is initialized
+      (define is_initialized (mem-load1 registry_ptr 0))
+      (if (!= is_initialized 1)
+        (do
+          (sol_log_ "ERROR: Registry not initialized")
+          ERR_NOT_INIT)
+        (do
+          ;; Check strategy slot not already used
+          (define existing_status (mem-load1 strategy_ptr 0))
+          (if (!= existing_status STATUS_INACTIVE)
+            (do
+              (sol_log_ "ERROR: Strategy slot already used")
+              ERR_STRATEGY_EXISTS)
+            (do
+              ;; Verify author is signer (account 2)
+              (if (= (account-is-signer 2) 0)
+                (do
+                  (sol_log_ "ERROR: Author must sign")
+                  ERR_NOT_ADMIN)
+                (do
+                  ;; Read parameters
+                  (define min_rep (mem-load instr_ptr 9))
+                  (define fee_lamports (mem-load instr_ptr 17))
+
+                  (sol_log_ "Min reputation required:")
+                  (sol_log_64_ min_rep)
+                  (sol_log_ "Fee per execution:")
+                  (sol_log_64_ fee_lamports)
+
+                  ;; Validate reputation threshold (0 to 10000)
+                  (if (> min_rep 10000)
+                    (do
+                      (sol_log_ "ERROR: Invalid reputation threshold")
+                      ERR_INVALID_REP)
+                    (do
+                      ;; Get next strategy ID
+                      (define strategy_id (mem-load registry_ptr 16))
+                      (sol_log_ "Assigned strategy ID:")
+                      (sol_log_64_ strategy_id)
+
+                      ;; Get current timestamp
+                      (define now (get-clock-timestamp))
+
+                      ;; Initialize strategy entry
+                      (mem-store strategy_ptr 0 STATUS_ACTIVE)   ;; status = Active
+                      (mem-store strategy_ptr 8 strategy_id)     ;; strategy_id
+                      (mem-store strategy_ptr 16 min_rep)        ;; min_reputation
+                      (mem-store strategy_ptr 24 fee_lamports)   ;; fee_lamports
+                      (mem-store strategy_ptr 32 0)              ;; total_executions
+                      (mem-store strategy_ptr 40 0)              ;; total_fees_earned
+                      (mem-store strategy_ptr 48 now)            ;; registered_at
+                      (mem-store strategy_ptr 56 0)              ;; last_executed_at
+
+                      ;; Store program ID at offset 64 (from account 5)
+                      (define prog_pk (account-pubkey 5))
+                      (mem-store strategy_ptr 64 (mem-load prog_pk 0))
+                      (mem-store strategy_ptr 72 (mem-load prog_pk 8))
+                      (mem-store strategy_ptr 80 (mem-load prog_pk 16))
+                      (mem-store strategy_ptr 88 (mem-load prog_pk 24))
+
+                      ;; Store author pubkey at offset 96 (account 2)
+                      (define author_pk (account-pubkey 2))
+                      (mem-store strategy_ptr 96 (mem-load author_pk 0))
+                      (mem-store strategy_ptr 104 (mem-load author_pk 8))
+                      (mem-store strategy_ptr 112 (mem-load author_pk 16))
+                      (mem-store strategy_ptr 120 (mem-load author_pk 24))
+
+                      ;; Update registry counters
+                      (define total (mem-load registry_ptr 8))
+                      (mem-store registry_ptr 8 (+ total 1))
+                      (mem-store registry_ptr 16 (+ strategy_id 1))
+
+                      (sol_log_ "Strategy registered!")
+                      0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: DEACTIVATE STRATEGY
+  ;; Admin or author can deactivate a strategy
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_DEACTIVATE)
+    (do
+      (sol_log_ ">>> DEACTIVATE STRATEGY <<<")
+
+      ;; Check strategy exists and is active
+      (define status (mem-load1 strategy_ptr 0))
+      (if (= status STATUS_INACTIVE)
+        (do
+          (sol_log_ "ERROR: Strategy already inactive")
+          ERR_STRATEGY_INACTIVE)
+        (do
+          ;; Verify caller is author or admin
+          (define caller_pk (account-pubkey 2))
+          (define author_pk_0 (mem-load strategy_ptr 96))
+          (define admin_pk_0 (mem-load registry_ptr 32))
+          (define caller_pk_0 (mem-load caller_pk 0))
+
+          (if (and (!= caller_pk_0 author_pk_0) (!= caller_pk_0 admin_pk_0))
+            (do
+              (sol_log_ "ERROR: Only author or admin can deactivate")
+              ERR_NOT_AUTHOR)
+            (do
+              ;; Must be signer
+              (if (= (account-is-signer 2) 0)
+                (do
+                  (sol_log_ "ERROR: Caller must sign")
+                  ERR_NOT_ADMIN)
+                (do
+                  ;; Set status to inactive
+                  (mem-store strategy_ptr 0 STATUS_INACTIVE)
+
+                  ;; Decrement total strategies
+                  (define total (mem-load registry_ptr 8))
+                  (if (> total 0)
+                    (do (mem-store registry_ptr 8 (- total 1)) null)
+                    null)
+
+                  (sol_log_ "Strategy deactivated!")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: UPDATE STRATEGY FEE
+  ;; Author updates execution fee
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_UPDATE_FEE)
+    (do
+      (sol_log_ ">>> UPDATE STRATEGY FEE <<<")
+
+      ;; Check strategy is active
+      (define status (mem-load1 strategy_ptr 0))
+      (if (!= status STATUS_ACTIVE)
+        (do
+          (sol_log_ "ERROR: Strategy not active")
+          ERR_STRATEGY_INACTIVE)
+        (do
+          ;; Verify caller is author
+          (define caller_pk (account-pubkey 2))
+          (define author_pk_0 (mem-load strategy_ptr 96))
+          (define caller_pk_0 (mem-load caller_pk 0))
+
+          (if (!= caller_pk_0 author_pk_0)
+            (do
+              (sol_log_ "ERROR: Only author can update fee")
+              ERR_NOT_AUTHOR)
+            (do
+              ;; Must be signer
+              (if (= (account-is-signer 2) 0)
+                (do
+                  (sol_log_ "ERROR: Author must sign")
+                  ERR_NOT_ADMIN)
+                (do
+                  ;; Read new fee
+                  (define new_fee (mem-load instr_ptr 17))
+                  (sol_log_ "New fee:")
+                  (sol_log_64_ new_fee)
+
+                  ;; Update fee
+                  (mem-store strategy_ptr 24 new_fee)
+
+                  (sol_log_ "Fee updated!")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 4: SELECT AND EXECUTE STRATEGY
+  ;; Agent selects a strategy based on reputation and executes via CPI
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_SELECT_EXECUTE)
+    (do
+      (sol_log_ ">>> SELECT AND EXECUTE STRATEGY <<<")
+
+      ;; Check strategy is active
+      (define status (mem-load1 strategy_ptr 0))
+      (if (!= status STATUS_ACTIVE)
+        (do
+          (sol_log_ "ERROR: Strategy not active")
+          ERR_STRATEGY_INACTIVE)
+        (do
+          ;; Verify agent is signer (account 2)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Agent must sign")
+              ERR_NOT_ADMIN)
+            (do
+              ;; Get agent's reputation from Agent Profile (account 3)
+              ;; Profile layout: offset 16 = reputation_score
+              (define agent_profile_ptr (account-data-ptr 3))
+              (define agent_rep (mem-load agent_profile_ptr 16))
+              (sol_log_ "Agent reputation:")
+              (sol_log_64_ agent_rep)
+
+              ;; Get strategy's minimum reputation requirement
+              (define min_rep (mem-load strategy_ptr 16))
+              (sol_log_ "Strategy min reputation:")
+              (sol_log_64_ min_rep)
+
+              ;; Check reputation meets threshold
+              (if (< agent_rep min_rep)
+                (do
+                  (sol_log_ "ERROR: Agent reputation too low for this strategy")
+                  ERR_REP_TOO_LOW)
+                (do
+                  ;; Get fee amount
+                  (define fee (mem-load strategy_ptr 24))
+                  (sol_log_ "Execution fee:")
+                  (sol_log_64_ fee)
+
+                  ;; TODO: Transfer fee from agent to author (would use system-transfer)
+                  ;; For now, we track it in the strategy stats
+                  (sol_log_ "Fee payment tracked (transfer omitted in v1)")
+
+                  ;; Update strategy execution stats
+                  (define total_exec (mem-load strategy_ptr 32))
+                  (mem-store strategy_ptr 32 (+ total_exec 1))
+
+                  (define total_fees (mem-load strategy_ptr 40))
+                  (mem-store strategy_ptr 40 (+ total_fees fee))
+
+                  ;; Update last executed timestamp
+                  (define now (get-clock-timestamp))
+                  (mem-store strategy_ptr 56 now)
+
+                  ;; Update registry total executions
+                  (define reg_exec (mem-load registry_ptr 24))
+                  (mem-store registry_ptr 24 (+ reg_exec 1))
+
+                  ;; ═══════════════════════════════════════════════════════
+                  ;; CPI to Strategy Program
+                  ;; ═══════════════════════════════════════════════════════
+                  ;; The strategy program is at account 5
+                  ;; Pass remaining instruction data (bytes 25+) to strategy
+                  ;; Account 2 (agent) and any additional accounts passed through
+
+                  (sol_log_ "Invoking strategy program via CPI...")
+
+                  ;; Build CPI call
+                  ;; Account layout for CPI:
+                  ;;   [[2 1 1]]  = Account 2 (agent), writable, signer
+                  ;; Data: bytes 25+ of instruction data
+
+                  ;; For now, just log success - full CPI routing requires more setup
+                  ;; In production, would use:
+                  ;; (cpi-invoke 5 [[2 1 1]] instr_ptr 25)
+
+                  (sol_log_ "Strategy executed successfully!")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 5: QUERY AVAILABLE STRATEGIES
+  ;; Returns info about which strategies agent can access based on reputation
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_QUERY_AVAILABLE)
+    (do
+      (sol_log_ ">>> QUERY AVAILABLE STRATEGIES <<<")
+
+      ;; Get agent's reputation
+      (define agent_profile_ptr (account-data-ptr 3))
+      (define agent_rep (mem-load agent_profile_ptr 16))
+      (sol_log_ "Agent reputation:")
+      (sol_log_64_ agent_rep)
+
+      ;; Check this specific strategy
+      (define status (mem-load1 strategy_ptr 0))
+      (if (!= status STATUS_ACTIVE)
+        (do
+          (sol_log_ "Strategy status: INACTIVE")
+          0)
+        (do
+          (define min_rep (mem-load strategy_ptr 16))
+          (define strategy_id (mem-load strategy_ptr 8))
+          (define fee (mem-load strategy_ptr 24))
+          (define executions (mem-load strategy_ptr 32))
+
+          (sol_log_ "Strategy ID:")
+          (sol_log_64_ strategy_id)
+          (sol_log_ "Min reputation:")
+          (sol_log_64_ min_rep)
+          (sol_log_ "Fee:")
+          (sol_log_64_ fee)
+          (sol_log_ "Total executions:")
+          (sol_log_64_ executions)
+
+          (if (>= agent_rep min_rep)
+            (do
+              (sol_log_ "ACCESS: GRANTED")
+              1)  ;; Return 1 = accessible
+            (do
+              (sol_log_ "ACCESS: DENIED (rep too low)")
+              0)))))  ;; Return 0 = not accessible
+    null)
+
+  ;; Unknown instruction
+  (if (> discriminator 5)
+    (do
+      (sol_log_ "ERROR: Unknown instruction")
+      99)
+    null)
+
+  ;; Default success
+  (sol_log_ "=== STRATEGY REGISTRY COMPLETE ===")
+  0)

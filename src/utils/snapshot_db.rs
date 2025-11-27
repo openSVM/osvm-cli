@@ -130,6 +130,47 @@ impl SnapshotDB {
         Ok(home.join(".osvm").join("snapshot.rocksdb"))
     }
 
+    /// Open snapshot database at a specific path (useful for testing)
+    #[cfg(test)]
+    pub fn open_path(path: &std::path::Path) -> Result<Self> {
+        // Ensure directory exists
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .context("Failed to create snapshot db directory")?;
+        }
+
+        // Configure RocksDB for high performance
+        let mut opts = Options::default();
+        opts.create_if_missing(true);
+        opts.create_missing_column_families(true);
+
+        // Performance tuning
+        opts.set_max_background_jobs(4);
+        opts.set_bytes_per_sync(1048576); // 1MB
+        opts.set_write_buffer_size(256 * 1024 * 1024); // 256MB write buffer
+        opts.set_max_write_buffer_number(3);
+        opts.set_target_file_size_base(256 * 1024 * 1024); // 256MB SST files
+
+        // Enable compression
+        opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+
+        // Create column families
+        let cfs = vec![
+            cf::ACCOUNTS,
+            cf::TRANSACTIONS,
+            cf::PROGRAM_DATA,
+            cf::TOKEN_ACCOUNTS,
+            cf::METADATA,
+        ];
+
+        let db = DB::open_cf(&opts, path, &cfs)
+            .context("Failed to open snapshot database")?;
+
+        Ok(Self {
+            db: Arc::new(db),
+        })
+    }
+
     /// Store account data
     pub fn put_account(&self, account: &AccountRecord) -> Result<()> {
         let cf = self.db.cf_handle(cf::ACCOUNTS)

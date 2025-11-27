@@ -1,0 +1,53 @@
+{
+  "name": "tree-sitter-ovsm",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for OVSM LISP - a blockchain automation language",
+  "main": "bindings/node",
+  "types": "bindings/node",
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "lexer",
+    "ovsm",
+    "lisp",
+    "blockchain",
+    "solana"
+  ],
+  "author": "OpenSVM Team <rin@opensvm.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opensvm/osvm-cli"
+  },
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "prebuilds/**",
+    "bindings/node/*",
+    "queries/*",
+    "src/**"
+  ],
+  "dependencies": {
+    "nan": "^2.18.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.0"
+  },
+  "scripts": {
+    "build": "tree-sitter generate",
+    "parse": "tree-sitter parse",
+    "test": "tree-sitter test",
+    "highlight": "tree-sitter highlight"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.ovsm",
+      "injection-regex": "^ovsm$",
+      "file-types": [
+        "ovsm"
+      ],
+      "highlights": "queries/highlights.scm",
+      "indents": "queries/indents.scm"
+    }
+  ]
+}

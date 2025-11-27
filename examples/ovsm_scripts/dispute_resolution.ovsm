@@ -1,0 +1,113 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; DISPUTE RESOLUTION MULTI-SIG PROGRAM
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; Multi-sig voting system for contested agent task deliveries.
+;;; Uses M-of-N threshold voting to resolve disputes fairly.
+;;;
+;;; Instructions:
+;;;   0 = InitDispute    1 = Vote    2 = Execute    3 = ClaimReward
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== DISPUTE RESOLUTION ===")
+
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (define dispute_ptr (account-data-ptr 0))
+  (define status (mem-load1 dispute_ptr 0))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: INIT DISPUTE
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> INIT DISPUTE <<<")
+      (if (!= status 0)
+        1
+        (do
+          (define threshold (mem-load1 instr_ptr 1))
+          (define arbiters (mem-load1 instr_ptr 2))
+          (define deadline (mem-load instr_ptr 3))
+          (define escrow_ptr (account-data-ptr 1))
+          (define reward (mem-load escrow_ptr 8))
+          (define stake (mem-load escrow_ptr 16))
+
+          (mem-store dispute_ptr 0 0)
+          (mem-store dispute_ptr 2 arbiters)
+          (mem-store dispute_ptr 3 threshold)
+          (mem-store dispute_ptr 8 reward)
+          (mem-store dispute_ptr 16 stake)
+          (mem-store dispute_ptr 24 deadline)
+
+          (sol_log_ "Dispute created")
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: VOTE
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> VOTE <<<")
+      (define now (get-clock-timestamp))
+      (define deadline (mem-load dispute_ptr 24))
+
+      (if (> now deadline)
+        11
+        (do
+          (define vote (mem-load1 instr_ptr 1))
+          (define v_agent (mem-load1 dispute_ptr 4))
+          (define v_req (mem-load1 dispute_ptr 5))
+
+          (if (= vote 1)
+            (do (mem-store dispute_ptr 4 (+ v_agent 1)) 0)
+            (do (mem-store dispute_ptr 5 (+ v_req 1)) 0))
+
+          (define threshold (mem-load1 dispute_ptr 3))
+          (define new_agent (mem-load1 dispute_ptr 4))
+          (define new_req (mem-load1 dispute_ptr 5))
+
+          (if (>= new_agent threshold)
+            (do (mem-store dispute_ptr 1 1) (sol_log_ "Agent wins") 0)
+            (if (>= new_req threshold)
+              (do (mem-store dispute_ptr 1 2) (sol_log_ "Requester wins") 0)
+              (do (sol_log_ "Vote recorded") 0))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: EXECUTE
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 2)
+    (do
+      (sol_log_ ">>> EXECUTE <<<")
+      (define outcome (mem-load1 dispute_ptr 1))
+      (if (= outcome 0)
+        21
+        (do
+          (mem-store dispute_ptr 0 1)
+          (define reward (mem-load dispute_ptr 8))
+          (define stake (mem-load dispute_ptr 16))
+          (sol_log_ "Payout:")
+          (sol_log_64_ (+ reward stake))
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: CLAIM REWARD
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 3)
+    (do
+      (sol_log_ ">>> CLAIM REWARD <<<")
+      (define total (+ (mem-load dispute_ptr 8) (mem-load dispute_ptr 16)))
+      (define fee (/ total 50))
+      (define voters (+ (mem-load1 dispute_ptr 4) (mem-load1 dispute_ptr 5)))
+      (define per_arbiter (/ fee voters))
+      (sol_log_ "Arbiter reward:")
+      (sol_log_64_ per_arbiter)
+      0)
+    null)
+
+  (sol_log_ "=== COMPLETE ===")
+  0)

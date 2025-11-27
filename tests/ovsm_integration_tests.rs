@@ -3,6 +3,7 @@
 
 #[allow(deprecated)]
 use assert_cmd::cargo::cargo_bin;
+use assert_cmd::assert::OutputAssertExt;
 use predicates::prelude::*;
 use std::fs;
 use std::process::Command;

@@ -1,0 +1,39 @@
+[package]
+name = "ovsm-lsp"
+version = "0.1.0"
+edition = "2021"
+authors = ["OSVM Team <rin@opensvm.com>"]
+description = "Language Server Protocol implementation for OVSM LISP"
+license = "MIT"
+repository = "https://github.com/opensvm/osvm-cli"
+keywords = ["lsp", "language-server", "ovsm", "lisp", "ide"]
+categories = ["development-tools", "text-editors"]
+
+[[bin]]
+name = "ovsm-lsp"
+path = "src/main.rs"
+
+[dependencies]
+# LSP implementation
+tower-lsp = "0.20"
+tokio = { version = "1.35", features = ["full"] }
+
+# OVSM core (reuse lexer, parser, errors)
+ovsm = { path = "../ovsm" }
+
+# Serialization (for LSP protocol)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Async utilities
+dashmap = "5.5"
+
+# HTTP client for AI completion
+reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+tokio-test = "0.4"

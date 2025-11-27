@@ -1,0 +1,532 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; ON-CHAIN AGENT REGISTRY WITH TOKEN-WEIGHTED REPUTATION
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; Economic Model:
+;;; - Agents stake $OSVM tokens to register (skin in the game)
+;;; - Reputation score weighted by stake amount (more stake = more weight)
+;;; - Successful tasks increase reputation points
+;;; - Failed/slashed tasks decrease reputation and may trigger stake burn
+;;; - Higher reputation = priority in task matching
+;;;
+;;; Accounts Layout:
+;;;   0: Registry PDA (global registry state)
+;;;   1: Agent Profile PDA (per-agent data)
+;;;   2: Agent Authority (signer, wallet that controls the agent)
+;;;   3: $OSVM Token Mint
+;;;   4: Agent Token Account (source for staking)
+;;;   5: Registry Token Vault (destination for stakes)
+;;;   6: Token Program
+;;;   7: System Program
+;;;
+;;; Instruction Data Format:
+;;;   byte 0: instruction discriminator
+;;;     0 = InitializeRegistry (admin only)
+;;;     1 = RegisterAgent (stake tokens, create profile)
+;;;     2 = UpdateReputation (called by escrow program)
+;;;     3 = IncreaseStake (agent adds more stake)
+;;;     4 = WithdrawStake (unstake with cooldown)
+;;;     5 = SlashAgent (penalty for bad behavior)
+;;;     6 = DeactivateAgent (voluntary exit)
+;;;   bytes 1-8: amount (for Register/IncreaseStake/Withdraw)
+;;;   bytes 9-16: reputation_delta (for UpdateReputation, signed i64)
+;;;   bytes 17-24: task_id (for UpdateReputation)
+;;;
+;;; Registry Account Data Layout (64 bytes):
+;;;   offset 0:   u8 initialized (0=no, 1=yes)
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 total_staked
+;;;   offset 16:  u64 total_agents
+;;;   offset 24:  u64 min_stake_amount (lamports)
+;;;   offset 32:  u64 cooldown_period (seconds)
+;;;   offset 40:  32 bytes admin_pubkey
+;;;
+;;; Agent Profile Account Data Layout (128 bytes):
+;;;   offset 0:   u8 status (0=Inactive, 1=Active, 2=Cooldown, 3=Slashed)
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 stake_amount (tokens staked)
+;;;   offset 16:  i64 reputation_score (can be negative)
+;;;   offset 24:  u64 tasks_completed
+;;;   offset 32:  u64 tasks_failed
+;;;   offset 40:  u64 registered_at (timestamp)
+;;;   offset 48:  u64 last_active (timestamp)
+;;;   offset 56:  u64 cooldown_start (timestamp, 0 if not in cooldown)
+;;;   offset 64:  32 bytes authority_pubkey
+;;;   offset 96:  32 bytes capabilities_hash (hash of capabilities JSON)
+;;;
+;;; Status Enum:
+;;;   0 = Inactive (not registered or deactivated)
+;;;   1 = Active (available for tasks)
+;;;   2 = Cooldown (unstaking in progress)
+;;;   3 = Slashed (penalized, cannot operate)
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== AGENT REGISTRY PROGRAM ===")
+
+  ;; Read instruction discriminator
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (sol_log_ "Instruction:")
+  (sol_log_64_ discriminator)
+
+  ;; Get account pointers
+  (define registry_ptr (account-data-ptr 0))
+  (define profile_ptr (account-data-ptr 1))
+
+  ;; Status constants
+  (define STATUS_INACTIVE 0)
+  (define STATUS_ACTIVE 1)
+  (define STATUS_COOLDOWN 2)
+  (define STATUS_SLASHED 3)
+
+  ;; Instruction constants
+  (define INSTR_INIT_REGISTRY 0)
+  (define INSTR_REGISTER 1)
+  (define INSTR_UPDATE_REP 2)
+  (define INSTR_INCREASE_STAKE 3)
+  (define INSTR_WITHDRAW 4)
+  (define INSTR_SLASH 5)
+  (define INSTR_DEACTIVATE 6)
+
+  ;; Reputation constants
+  (define REP_SUCCESS_BONUS 100)      ;; Points per successful task
+  (define REP_FAILURE_PENALTY -50)    ;; Points per failed task
+  (define REP_SLASH_PENALTY -500)     ;; Points for slashing
+  (define MIN_REP_FOR_TASKS -1000)    ;; Below this, cannot accept tasks
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: INITIALIZE REGISTRY
+  ;; Admin creates the global registry state
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_INIT_REGISTRY)
+    (do
+      (sol_log_ ">>> INITIALIZE REGISTRY <<<")
+
+      ;; Check if already initialized
+      (define is_initialized (mem-load1 registry_ptr 0))
+      (if (= is_initialized 1)
+        (do
+          (sol_log_ "ERROR: Already initialized")
+          1)
+        (do
+          ;; Verify authority is signer (account 2)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Admin must sign")
+              2)
+            (do
+              ;; Read parameters from instruction data
+              (define min_stake (mem-load instr_ptr 1))
+              (define cooldown_period (mem-load instr_ptr 9))
+
+              (sol_log_ "Min stake:")
+              (sol_log_64_ min_stake)
+              (sol_log_ "Cooldown period:")
+              (sol_log_64_ cooldown_period)
+
+              ;; Initialize registry state
+              (mem-store registry_ptr 0 1)  ;; initialized = true
+
+              ;; Total staked starts at 0
+              (mem-store registry_ptr 8 0)
+
+              ;; Total agents starts at 0
+              (mem-store registry_ptr 16 0)
+
+              ;; Set min stake amount
+              (mem-store registry_ptr 24 min_stake)
+
+              ;; Set cooldown period
+              (mem-store registry_ptr 32 cooldown_period)
+
+              ;; Store admin pubkey at offset 40
+              (define admin_pk (account-pubkey 2))
+              (mem-store registry_ptr 40 (mem-load admin_pk 0))
+              (mem-store registry_ptr 48 (mem-load admin_pk 8))
+              (mem-store registry_ptr 56 (mem-load admin_pk 16))
+              (mem-store registry_ptr 64 (mem-load admin_pk 24))
+
+              (sol_log_ "Registry initialized!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: REGISTER AGENT
+  ;; Agent stakes tokens and creates their profile
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_REGISTER)
+    (do
+      (sol_log_ ">>> REGISTER AGENT <<<")
+
+      ;; Check registry is initialized
+      (define is_initialized (mem-load1 registry_ptr 0))
+      (if (!= is_initialized 1)
+        (do
+          (sol_log_ "ERROR: Registry not initialized")
+          3)
+        (do
+          ;; Check agent not already registered
+          (define agent_status (mem-load1 profile_ptr 0))
+          (if (!= agent_status STATUS_INACTIVE)
+            (do
+              (sol_log_ "ERROR: Agent already registered")
+              4)
+            (do
+              ;; Verify agent authority is signer
+              (if (= (account-is-signer 2) 0)
+                (do
+                  (sol_log_ "ERROR: Agent must sign")
+                  5)
+                (do
+                  ;; Read stake amount from instruction data
+                  (define stake_amount (mem-load instr_ptr 1))
+                  (sol_log_ "Stake amount:")
+                  (sol_log_64_ stake_amount)
+
+                  ;; Check meets minimum stake
+                  (define min_stake (mem-load registry_ptr 24))
+                  (if (< stake_amount min_stake)
+                    (do
+                      (sol_log_ "ERROR: Stake below minimum")
+                      6)
+                    (do
+                      ;; Transfer tokens from agent to registry vault via SPL Token CPI
+                      ;; Account indices: 6=Token Program, 4=Agent Token, 5=Vault, 2=Authority
+                      (sol_log_ "Staking tokens via SPL Token transfer...")
+                      (define transfer_result (spl-token-transfer 6 4 5 2 stake_amount))
+                      (if (!= transfer_result 0)
+                        (do
+                          (sol_log_ "ERROR: Token transfer failed")
+                          15)
+                        null)
+
+                      ;; Initialize agent profile
+                      (mem-store profile_ptr 0 STATUS_ACTIVE)  ;; status = Active
+
+                      ;; Set stake amount
+                      (mem-store profile_ptr 8 stake_amount)
+
+                      ;; Initial reputation = stake_amount / 1000 (bootstrap based on commitment)
+                      (define initial_rep (/ stake_amount 1000))
+                      (mem-store profile_ptr 16 initial_rep)
+
+                      ;; Tasks completed/failed start at 0
+                      (mem-store profile_ptr 24 0)
+                      (mem-store profile_ptr 32 0)
+
+                      ;; Set registered_at timestamp via clock sysvar
+                      (define now (get-clock-timestamp))
+                      (mem-store profile_ptr 40 now)
+
+                      ;; last_active = now
+                      (mem-store profile_ptr 48 now)
+
+                      ;; cooldown_start = 0 (not in cooldown)
+                      (mem-store profile_ptr 56 0)
+
+                      ;; Store authority pubkey at offset 64
+                      (define auth_pk (account-pubkey 2))
+                      (mem-store profile_ptr 64 (mem-load auth_pk 0))
+                      (mem-store profile_ptr 72 (mem-load auth_pk 8))
+                      (mem-store profile_ptr 80 (mem-load auth_pk 16))
+                      (mem-store profile_ptr 88 (mem-load auth_pk 24))
+
+                      ;; Update registry totals
+                      (define total_staked (mem-load registry_ptr 8))
+                      (mem-store registry_ptr 8 (+ total_staked stake_amount))
+
+                      (define total_agents (mem-load registry_ptr 16))
+                      (mem-store registry_ptr 16 (+ total_agents 1))
+
+                      (sol_log_ "Agent registered!")
+                      (sol_log_ "Initial reputation:")
+                      (sol_log_64_ initial_rep)
+                      0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: UPDATE REPUTATION
+  ;; Called by escrow program after task completion/failure
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_UPDATE_REP)
+    (do
+      (sol_log_ ">>> UPDATE REPUTATION <<<")
+
+      ;; Check agent is active
+      (define agent_status (mem-load1 profile_ptr 0))
+      (if (!= agent_status STATUS_ACTIVE)
+        (do
+          (sol_log_ "ERROR: Agent not active")
+          7)
+        (do
+          ;; Verify caller is authorized (either admin or agent themselves)
+          ;; In production with full CPI, would check if caller is authorized escrow program
+          (define updater_is_signer (account-is-signer 2))
+          (if (= updater_is_signer 0)
+            (do
+              (sol_log_ "ERROR: Reputation updater must sign")
+              18)
+            null)
+
+          ;; Read reputation delta from instruction data (signed i64)
+          (define rep_delta (mem-load instr_ptr 9))
+          (sol_log_ "Reputation delta:")
+          (sol_log_64_ rep_delta)
+
+          ;; Read task outcome (1 = success, 0 = failure)
+          (define task_success (mem-load1 instr_ptr 17))
+
+          ;; Get current reputation
+          (define current_rep (mem-load profile_ptr 16))
+
+          ;; Calculate new reputation
+          (define new_rep (+ current_rep rep_delta))
+          (sol_log_ "New reputation:")
+          (sol_log_64_ new_rep)
+
+          ;; Update reputation
+          (mem-store profile_ptr 16 new_rep)
+
+          ;; Update task counters
+          (if (= task_success 1)
+            (do
+              (define completed (mem-load profile_ptr 24))
+              (mem-store profile_ptr 24 (+ completed 1))
+              (sol_log_ "Tasks completed:"))
+            (do
+              (define failed (mem-load profile_ptr 32))
+              (mem-store profile_ptr 32 (+ failed 1))
+              (sol_log_ "Tasks failed:")))
+
+          ;; Check if reputation too low - auto-deactivate
+          (if (< new_rep MIN_REP_FOR_TASKS)
+            (do
+              (sol_log_ "WARNING: Reputation too low, deactivating agent")
+              (mem-store profile_ptr 0 STATUS_INACTIVE)
+              0)
+            0)
+
+          ;; Update last active timestamp via clock sysvar
+          (define last_active_now (get-clock-timestamp))
+          (mem-store profile_ptr 48 last_active_now)
+
+          (sol_log_ "Reputation updated!")
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: INCREASE STAKE
+  ;; Agent adds more tokens to boost reputation weight
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_INCREASE_STAKE)
+    (do
+      (sol_log_ ">>> INCREASE STAKE <<<")
+
+      ;; Check agent is active
+      (define agent_status (mem-load1 profile_ptr 0))
+      (if (!= agent_status STATUS_ACTIVE)
+        (do
+          (sol_log_ "ERROR: Agent not active")
+          8)
+        (do
+          ;; Verify agent authority is signer
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Agent must sign")
+              9)
+            (do
+              ;; Read additional stake amount
+              (define add_stake (mem-load instr_ptr 1))
+              (sol_log_ "Additional stake:")
+              (sol_log_64_ add_stake)
+
+              ;; Transfer additional tokens via SPL Token CPI
+              ;; Account indices: 6=Token Program, 4=Agent Token, 5=Vault, 2=Authority
+              (define add_transfer_result (spl-token-transfer 6 4 5 2 add_stake))
+              (if (!= add_transfer_result 0)
+                (do
+                  (sol_log_ "ERROR: Token transfer failed")
+                  16)
+                null)
+
+              ;; Update agent stake
+              (define current_stake (mem-load profile_ptr 8))
+              (define new_stake (+ current_stake add_stake))
+              (mem-store profile_ptr 8 new_stake)
+
+              ;; Bonus reputation for increasing commitment
+              (define rep_bonus (/ add_stake 2000))
+              (define current_rep (mem-load profile_ptr 16))
+              (mem-store profile_ptr 16 (+ current_rep rep_bonus))
+
+              ;; Update registry total
+              (define total_staked (mem-load registry_ptr 8))
+              (mem-store registry_ptr 8 (+ total_staked add_stake))
+
+              (sol_log_ "Stake increased!")
+              (sol_log_ "New stake:")
+              (sol_log_64_ new_stake)
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 4: WITHDRAW STAKE (Initiate Cooldown)
+  ;; Agent requests to unstake - starts cooldown period
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_WITHDRAW)
+    (do
+      (sol_log_ ">>> INITIATE WITHDRAWAL <<<")
+
+      ;; Check agent is active
+      (define agent_status (mem-load1 profile_ptr 0))
+      (if (!= agent_status STATUS_ACTIVE)
+        (do
+          (sol_log_ "ERROR: Agent not active")
+          10)
+        (do
+          ;; Verify agent authority is signer
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Agent must sign")
+              11)
+            (do
+              ;; Set status to Cooldown
+              (mem-store profile_ptr 0 STATUS_COOLDOWN)
+
+              ;; Set cooldown start timestamp via clock sysvar
+              (define cooldown_now (get-clock-timestamp))
+              (mem-store profile_ptr 56 cooldown_now)
+
+              (sol_log_ "Cooldown initiated!")
+              (sol_log_ "Stake will be available after cooldown period")
+
+              ;; Note: Actual token transfer happens in a separate
+              ;; "complete withdrawal" instruction after cooldown
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 5: SLASH AGENT
+  ;; Penalize agent for bad behavior (called by governance/escrow)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_SLASH)
+    (do
+      (sol_log_ ">>> SLASH AGENT <<<")
+
+      ;; Check agent exists (any status except inactive)
+      (define agent_status (mem-load1 profile_ptr 0))
+      (if (= agent_status STATUS_INACTIVE)
+        (do
+          (sol_log_ "ERROR: Agent not registered")
+          12)
+        (do
+          ;; Verify caller is admin (account 7 must match stored admin pubkey)
+          ;; In production, also check for authorized escrow programs via CPI caller check
+          (define caller_pk (account-pubkey 7))
+          (define admin_pk_0 (mem-load registry_ptr 40))
+          (define admin_pk_1 (mem-load registry_ptr 48))
+          (define caller_pk_0 (mem-load caller_pk 0))
+          (define caller_pk_1 (mem-load caller_pk 8))
+
+          (if (and (= caller_pk_0 admin_pk_0) (= caller_pk_1 admin_pk_1))
+            null  ;; Admin authorized, continue
+            (do
+              ;; Check if authorized escrow program (account 8 if present)
+              ;; For now, require admin signature
+              (if (= (account-is-signer 7) 0)
+                (do
+                  (sol_log_ "ERROR: Admin must sign slash")
+                  17)
+                null)))
+
+          ;; Read slash amount (percentage * 100, e.g., 5000 = 50%)
+          (define slash_pct (mem-load instr_ptr 1))
+          (sol_log_ "Slash percentage (x100):")
+          (sol_log_64_ slash_pct)
+
+          ;; Calculate slash amount
+          (define current_stake (mem-load profile_ptr 8))
+          (define slash_amount (/ (* current_stake slash_pct) 10000))
+          (sol_log_ "Slash amount:")
+          (sol_log_64_ slash_amount)
+
+          ;; Reduce stake
+          (define new_stake (- current_stake slash_amount))
+          (mem-store profile_ptr 8 new_stake)
+
+          ;; Heavy reputation penalty
+          (define current_rep (mem-load profile_ptr 16))
+          (define new_rep (+ current_rep REP_SLASH_PENALTY))
+          (mem-store profile_ptr 16 new_rep)
+
+          ;; Set status to Slashed if severe
+          (if (< new_stake 1000000)  ;; Less than 0.001 token
+            (do (mem-store profile_ptr 0 STATUS_SLASHED) 0)
+            0)
+
+          ;; Update registry total
+          (define total_staked (mem-load registry_ptr 8))
+          (mem-store registry_ptr 8 (- total_staked slash_amount))
+
+          ;; Transfer slashed tokens from vault to treasury (account 8)
+          ;; Account indices: 6=Token Program, 5=Vault, 8=Treasury, 9=Vault Authority PDA
+          ;; Note: This requires vault authority to be a PDA that this program controls
+          ;; For simplicity in this version, we just track the slash - actual transfer
+          ;; would use spl-token-transfer-signed with the vault PDA seeds
+          (sol_log_ "Slashed tokens marked for treasury transfer")
+
+          (sol_log_ "Agent slashed!")
+          (sol_log_ "Remaining stake:")
+          (sol_log_64_ new_stake)
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 6: DEACTIVATE AGENT
+  ;; Agent voluntarily exits the registry
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_DEACTIVATE)
+    (do
+      (sol_log_ ">>> DEACTIVATE AGENT <<<")
+
+      ;; Check agent is active or in cooldown
+      (define agent_status (mem-load1 profile_ptr 0))
+      (if (= agent_status STATUS_INACTIVE)
+        (do
+          (sol_log_ "ERROR: Agent already inactive")
+          13)
+        (do
+          ;; Verify agent authority is signer
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Agent must sign")
+              14)
+            (do
+              ;; Set status to Inactive
+              (mem-store profile_ptr 0 STATUS_INACTIVE)
+
+              ;; Update registry agent count
+              (define total_agents (mem-load registry_ptr 16))
+              (if (> total_agents 0)
+                (do (mem-store registry_ptr 16 (- total_agents 1)) 0)
+                0)
+
+              ;; Note: Stake return requires cooldown to complete
+              ;; This just marks the agent as inactive
+
+              (sol_log_ "Agent deactivated!")
+              0)))))
+    null)
+
+  ;; Unknown instruction
+  (if (> discriminator 6)
+    (do
+      (sol_log_ "ERROR: Unknown instruction")
+      99)
+    null)
+
+  ;; Default success
+  (sol_log_ "=== REGISTRY COMPLETE ===")
+  0)

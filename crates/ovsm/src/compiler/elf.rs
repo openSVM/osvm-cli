@@ -672,6 +672,7 @@ pub fn validate_sbpf_elf(data: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler::SbpfVersion;
 
     #[test]
     fn test_elf_writer() {
@@ -683,7 +684,7 @@ mod tests {
             SbpfInstruction::exit(),
         ];
 
-        let elf = writer.write(&program, false, super::SbpfVersion::V1).unwrap();
+        let elf = writer.write(&program, false, SbpfVersion::V1).unwrap();
         assert!(elf.len() > 64);
         validate_sbpf_elf(&elf).unwrap();
     }

@@ -1,0 +1,201 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; TOKEN ESCROW - SPL Token Payments for Agent Services
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; This program handles SPL Token escrow for agent job payments.
+;;; Uses spl-token-transfer for convenient token transfers.
+;;;
+;;; Accounts Layout:
+;;;   0: Job state account (stores job info: status, amount, parties)
+;;;   1: Escrow token account (holds tokens until release)
+;;;   2: Client token account (source for deposits)
+;;;   3: Agent token account (destination for payments)
+;;;   4: Authority/Signer
+;;;   5: SPL Token Program
+;;;
+;;; Job State Layout (112 bytes):
+;;;   [0]:     status (1 byte): 0=empty, 1=funded, 2=completed, 3=refunded
+;;;   [1-8]:   job_id (u64)
+;;;   [9-16]:  amount (u64)
+;;;   [17-48]: client pubkey (32 bytes)
+;;;   [49-80]: agent pubkey (32 bytes)
+;;;   [81-112]: token mint (32 bytes)
+;;;
+;;; Instructions:
+;;;   0 = CreateJob: Initialize job with token amount (client deposits)
+;;;   1 = CompleteJob: Release tokens to agent
+;;;   2 = CancelJob: Refund tokens to client
+;;;   3 = QueryJob: View job status
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== TOKEN ESCROW ===")
+
+  ;; Status constants
+  (define STATUS_EMPTY 0)
+  (define STATUS_FUNDED 1)
+  (define STATUS_COMPLETED 2)
+  (define STATUS_REFUNDED 3)
+
+  ;; Read instruction discriminator
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (define job_ptr (account-data-ptr 0))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: CREATE JOB
+  ;; Client deposits tokens to escrow
+  ;; Instruction data: [0, job_id (8), amount (8)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> CREATE JOB <<<")
+
+      (define status (mem-load1 job_ptr 0))
+      (if (!= status STATUS_EMPTY)
+        (do (sol_log_ "ERR: Already init") 1)
+        (do
+          ;; Read parameters
+          (define job_id (mem-load instr_ptr 1))
+          (define amount (mem-load instr_ptr 9))
+
+          (sol_log_ "Job ID:")
+          (sol_log_64_ job_id)
+          (sol_log_ "Token amount:")
+          (sol_log_64_ amount)
+
+          ;; Store job_id
+          (mem-store job_ptr 1 job_id)
+
+          ;; Store amount
+          (mem-store job_ptr 9 amount)
+
+          ;; Store client pubkey (account 4 = authority/signer is the client)
+          (define client_pk (account-pubkey 4))
+          (mem-store job_ptr 17 (mem-load client_pk 0))
+          (mem-store job_ptr 25 (mem-load client_pk 8))
+          (mem-store job_ptr 33 (mem-load client_pk 16))
+          (mem-store job_ptr 41 (mem-load client_pk 24))
+
+          ;; Store agent pubkey (read from account 3's owner)
+          (define agent_pk (account-pubkey 3))
+          (mem-store job_ptr 49 (mem-load agent_pk 0))
+          (mem-store job_ptr 57 (mem-load agent_pk 8))
+          (mem-store job_ptr 65 (mem-load agent_pk 16))
+          (mem-store job_ptr 73 (mem-load agent_pk 24))
+
+          ;; Transfer tokens: client (2) -> escrow (1)
+          ;; spl-token-transfer: token-prog-idx source-idx dest-idx authority-idx amount
+          (define result (spl-token-transfer 5 2 1 4 amount))
+
+          (if (= result 0)
+            (do
+              (mem-store1 job_ptr 0 STATUS_FUNDED)
+              (sol_log_ "Job created & funded")
+              0)
+            (do
+              (sol_log_ "Token transfer failed")
+              (sol_log_64_ result)
+              result)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: COMPLETE JOB
+  ;; Release tokens to agent
+  ;; Instruction data: [1, job_id (8)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> COMPLETE JOB <<<")
+
+      (define status (mem-load1 job_ptr 0))
+      (if (!= status STATUS_FUNDED)
+        (do (sol_log_ "ERR: Not funded") 10)
+        (do
+          ;; Verify job_id
+          (define job_id (mem-load instr_ptr 1))
+          (define stored_job (mem-load job_ptr 1))
+          (if (!= job_id stored_job)
+            (do (sol_log_ "ERR: Job mismatch") 11)
+            (do
+              (define amount (mem-load job_ptr 9))
+              (sol_log_ "Releasing tokens:")
+              (sol_log_64_ amount)
+
+              ;; Transfer tokens: escrow (1) -> agent (3)
+              ;; Authority (4) must be the escrow authority
+              (define result (spl-token-transfer 5 1 3 4 amount))
+
+              (if (= result 0)
+                (do
+                  (mem-store1 job_ptr 0 STATUS_COMPLETED)
+                  (sol_log_ "Job completed!")
+                  0)
+                (do
+                  (sol_log_ "Release failed")
+                  result)))))))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: CANCEL JOB
+  ;; Refund tokens to client
+  ;; Instruction data: [2, job_id (8)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 2)
+    (do
+      (sol_log_ ">>> CANCEL JOB <<<")
+
+      (define status (mem-load1 job_ptr 0))
+      (if (!= status STATUS_FUNDED)
+        (do (sol_log_ "ERR: Not funded") 20)
+        (do
+          (define job_id (mem-load instr_ptr 1))
+          (define stored_job (mem-load job_ptr 1))
+          (if (!= job_id stored_job)
+            (do (sol_log_ "ERR: Job mismatch") 21)
+            (do
+              (define amount (mem-load job_ptr 9))
+              (sol_log_ "Refunding tokens:")
+              (sol_log_64_ amount)
+
+              ;; Transfer tokens: escrow (1) -> client (2)
+              (define result (spl-token-transfer 5 1 2 4 amount))
+
+              (if (= result 0)
+                (do
+                  (mem-store1 job_ptr 0 STATUS_REFUNDED)
+                  (sol_log_ "Job cancelled!")
+                  0)
+                (do
+                  (sol_log_ "Refund failed")
+                  result)))))))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: QUERY JOB
+  ;; View job status and details
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 3)
+    (do
+      (sol_log_ ">>> QUERY JOB <<<")
+      (define status (mem-load1 job_ptr 0))
+      (define job_id (mem-load job_ptr 1))
+      (define amount (mem-load job_ptr 9))
+
+      (sol_log_ "Status:")
+      (sol_log_64_ status)
+      (sol_log_ "Job ID:")
+      (sol_log_64_ job_id)
+      (sol_log_ "Amount:")
+      (sol_log_64_ amount)
+      0)
+    0)
+
+  (if (> discriminator 3)
+    (do (sol_log_ "ERR: Unknown instruction") 99)
+    0)
+
+  (sol_log_ "=== TOKEN ESCROW DONE ===")
+  0)

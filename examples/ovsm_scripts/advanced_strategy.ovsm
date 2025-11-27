@@ -1,0 +1,288 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; ADVANCED STRATEGY - Complex Multi-Step Task Execution
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; PURPOSE:
+;;; An advanced strategy program for higher-reputation agents.
+;;; Demonstrates complex execution patterns and higher-value operations.
+;;;
+;;; MINIMUM REPUTATION: 7500 (75% - experienced level)
+;;; FEE: 5000 lamports (0.000005 SOL)
+;;;
+;;; CAPABILITIES:
+;;; - Multi-step computation pipelines
+;;; - Statistical aggregation
+;;; - Conditional execution paths
+;;; - Result verification
+;;;
+;;; ACCOUNTS:
+;;;   0: Agent Authority (signer)
+;;;   1: Input Data Account (contains input values)
+;;;   2: Result Account (writable, stores execution result)
+;;;   3: Config Account (optional strategy configuration)
+;;;
+;;; INSTRUCTION DATA:
+;;;   byte 0: instruction discriminator
+;;;     0 = Pipeline (multi-step computation)
+;;;     1 = Aggregate (statistical operations)
+;;;     2 = Conditional (branching execution)
+;;;     3 = Verify (result verification)
+;;;   bytes 1-8: primary_param
+;;;   bytes 9-16: secondary_param
+;;;   bytes 17-24: threshold (for conditional/verify)
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== ADVANCED STRATEGY PROGRAM ===")
+
+  ;; Read instruction data
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (sol_log_ "Instruction:")
+  (sol_log_64_ discriminator)
+
+  ;; Strategy metadata
+  (define MIN_REPUTATION 7500)
+  (define STRATEGY_FEE 5000)
+
+  ;; Instruction types
+  (define INSTR_PIPELINE 0)
+  (define INSTR_AGGREGATE 1)
+  (define INSTR_CONDITIONAL 2)
+  (define INSTR_VERIFY 3)
+
+  ;; Error codes
+  (define ERR_NOT_SIGNER 1)
+  (define ERR_INVALID_INPUT 2)
+  (define ERR_PIPELINE_FAILED 3)
+  (define ERR_VERIFICATION_FAILED 4)
+  (define ERR_THRESHOLD_NOT_MET 5)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: PIPELINE
+  ;; Multi-step computation: normalize -> transform -> scale
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_PIPELINE)
+    (do
+      (sol_log_ ">>> PIPELINE EXECUTION <<<")
+
+      (if (= (account-is-signer 0) 0)
+        (do
+          (sol_log_ "ERROR: Agent must sign")
+          ERR_NOT_SIGNER)
+        (do
+          ;; Read parameters
+          (define input_value (mem-load instr_ptr 1))
+          (define scale_factor (mem-load instr_ptr 9))
+
+          (sol_log_ "Input value:")
+          (sol_log_64_ input_value)
+          (sol_log_ "Scale factor:")
+          (sol_log_64_ scale_factor)
+
+          ;; Validate inputs
+          (if (= scale_factor 0)
+            (do
+              (sol_log_ "ERROR: Scale factor cannot be zero")
+              ERR_INVALID_INPUT)
+            (do
+              ;; Step 1: Normalize (constrain to 0-10000 range)
+              (sol_log_ "Step 1: Normalizing...")
+              (define normalized (if (> input_value 10000) 10000 input_value))
+              (sol_log_64_ normalized)
+
+              ;; Step 2: Transform (square root approximation via Newton-Raphson)
+              ;; Using integer math: sqrt(x) ≈ (x + x/guess) / 2
+              (sol_log_ "Step 2: Transforming...")
+              (define guess (/ normalized 2))
+              (define better (if (= guess 0) 1 (/ (+ guess (/ normalized guess)) 2)))
+              (define transformed better)
+              (sol_log_64_ transformed)
+
+              ;; Step 3: Scale (multiply by scale factor)
+              (sol_log_ "Step 3: Scaling...")
+              (define result (* transformed scale_factor))
+              (sol_log_64_ result)
+
+              ;; Store result
+              (define result_ptr (account-data-ptr 2))
+              (mem-store result_ptr 0 result)
+              (mem-store result_ptr 8 normalized)    ;; Also store intermediate values
+              (mem-store result_ptr 16 transformed)
+
+              (sol_log_ "Pipeline completed!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: AGGREGATE
+  ;; Statistical aggregation: sum, average, min, max from input account
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_AGGREGATE)
+    (do
+      (sol_log_ ">>> AGGREGATE EXECUTION <<<")
+
+      (if (= (account-is-signer 0) 0)
+        (do
+          (sol_log_ "ERROR: Agent must sign")
+          ERR_NOT_SIGNER)
+        (do
+          ;; Read count from params (how many values to aggregate)
+          (define count (mem-load instr_ptr 1))
+          (sol_log_ "Aggregating values, count:")
+          (sol_log_64_ count)
+
+          ;; Validate count
+          (if (or (= count 0) (> count 10))
+            (do
+              (sol_log_ "ERROR: Count must be 1-10")
+              ERR_INVALID_INPUT)
+            (do
+              ;; Read values from input account (account 1)
+              (define input_ptr (account-data-ptr 1))
+
+              ;; Calculate aggregates
+              ;; For simplicity, read up to 3 values and compute
+              (define v1 (mem-load input_ptr 0))
+              (define v2 (if (> count 1) (mem-load input_ptr 8) 0))
+              (define v3 (if (> count 2) (mem-load input_ptr 16) 0))
+
+              (sol_log_ "Values:")
+              (sol_log_64_ v1)
+              (sol_log_64_ v2)
+              (sol_log_64_ v3)
+
+              ;; Sum
+              (define sum (+ v1 (+ v2 v3)))
+              (sol_log_ "Sum:")
+              (sol_log_64_ sum)
+
+              ;; Average (integer division)
+              (define avg (/ sum count))
+              (sol_log_ "Average:")
+              (sol_log_64_ avg)
+
+              ;; Min (simplified)
+              (define min_val (if (< v1 v2) (if (< v1 v3) v1 v3) (if (< v2 v3) v2 v3)))
+              (sol_log_ "Min:")
+              (sol_log_64_ min_val)
+
+              ;; Max (simplified)
+              (define max_val (if (> v1 v2) (if (> v1 v3) v1 v3) (if (> v2 v3) v2 v3)))
+              (sol_log_ "Max:")
+              (sol_log_64_ max_val)
+
+              ;; Store results
+              (define result_ptr (account-data-ptr 2))
+              (mem-store result_ptr 0 sum)
+              (mem-store result_ptr 8 avg)
+              (mem-store result_ptr 16 min_val)
+              (mem-store result_ptr 24 max_val)
+
+              (sol_log_ "Aggregation completed!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: CONDITIONAL
+  ;; Execute different paths based on threshold
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_CONDITIONAL)
+    (do
+      (sol_log_ ">>> CONDITIONAL EXECUTION <<<")
+
+      (if (= (account-is-signer 0) 0)
+        (do
+          (sol_log_ "ERROR: Agent must sign")
+          ERR_NOT_SIGNER)
+        (do
+          ;; Read parameters
+          (define value (mem-load instr_ptr 1))
+          (define threshold (mem-load instr_ptr 17))
+
+          (sol_log_ "Value:")
+          (sol_log_64_ value)
+          (sol_log_ "Threshold:")
+          (sol_log_64_ threshold)
+
+          (define result_ptr (account-data-ptr 2))
+
+          (if (>= value threshold)
+            (do
+              (sol_log_ "Path: ABOVE THRESHOLD")
+              ;; Apply bonus multiplier (1.5x = multiply by 3, divide by 2)
+              (define result (/ (* value 3) 2))
+              (mem-store result_ptr 0 result)
+              (mem-store result_ptr 8 1)  ;; 1 = above threshold
+              (sol_log_ "Bonus applied:")
+              (sol_log_64_ result)
+              0)
+            (do
+              (sol_log_ "Path: BELOW THRESHOLD")
+              ;; Apply penalty (0.5x = divide by 2)
+              (define result (/ value 2))
+              (mem-store result_ptr 0 result)
+              (mem-store result_ptr 8 0)  ;; 0 = below threshold
+              (sol_log_ "Penalty applied:")
+              (sol_log_64_ result)
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: VERIFY
+  ;; Verify a computation result meets criteria
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator INSTR_VERIFY)
+    (do
+      (sol_log_ ">>> VERIFICATION EXECUTION <<<")
+
+      (if (= (account-is-signer 0) 0)
+        (do
+          (sol_log_ "ERROR: Agent must sign")
+          ERR_NOT_SIGNER)
+        (do
+          ;; Read expected value and actual from params
+          (define expected (mem-load instr_ptr 1))
+          (define actual (mem-load instr_ptr 9))
+          (define tolerance (mem-load instr_ptr 17))
+
+          (sol_log_ "Expected:")
+          (sol_log_64_ expected)
+          (sol_log_ "Actual:")
+          (sol_log_64_ actual)
+          (sol_log_ "Tolerance:")
+          (sol_log_64_ tolerance)
+
+          ;; Calculate difference
+          (define diff (if (> actual expected)
+                           (- actual expected)
+                           (- expected actual)))
+          (sol_log_ "Difference:")
+          (sol_log_64_ diff)
+
+          (define result_ptr (account-data-ptr 2))
+
+          (if (<= diff tolerance)
+            (do
+              (sol_log_ "Verification: PASSED")
+              (mem-store result_ptr 0 1)  ;; 1 = verified
+              (mem-store result_ptr 8 diff)
+              0)
+            (do
+              (sol_log_ "Verification: FAILED")
+              (mem-store result_ptr 0 0)  ;; 0 = failed
+              (mem-store result_ptr 8 diff)
+              ERR_VERIFICATION_FAILED)))))
+    null)
+
+  ;; Unknown instruction
+  (if (> discriminator 3)
+    (do
+      (sol_log_ "ERROR: Unknown instruction")
+      99)
+    null)
+
+  ;; Default success
+  (sol_log_ "=== ADVANCED STRATEGY COMPLETE ===")
+  0)

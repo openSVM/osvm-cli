@@ -1,0 +1,219 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AGENT ESCROW WITH PDA - Real SOL Transfers via Program-Derived Addresses
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; This program demonstrates REAL escrow operations using PDAs to sign transfers.
+;;; The escrow PDA holds SOL on behalf of jobs, and can release funds when authorized.
+;;;
+;;; PDA seeds: ["escrow", job_id (8 bytes), bump (1 byte)]
+;;;
+;;; Accounts Layout:
+;;;   0: Job state PDA (stores job info: agent, client, amount, status)
+;;;   1: Escrow PDA (holds the SOL, derived from job_id)
+;;;   2: Recipient (agent or client depending on operation)
+;;;   3: System Program (11111111111111111111111111111111)
+;;;   4: Payer/Signer
+;;;
+;;; Instructions:
+;;;   0 = InitJob (create job, deposit SOL to escrow)
+;;;   1 = ReleaseToAgent (complete job, pay agent)
+;;;   2 = RefundClient (cancel job, return SOL)
+;;;   3 = QueryEscrow (view-only, check escrow balance)
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== ESCROW PDA ===")
+
+  ;; Heap memory regions
+  (define HEAP_TRANSFER_DATA 12884901888)  ;; 0x300000000 - System transfer instruction
+  (define HEAP_SEED_PREFIX 12884902144)    ;; 0x300000100 - "escrow" prefix
+  (define HEAP_SEED_JOB 12884902208)       ;; 0x300000140 - job_id bytes
+  (define HEAP_SEED_BUMP 12884902272)      ;; 0x300000180 - bump byte
+
+  ;; Status constants
+  (define STATUS_EMPTY 0)
+  (define STATUS_FUNDED 1)
+  (define STATUS_COMPLETED 2)
+  (define STATUS_REFUNDED 3)
+
+  ;; Read instruction
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (define job_ptr (account-data-ptr 0))
+
+  ;; Pre-store "escrow" seed in heap (ASCII: 101, 115, 99, 114, 111, 119)
+  (mem-store1 HEAP_SEED_PREFIX 0 101)
+  (mem-store1 HEAP_SEED_PREFIX 1 115)
+  (mem-store1 HEAP_SEED_PREFIX 2 99)
+  (mem-store1 HEAP_SEED_PREFIX 3 114)
+  (mem-store1 HEAP_SEED_PREFIX 4 111)
+  (mem-store1 HEAP_SEED_PREFIX 5 119)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: INIT JOB
+  ;; Creates job record, client deposits SOL to escrow PDA
+  ;; Instruction data: [0, job_id (8), amount (8), bump (1)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> INIT JOB <<<")
+
+      (define status (mem-load1 job_ptr 0))
+      (if (!= status STATUS_EMPTY)
+        (do (sol_log_ "ERR: Already init") 1)
+        (do
+          ;; Read parameters
+          (define job_id (mem-load instr_ptr 1))
+          (define amount (mem-load instr_ptr 9))
+          (define bump (mem-load1 instr_ptr 17))
+
+          (sol_log_ "Job ID:")
+          (sol_log_64_ job_id)
+          (sol_log_ "Amount:")
+          (sol_log_64_ amount)
+
+          ;; Store client pubkey (account 4 = payer/client)
+          (define client_pk (account-pubkey 4))
+          (mem-store job_ptr 8 (mem-load client_pk 0))
+          (mem-store job_ptr 16 (mem-load client_pk 8))
+          (mem-store job_ptr 24 (mem-load client_pk 16))
+          (mem-store job_ptr 32 (mem-load client_pk 24))
+
+          ;; Store escrow amount and job_id
+          (mem-store job_ptr 40 amount)
+          (mem-store job_ptr 48 job_id)
+          (mem-store job_ptr 56 bump)
+
+          ;; Mark as funded
+          (mem-store job_ptr 0 STATUS_FUNDED)
+
+          (sol_log_ "Job initialized")
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: RELEASE TO AGENT
+  ;; Job completed, transfer SOL from escrow PDA to agent (account 2)
+  ;; Instruction data: [1, job_id (8), bump (1)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> RELEASE TO AGENT <<<")
+
+      (define status (mem-load1 job_ptr 0))
+      (if (!= status STATUS_FUNDED)
+        (do (sol_log_ "ERR: Not funded") 10)
+        (do
+          ;; Read job data
+          (define job_id (mem-load instr_ptr 1))
+          (define bump (mem-load1 instr_ptr 9))
+          (define amount (mem-load job_ptr 40))
+          (define stored_job (mem-load job_ptr 48))
+
+          ;; Verify job ID matches
+          (if (!= job_id stored_job)
+            (do (sol_log_ "ERR: Job mismatch") 11)
+            (do
+              (sol_log_ "Releasing to agent:")
+              (sol_log_64_ amount)
+
+              ;; Prepare seeds in heap
+              (mem-store HEAP_SEED_JOB 0 job_id)
+              (mem-store1 HEAP_SEED_BUMP 0 bump)
+
+              ;; Build System Transfer instruction
+              ;; Format: [4 bytes padding][4 bytes discriminator=2][8 bytes amount]
+              (mem-store HEAP_TRANSFER_DATA 0 2)
+              (mem-store HEAP_TRANSFER_DATA 8 amount)
+
+              ;; CPI: Escrow PDA (account 1) -> Agent (account 2)
+              ;; PDA signs with seeds ["escrow", job_id, bump]
+              (define result
+                (cpi-invoke-signed
+                  3                           ;; System Program at index 3
+                  HEAP_TRANSFER_DATA          ;; Transfer instruction
+                  12                          ;; 12 bytes
+                  [[1 1 1] [2 1 0] [3 0 0]]  ;; Escrow(signer), Agent, System
+                  [[[HEAP_SEED_PREFIX 6] [HEAP_SEED_JOB 8] [HEAP_SEED_BUMP 1]]]))
+
+              (if (= result 0)
+                (do
+                  (mem-store job_ptr 0 STATUS_COMPLETED)
+                  (sol_log_ "Released!")
+                  0)
+                (do
+                  (sol_log_ "CPI failed")
+                  (sol_log_64_ result)
+                  result)))))))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: REFUND CLIENT
+  ;; Cancel job, return SOL from escrow PDA to client (account 2)
+  ;; Instruction data: [2, job_id (8), bump (1)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 2)
+    (do
+      (sol_log_ ">>> REFUND CLIENT <<<")
+
+      (define status (mem-load1 job_ptr 0))
+      (if (!= status STATUS_FUNDED)
+        (do (sol_log_ "ERR: Not funded") 20)
+        (do
+          (define job_id (mem-load instr_ptr 1))
+          (define bump (mem-load1 instr_ptr 9))
+          (define amount (mem-load job_ptr 40))
+
+          (sol_log_ "Refunding:")
+          (sol_log_64_ amount)
+
+          ;; Prepare seeds
+          (mem-store HEAP_SEED_JOB 0 job_id)
+          (mem-store1 HEAP_SEED_BUMP 0 bump)
+
+          ;; Build transfer
+          (mem-store HEAP_TRANSFER_DATA 0 2)
+          (mem-store HEAP_TRANSFER_DATA 8 amount)
+
+          ;; CPI: Escrow -> Client
+          (define result
+            (cpi-invoke-signed
+              3
+              HEAP_TRANSFER_DATA
+              12
+              [[1 1 1] [2 1 0] [3 0 0]]
+              [[[HEAP_SEED_PREFIX 6] [HEAP_SEED_JOB 8] [HEAP_SEED_BUMP 1]]]))
+
+          (if (= result 0)
+            (do
+              (mem-store job_ptr 0 STATUS_REFUNDED)
+              (sol_log_ "Refunded!")
+              0)
+            (do
+              (sol_log_ "CPI failed")
+              result)))))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: QUERY ESCROW
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 3)
+    (do
+      (sol_log_ ">>> QUERY <<<")
+      (define status (mem-load1 job_ptr 0))
+      (define amount (mem-load job_ptr 40))
+      (sol_log_ "Status:")
+      (sol_log_64_ status)
+      (sol_log_ "Amount:")
+      (sol_log_64_ amount)
+      0)
+    0)
+
+  (if (> discriminator 3)
+    (do (sol_log_ "ERR: Unknown") 99)
+    0)
+
+  (sol_log_ "=== ESCROW DONE ===")
+  0)

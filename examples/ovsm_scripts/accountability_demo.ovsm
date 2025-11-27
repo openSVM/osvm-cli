@@ -1,0 +1,370 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AGENT ACCOUNTABILITY DEMO - Complete End-to-End Workflow
+;;; Written in OVSM LISP - Demonstrates full agent lifecycle
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; This demo program simulates the complete workflow of the Agent Accountability
+;;; System using simulated calls. It demonstrates:
+;;;
+;;; 1. Agent Registration (Reputation NFT creation)
+;;; 2. Building Reputation (completing tasks, getting attestations)
+;;; 3. Marketplace Listing (listing services with trust-based fees)
+;;; 4. Job Execution (escrow funding, completion, payment)
+;;; 5. Dispute Resolution (if needed)
+;;;
+;;; Accounts Layout (Simulation):
+;;;   0: Demo state account (tracks simulation state)
+;;;   1: Agent wallet (the AI agent's address)
+;;;   2: Client wallet (the customer hiring the agent)
+;;;   3: Authority/Signer
+;;;
+;;; Demo State Layout (128 bytes):
+;;;   [0]:     phase (1=register, 2=build_rep, 3=list, 4=job, 5=complete)
+;;;   [1-8]:   agent_id (u64)
+;;;   [9-16]:  tasks_completed (u64)
+;;;   [17-24]: tasks_failed (u64)
+;;;   [25-32]: trust_score (u64)
+;;;   [33-40]: listing_price (u64)
+;;;   [41-48]: job_id (u64)
+;;;   [49-56]: escrow_amount (u64)
+;;;   [57]:    job_status (0=none, 1=funded, 2=complete, 3=disputed)
+;;;
+;;; Instructions:
+;;;   0 = InitDemo - Initialize the demo simulation
+;;;   1 = RegisterAgent - Simulate agent registration
+;;;   2 = CompleteTask - Simulate task completion (builds reputation)
+;;;   3 = FailTask - Simulate task failure (negative reputation)
+;;;   4 = ListService - Create a marketplace listing
+;;;   5 = HireAgent - Client funds escrow and hires agent
+;;;   6 = DeliverJob - Agent delivers work, receives payment
+;;;   7 = DisputeJob - Client disputes the delivery
+;;;   8 = QueryStatus - View current demo state
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== AGENT ACCOUNTABILITY DEMO ===")
+
+  ;; Phase constants
+  (define PHASE_INIT 0)
+  (define PHASE_REGISTERED 1)
+  (define PHASE_BUILDING_REP 2)
+  (define PHASE_LISTED 3)
+  (define PHASE_JOB_ACTIVE 4)
+  (define PHASE_COMPLETE 5)
+
+  ;; Job status
+  (define JOB_NONE 0)
+  (define JOB_FUNDED 1)
+  (define JOB_DELIVERED 2)
+  (define JOB_DISPUTED 3)
+
+  ;; Read instruction
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (define state_ptr (account-data-ptr 0))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: INIT DEMO
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> INIT DEMO <<<")
+
+      ;; Initialize all state to zero
+      (mem-store1 state_ptr 0 PHASE_INIT)
+      (mem-store state_ptr 1 0)    ;; agent_id
+      (mem-store state_ptr 9 0)    ;; tasks_completed
+      (mem-store state_ptr 17 0)   ;; tasks_failed
+      (mem-store state_ptr 25 0)   ;; trust_score
+      (mem-store state_ptr 33 0)   ;; listing_price
+      (mem-store state_ptr 41 0)   ;; job_id
+      (mem-store state_ptr 49 0)   ;; escrow_amount
+      (mem-store1 state_ptr 57 JOB_NONE)
+
+      (sol_log_ "Demo initialized!")
+      0)
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: REGISTER AGENT
+  ;; Simulates: Minting a Reputation NFT for the agent
+  ;; Instruction data: [1, agent_id (8 bytes)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> REGISTER AGENT <<<")
+
+      (define phase (mem-load1 state_ptr 0))
+      (if (!= phase PHASE_INIT)
+        (do (sol_log_ "ERR: Already registered") 1)
+        (do
+          (define agent_id (mem-load instr_ptr 1))
+
+          (sol_log_ "Registering agent ID:")
+          (sol_log_64_ agent_id)
+
+          ;; Store agent_id and update phase
+          (mem-store state_ptr 1 agent_id)
+          (mem-store1 state_ptr 0 PHASE_REGISTERED)
+
+          ;; Simulates: Calling reputation_nft.ovsm instruction 0 (Mint)
+          ;; In real deployment: (cpi-invoke reputation_nft [agent_wallet] mint_data)
+          (sol_log_ "[SIM] Minted Reputation NFT")
+          (sol_log_ "Agent registered successfully!")
+          0)))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: COMPLETE TASK
+  ;; Simulates: Task completion + attestation
+  ;; Instruction data: [2, rating (1 byte, 0-5)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 2)
+    (do
+      (sol_log_ ">>> COMPLETE TASK <<<")
+
+      (define phase (mem-load1 state_ptr 0))
+      (if (< phase PHASE_REGISTERED)
+        (do (sol_log_ "ERR: Not registered") 2)
+        (do
+          (define rating (mem-load1 instr_ptr 1))
+
+          ;; Read current state
+          (define tasks_ok (mem-load state_ptr 9))
+          (define trust (mem-load state_ptr 25))
+
+          ;; Increment tasks completed
+          (mem-store state_ptr 9 (+ tasks_ok 1))
+
+          ;; Update trust score (simplified: trust = (rating * 20) avg)
+          (define new_trust (/ (+ (* trust tasks_ok) (* rating 20)) (+ tasks_ok 1)))
+          (mem-store state_ptr 25 new_trust)
+
+          ;; Update phase
+          (mem-store1 state_ptr 0 PHASE_BUILDING_REP)
+
+          ;; Simulates: Calling reputation_attestation.ovsm
+          ;; In real deployment: (cpi-invoke attestation_prog [nft_account] attest_data)
+          (sol_log_ "[SIM] Created attestation")
+          (sol_log_ "[SIM] Updated Reputation NFT")
+
+          (sol_log_ "Task completed! New trust score:")
+          (sol_log_64_ new_trust)
+          0)))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: FAIL TASK
+  ;; Simulates: Task failure + negative attestation
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 3)
+    (do
+      (sol_log_ ">>> FAIL TASK <<<")
+
+      (define phase (mem-load1 state_ptr 0))
+      (if (< phase PHASE_REGISTERED)
+        (do (sol_log_ "ERR: Not registered") 3)
+        (do
+          ;; Read current state
+          (define tasks_fail (mem-load state_ptr 17))
+          (define trust (mem-load state_ptr 25))
+
+          ;; Increment failed tasks
+          (mem-store state_ptr 17 (+ tasks_fail 1))
+
+          ;; Decrease trust (penalty)
+          (define new_trust (if (> trust 10) (- trust 10) 0))
+          (mem-store state_ptr 25 new_trust)
+
+          (sol_log_ "[SIM] Created negative attestation")
+          (sol_log_ "Task failed! New trust score:")
+          (sol_log_64_ new_trust)
+          0)))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 4: LIST SERVICE
+  ;; Simulates: Creating a marketplace listing
+  ;; Instruction data: [4, price (8 bytes)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 4)
+    (do
+      (sol_log_ ">>> LIST SERVICE <<<")
+
+      (define phase (mem-load1 state_ptr 0))
+      (define trust (mem-load state_ptr 25))
+
+      (if (< phase PHASE_BUILDING_REP)
+        (do (sol_log_ "ERR: No reputation") 4)
+        (do
+          (define price (mem-load instr_ptr 1))
+
+          (sol_log_ "Listing service at price:")
+          (sol_log_64_ price)
+
+          ;; Calculate fee based on trust (high trust = lower fee)
+          ;; fee = price * (100 - trust) / 1000 (max 10% fee at 0 trust)
+          (define fee_pct (if (> trust 100) 0 (- 100 trust)))
+          (define fee (/ (* price fee_pct) 1000))
+
+          (sol_log_ "Platform fee:")
+          (sol_log_64_ fee)
+
+          ;; Store listing info
+          (mem-store state_ptr 33 price)
+          (mem-store1 state_ptr 0 PHASE_LISTED)
+
+          ;; Simulates: Calling agent_marketplace.ovsm
+          (sol_log_ "[SIM] Created marketplace listing")
+          (sol_log_ "Service listed successfully!")
+          0)))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 5: HIRE AGENT
+  ;; Simulates: Client funding escrow to hire agent
+  ;; Instruction data: [5, job_id (8 bytes)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 5)
+    (do
+      (sol_log_ ">>> HIRE AGENT <<<")
+
+      (define phase (mem-load1 state_ptr 0))
+      (if (!= phase PHASE_LISTED)
+        (do (sol_log_ "ERR: Not listed") 5)
+        (do
+          (define job_id (mem-load instr_ptr 1))
+          (define price (mem-load state_ptr 33))
+
+          (sol_log_ "Client hiring agent for job:")
+          (sol_log_64_ job_id)
+          (sol_log_ "Escrow amount:")
+          (sol_log_64_ price)
+
+          ;; Store job info
+          (mem-store state_ptr 41 job_id)
+          (mem-store state_ptr 49 price)
+          (mem-store1 state_ptr 57 JOB_FUNDED)
+          (mem-store1 state_ptr 0 PHASE_JOB_ACTIVE)
+
+          ;; Simulates: Calling agent_escrow_pda.ovsm (InitJob)
+          ;; In real deployment: (cpi-invoke-signed escrow_prog [...] init_data)
+          (sol_log_ "[SIM] Created escrow account")
+          (sol_log_ "[SIM] Deposited SOL to escrow")
+          (sol_log_ "Agent hired! Job is active.")
+          0)))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 6: DELIVER JOB
+  ;; Simulates: Agent delivers work, receives payment
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 6)
+    (do
+      (sol_log_ ">>> DELIVER JOB <<<")
+
+      (define job_status (mem-load1 state_ptr 57))
+      (if (!= job_status JOB_FUNDED)
+        (do (sol_log_ "ERR: No active job") 6)
+        (do
+          (define amount (mem-load state_ptr 49))
+          (define job_id (mem-load state_ptr 41))
+
+          (sol_log_ "Delivering job:")
+          (sol_log_64_ job_id)
+          (sol_log_ "Releasing payment:")
+          (sol_log_64_ amount)
+
+          ;; Update state
+          (mem-store1 state_ptr 57 JOB_DELIVERED)
+          (mem-store1 state_ptr 0 PHASE_COMPLETE)
+
+          ;; Simulates: Calling agent_escrow_pda.ovsm (ReleaseToAgent)
+          (sol_log_ "[SIM] Released escrow to agent")
+
+          ;; Simulates: Auto-attestation for successful job
+          ;; (cpi-invoke attestation_prog [nft] attest_data)
+          (sol_log_ "[SIM] Created completion attestation")
+
+          (sol_log_ "Job delivered! Agent paid.")
+          0)))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 7: DISPUTE JOB
+  ;; Simulates: Client disputes the delivery
+  ;; Instruction data: [7, reason (1 byte)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 7)
+    (do
+      (sol_log_ ">>> DISPUTE JOB <<<")
+
+      (define job_status (mem-load1 state_ptr 57))
+      (if (!= job_status JOB_FUNDED)
+        (do (sol_log_ "ERR: No active job") 7)
+        (do
+          (define reason (mem-load1 instr_ptr 1))
+          (define job_id (mem-load state_ptr 41))
+
+          (sol_log_ "Disputing job:")
+          (sol_log_64_ job_id)
+          (sol_log_ "Reason code:")
+          (sol_log_64_ reason)
+
+          ;; Update state
+          (mem-store1 state_ptr 57 JOB_DISPUTED)
+
+          ;; Simulates: Calling dispute_resolution.ovsm (InitDispute)
+          (sol_log_ "[SIM] Created dispute case")
+          (sol_log_ "[SIM] Froze escrow pending resolution")
+
+          (sol_log_ "Dispute filed! Awaiting resolution.")
+          0)))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 8: QUERY STATUS
+  ;; View current demo state
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 8)
+    (do
+      (sol_log_ ">>> QUERY STATUS <<<")
+
+      (define phase (mem-load1 state_ptr 0))
+      (define agent_id (mem-load state_ptr 1))
+      (define tasks_ok (mem-load state_ptr 9))
+      (define tasks_fail (mem-load state_ptr 17))
+      (define trust (mem-load state_ptr 25))
+      (define price (mem-load state_ptr 33))
+      (define job_id (mem-load state_ptr 41))
+      (define escrow (mem-load state_ptr 49))
+      (define job_status (mem-load1 state_ptr 57))
+
+      (sol_log_ "Phase:")
+      (sol_log_64_ phase)
+      (sol_log_ "Agent ID:")
+      (sol_log_64_ agent_id)
+      (sol_log_ "Tasks OK:")
+      (sol_log_64_ tasks_ok)
+      (sol_log_ "Tasks Failed:")
+      (sol_log_64_ tasks_fail)
+      (sol_log_ "Trust Score:")
+      (sol_log_64_ trust)
+      (sol_log_ "Listing Price:")
+      (sol_log_64_ price)
+      (sol_log_ "Job ID:")
+      (sol_log_64_ job_id)
+      (sol_log_ "Escrow Amount:")
+      (sol_log_64_ escrow)
+      (sol_log_ "Job Status:")
+      (sol_log_64_ job_status)
+      0)
+    0)
+
+  (if (> discriminator 8)
+    (do (sol_log_ "ERR: Unknown instruction") 99)
+    0)
+
+  (sol_log_ "=== DEMO COMPLETE ===")
+  0)

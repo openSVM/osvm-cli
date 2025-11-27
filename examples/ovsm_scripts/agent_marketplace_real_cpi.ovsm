@@ -1,0 +1,312 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AGENT MARKETPLACE WITH REAL CPI - Reputation-Gated Service Listings
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; This version uses REAL Cross-Program Invocation (CPI) via cpi-invoke to call
+;;; the reputation_attestation program for threshold verification.
+;;;
+;;; Key Innovation: Instead of duplicating reputation checking logic, this
+;;; program calls the attestation program's VerifyThreshold instruction via CPI.
+;;; This is the COMPOSABLE pattern that allows any Solana program to use
+;;; agent reputation as a gating mechanism.
+;;;
+;;; Accounts Layout (extended for CPI):
+;;;   0: Listing PDA account
+;;;   1: Agent wallet (signer)
+;;;   2: Agent's Reputation NFT account
+;;;   3: Attestation output buffer (temp account for CPI result)
+;;;   4: Attestation program ID
+;;;   5: Fee vault (marketplace treasury)
+;;;
+;;; Instructions:
+;;;   0 = CreateListingCPI (CPI to attestation.VerifyThreshold)
+;;;   1 = UpdateListing (owner only)
+;;;   2 = AcceptJob (client hires agent)
+;;;   3 = CompleteListing (close and refund deposit)
+;;;   4 = QueryListingFee (returns fee based on reputation)
+;;;
+;;; CPI Data Flow:
+;;;   1. Marketplace receives CreateListing request
+;;;   2. Constructs VerifyThreshold instruction data: [2, min_tasks, min_rating, max_decay]
+;;;   3. CPI to attestation program with accounts [output_buffer, nft_account]
+;;;   4. Reads result from output_buffer: offset 0 = pass (0 or 1)
+;;;   5. If pass=1, proceeds with listing creation
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== MARKETPLACE REAL CPI ===")
+
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (define listing_ptr (account-data-ptr 0))
+  (define status (mem-load1 listing_ptr 0))
+
+  ;; Constants
+  (define STATUS_EMPTY 0)
+  (define STATUS_ACTIVE 1)
+  (define STATUS_HIRED 2)
+  (define STATUS_COMPLETED 3)
+  (define STATUS_CANCELLED 4)
+
+  (define BASE_FEE 10000000)
+  (define BASE_DEPOSIT 100000000)
+
+  ;; Threshold requirements (passed to attestation program)
+  (define MIN_TASKS 5)
+  (define MIN_RATING_X10 30)
+  (define MAX_DECAY 50)
+
+  ;; Heap address for building CPI data (decimal for 0x300000600)
+  (define HEAP_CPI_DATA 12884902400)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: CREATE LISTING WITH REAL CPI
+  ;; Calls attestation.VerifyThreshold via cpi-invoke before creating listing
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> CREATE LISTING (REAL CPI) <<<")
+
+      (if (!= status STATUS_EMPTY)
+        (do (sol_log_ "ERROR: Slot not empty") 1)
+        (do
+          (if (= (account-is-signer 1) 0)
+            (do (sol_log_ "ERROR: Agent must sign") 2)
+            (do
+              ;; ═══════════════════════════════════════════════════════════════
+              ;; BUILD CPI INSTRUCTION DATA AT HEAP
+              ;; ═══════════════════════════════════════════════════════════════
+              ;; Format: [discriminator=2, min_tasks, min_rating_x10, max_decay]
+              (sol_log_ "Building CPI instruction data...")
+              (mem-store1 HEAP_CPI_DATA 0 2)             ;; discriminator = 2 (VerifyThreshold)
+              (mem-store1 HEAP_CPI_DATA 1 MIN_TASKS)     ;; min_tasks
+              (mem-store1 HEAP_CPI_DATA 2 MIN_RATING_X10) ;; min_rating_x10
+              (mem-store1 HEAP_CPI_DATA 3 MAX_DECAY)     ;; max_decay
+
+              ;; ═══════════════════════════════════════════════════════════════
+              ;; INVOKE ATTESTATION PROGRAM VIA CPI
+              ;; ═══════════════════════════════════════════════════════════════
+              ;; cpi-invoke args:
+              ;;   program-idx: 4 (attestation program account)
+              ;;   data-ptr: HEAP_CPI_DATA (instruction data)
+              ;;   data-len: 4 (4 bytes)
+              ;;   accounts: [[3 1 0] [2 0 0]]
+              ;;     - Account 3: output buffer (writable=1, signer=0)
+              ;;     - Account 2: NFT account (writable=0, signer=0)
+              (sol_log_ "CPI: Calling attestation.VerifyThreshold...")
+              (define cpi_result (cpi-invoke 4 HEAP_CPI_DATA 4 [[3 1 0] [2 0 0]]))
+
+              ;; Check CPI call result (0 = success)
+              (if (!= cpi_result 0)
+                (do
+                  (sol_log_ "CPI FAILED: Call error")
+                  (sol_log_64_ cpi_result)
+                  3)
+                (do
+                  ;; ═══════════════════════════════════════════════════════════
+                  ;; READ CPI RESULT FROM OUTPUT BUFFER
+                  ;; ═══════════════════════════════════════════════════════════
+                  ;; The attestation program wrote result to account 3:
+                  ;; offset 0: pass (0 or 1)
+                  ;; offset 8: net_tasks
+                  ;; offset 16: rating_x10
+                  ;; offset 24: decay_factor
+                  (define output_ptr (account-data-ptr 3))
+                  (define threshold_pass (mem-load1 output_ptr 0))
+
+                  (sol_log_ "CPI result - threshold_pass:")
+                  (sol_log_64_ threshold_pass)
+
+                  (if (= threshold_pass 0)
+                    (do
+                      (sol_log_ "THRESHOLD NOT MET")
+                      ;; Read diagnostic values from output
+                      (define net_tasks (mem-load output_ptr 8))
+                      (define rating_x10 (mem-load output_ptr 16))
+                      (define decay_factor (mem-load output_ptr 24))
+                      (sol_log_64_ net_tasks)
+                      (sol_log_64_ rating_x10)
+                      (sol_log_64_ decay_factor)
+                      4)
+                    (do
+                      (sol_log_ "THRESHOLD PASSED - Creating listing")
+
+                      ;; ═══════════════════════════════════════════════════════
+                      ;; CPI TO ATTESTATION: GetCollateralDiscount
+                      ;; ═══════════════════════════════════════════════════════
+                      ;; Build second CPI call for discount calculation
+                      (mem-store1 HEAP_CPI_DATA 0 3)  ;; discriminator = 3 (GetCollateralDiscount)
+                      (define discount_result (cpi-invoke 4 HEAP_CPI_DATA 1 [[3 1 0] [2 0 0]]))
+
+                      ;; Read discount from output buffer (offset 8 after pass byte)
+                      (define discount (if (= discount_result 0)
+                                          (mem-load1 output_ptr 8)
+                                          0))  ;; Default to no discount if CPI fails
+
+                      ;; Apply discount to fees
+                      (define actual_fee (/ (* BASE_FEE (- 100 discount)) 100))
+                      (define actual_deposit (/ (* BASE_DEPOSIT (- 100 discount)) 100))
+
+                      ;; Read listing parameters from instruction data
+                      (define price (mem-load instr_ptr 1))
+                      (define category (mem-load1 instr_ptr 9))
+                      (define duration (mem-load instr_ptr 10))
+
+                      ;; Get current timestamp
+                      (define now (get-clock-timestamp))
+
+                      ;; Initialize listing
+                      (mem-store listing_ptr 0 STATUS_ACTIVE)
+                      (mem-store listing_ptr 1 category)
+                      (mem-store listing_ptr 8 price)
+                      (mem-store listing_ptr 16 actual_deposit)
+                      (mem-store listing_ptr 24 now)
+                      (mem-store listing_ptr 32 (+ now duration))
+
+                      ;; Store agent pubkey (32 bytes = 4 x 8-byte words)
+                      (define agent_pk (account-pubkey 1))
+                      (mem-store listing_ptr 40 (mem-load agent_pk 0))
+                      (mem-store listing_ptr 48 (mem-load agent_pk 8))
+                      (mem-store listing_ptr 56 (mem-load agent_pk 16))
+                      (mem-store listing_ptr 64 (mem-load agent_pk 24))
+
+                      (sol_log_ "Listing created via CPI!")
+                      (sol_log_ "Discount %:")
+                      (sol_log_64_ discount)
+                      0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: UPDATE LISTING
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> UPDATE LISTING <<<")
+      (if (!= status STATUS_ACTIVE)
+        (do (sol_log_ "ERROR: Not active") 10)
+        (do
+          (if (= (account-is-signer 1) 0)
+            (do (sol_log_ "ERROR: Owner must sign") 11)
+            (do
+              (define stored_pk_0 (mem-load listing_ptr 40))
+              (define agent_pk (account-pubkey 1))
+              (define caller_pk_0 (mem-load agent_pk 0))
+
+              (if (!= stored_pk_0 caller_pk_0)
+                (do (sol_log_ "ERROR: Not owner") 12)
+                (do
+                  (define new_price (mem-load instr_ptr 1))
+                  (define extend_duration (mem-load instr_ptr 9))
+
+                  (if (> new_price 0)
+                    (do (mem-store listing_ptr 8 new_price) 0)
+                    0)
+
+                  (if (> extend_duration 0)
+                    (do
+                      (define current_expiry (mem-load listing_ptr 32))
+                      (mem-store listing_ptr 32 (+ current_expiry extend_duration))
+                      0)
+                    0)
+
+                  (sol_log_ "Listing updated")
+                  0)))))))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: ACCEPT JOB
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 2)
+    (do
+      (sol_log_ ">>> ACCEPT JOB <<<")
+      (if (!= status STATUS_ACTIVE)
+        (do (sol_log_ "ERROR: Not available") 20)
+        (do
+          (define now (get-clock-timestamp))
+          (define expires (mem-load listing_ptr 32))
+          (if (> now expires)
+            (do (sol_log_ "ERROR: Listing expired") 21)
+            (do
+              (if (= (account-is-signer 1) 0)
+                (do (sol_log_ "ERROR: Client must sign") 22)
+                (do
+                  (define price (mem-load listing_ptr 8))
+                  (sol_log_ "Transferring to escrow:")
+                  (sol_log_64_ price)
+
+                  (mem-store listing_ptr 0 STATUS_HIRED)
+
+                  (define client_pk (account-pubkey 1))
+                  (mem-store listing_ptr 72 (mem-load client_pk 0))
+                  (mem-store listing_ptr 80 (mem-load client_pk 8))
+                  (mem-store listing_ptr 88 (mem-load client_pk 16))
+                  (mem-store listing_ptr 96 (mem-load client_pk 24))
+
+                  (sol_log_ "Job accepted!")
+                  0)))))))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: COMPLETE LISTING
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 3)
+    (do
+      (sol_log_ ">>> COMPLETE LISTING <<<")
+      (if (= status STATUS_EMPTY)
+        (do (sol_log_ "ERROR: No listing") 30)
+        (do
+          (if (= (account-is-signer 1) 0)
+            (do (sol_log_ "ERROR: Must sign") 31)
+            (do
+              (define deposit (mem-load listing_ptr 16))
+              (sol_log_ "Refunding deposit:")
+              (sol_log_64_ deposit)
+
+              (mem-store listing_ptr 0 STATUS_COMPLETED)
+
+              (sol_log_ "Listing completed!")
+              0)))))
+    0)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 4: QUERY LISTING FEE (uses CPI for discount)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 4)
+    (do
+      (sol_log_ ">>> QUERY FEE (CPI) <<<")
+
+      ;; CPI to attestation.GetCollateralDiscount
+      (mem-store1 HEAP_CPI_DATA 0 3)  ;; discriminator = 3
+      (define cpi_result (cpi-invoke 4 HEAP_CPI_DATA 1 [[3 1 0] [2 0 0]]))
+
+      (if (!= cpi_result 0)
+        (do
+          (sol_log_ "No reputation: Full fee")
+          (sol_log_64_ BASE_FEE)
+          BASE_FEE)
+        (do
+          (define output_ptr (account-data-ptr 3))
+          (define pass (mem-load1 output_ptr 0))
+          (define discount (mem-load1 output_ptr 8))
+          (define trust_score (mem-load output_ptr 16))
+
+          (define actual_fee (/ (* BASE_FEE (- 100 discount)) 100))
+          (define actual_deposit (/ (* BASE_DEPOSIT (- 100 discount)) 100))
+
+          (sol_log_ "Trust score:")
+          (sol_log_64_ trust_score)
+          (sol_log_ "Discount %:")
+          (sol_log_64_ discount)
+          (sol_log_ "Listing fee:")
+          (sol_log_64_ actual_fee)
+          actual_fee)))
+    0)
+
+  ;; Unknown instruction
+  (if (> discriminator 4)
+    (do (sol_log_ "ERROR: Unknown") 99)
+    0)
+
+  (sol_log_ "=== MARKETPLACE REAL CPI COMPLETE ===")
+  0)

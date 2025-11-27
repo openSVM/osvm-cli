@@ -1,0 +1,328 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; REPUTATION ATTESTATION PROGRAM
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; Purpose:
+;;; - Allow third-party programs to query agent reputation via CPI
+;;; - Generate cryptographic attestations that can be verified on-chain
+;;; - Support composable reputation: DEXes, lending, marketplaces can all use it
+;;;
+;;; Design Philosophy:
+;;; - READ-ONLY: This program only reads reputation, never modifies it
+;;; - VERIFIABLE: Returns attestation with timestamp and signature
+;;; - COMPOSABLE: Other programs can CPI into this to gate actions
+;;;
+;;; Use Cases:
+;;; 1. DEX: Require min reputation to be a market maker
+;;; 2. Lending: Adjust collateral requirements based on reputation
+;;; 3. Marketplace: Gate access to premium features
+;;; 4. Insurance: Price coverage based on historical reliability
+;;;
+;;; Accounts Layout:
+;;;   0: Attestation output account (caller-provided, writable)
+;;;   1: Reputation NFT account (read-only)
+;;;   2: Clock sysvar (for timestamp)
+;;;
+;;; Instructions:
+;;;   0 = QueryReputation (returns raw stats)
+;;;   1 = AttestReputation (returns signed attestation struct)
+;;;   2 = VerifyThreshold (returns bool: meets min requirements?)
+;;;   3 = GetCollateralDiscount (returns discount percentage 0-90)
+;;;
+;;; Attestation Output Layout (64 bytes):
+;;;   offset 0:   u8 valid (0=invalid, 1=valid)
+;;;   offset 1:   u8 version
+;;;   offset 8:   u64 timestamp (when attestation was created)
+;;;   offset 16:  u64 net_tasks (completed - failed*2)
+;;;   offset 24:  u64 rating_x10 (average * 10, e.g., 45 = 4.5 stars)
+;;;   offset 32:  u64 decay_factor (0-100, how much reputation is decayed)
+;;;   offset 40:  u64 trust_score (0-100 combined score)
+;;;   offset 48:  u64 collateral_discount (0-90, percentage discount)
+;;;   offset 56:  8 bytes reserved
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== REPUTATION ATTESTATION ===")
+
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (define output_ptr (account-data-ptr 0))
+  (define nft_ptr (account-data-ptr 1))
+  (define nft_initialized (mem-load1 nft_ptr 0))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: QUERY REPUTATION
+  ;; Returns raw reputation stats to output account
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> QUERY REPUTATION <<<")
+      (if (!= nft_initialized 1)
+        (do
+          (sol_log_ "No reputation found")
+          ;; Write invalid attestation
+          (mem-store output_ptr 0 0)  ;; valid = 0
+          1)
+        (do
+          ;; Read stats from NFT
+          (define tasks_ok (mem-load nft_ptr 8))
+          (define tasks_fail (mem-load nft_ptr 16))
+          (define total_r (mem-load nft_ptr 40))
+          (define sum (mem-load nft_ptr 48))
+          (define last_active (mem-load nft_ptr 80))
+
+          ;; Calculate derived values
+          (define net_tasks (- tasks_ok (* tasks_fail 2)))
+          (define rating_x10 (if (> total_r 0)
+                               (/ (* sum 10) total_r)
+                               0))
+
+          ;; Calculate decay
+          (define now (get-clock-timestamp))
+          (define days_inactive (/ (- now last_active) 86400))
+          (define decay_factor
+            (if (>= days_inactive 30)
+              100
+              (/ (* days_inactive 100) 30)))
+
+          ;; Write output
+          (mem-store output_ptr 0 1)           ;; valid = 1
+          (mem-store output_ptr 1 1)           ;; version = 1
+          (mem-store output_ptr 8 now)         ;; timestamp
+          (mem-store output_ptr 16 net_tasks)  ;; net_tasks
+          (mem-store output_ptr 24 rating_x10) ;; rating_x10
+          (mem-store output_ptr 32 decay_factor) ;; decay_factor
+
+          (sol_log_ "Query complete")
+          (sol_log_ "Net tasks:")
+          (sol_log_64_ net_tasks)
+          (sol_log_ "Rating x10:")
+          (sol_log_64_ rating_x10)
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 1: ATTEST REPUTATION
+  ;; Returns full attestation with trust score and collateral discount
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> ATTEST REPUTATION <<<")
+      (if (!= nft_initialized 1)
+        (do
+          (sol_log_ "No reputation - zero attestation")
+          (mem-store output_ptr 0 0)  ;; valid = 0
+          1)
+        (do
+          ;; Read all stats
+          (define tasks_ok (mem-load nft_ptr 8))
+          (define tasks_fail (mem-load nft_ptr 16))
+          (define disputes_won (mem-load nft_ptr 24))
+          (define disputes_lost (mem-load nft_ptr 32))
+          (define total_r (mem-load nft_ptr 40))
+          (define sum (mem-load nft_ptr 48))
+          (define value_delivered (mem-load nft_ptr 56))
+          (define value_failed (mem-load nft_ptr 64))
+          (define last_active (mem-load nft_ptr 80))
+
+          ;; Calculate net tasks with 2x failure penalty
+          (define net_tasks (- tasks_ok (* tasks_fail 2)))
+
+          ;; Calculate rating (0-50 scale, x10)
+          (define rating_x10 (if (> total_r 0)
+                               (/ (* sum 10) total_r)
+                               0))
+
+          ;; Calculate decay factor (0-100)
+          (define now (get-clock-timestamp))
+          (define days_inactive (/ (- now last_active) 86400))
+          (define decay_factor
+            (if (>= days_inactive 30)
+              100
+              (/ (* days_inactive 100) 30)))
+
+          ;; Calculate trust score (0-100)
+          ;; Components:
+          ;;   - Task reliability (net_tasks / total * 50)
+          ;;   - Rating quality (rating_x10 / 5 * 30)
+          ;;   - Dispute record (won / total * 20)
+          (define total_tasks (+ tasks_ok tasks_fail))
+          (define task_score
+            (if (= total_tasks 0)
+              0
+              (if (< net_tasks 0)
+                0
+                (/ (* net_tasks 50) total_tasks))))
+
+          (define rating_score (/ (* rating_x10 30) 50))
+
+          (define total_disputes (+ disputes_won disputes_lost))
+          (define dispute_score
+            (if (= total_disputes 0)
+              10  ;; Neutral if no disputes
+              (/ (* disputes_won 20) total_disputes)))
+
+          (define raw_trust (+ task_score (+ rating_score dispute_score)))
+
+          ;; Apply decay to trust score
+          (define trust_score
+            (if (>= decay_factor 100)
+              0
+              (/ (* raw_trust (- 100 decay_factor)) 100)))
+
+          ;; Calculate collateral discount (0-90%)
+          ;; trust_score 100 = 90% discount
+          ;; trust_score 0 = 0% discount
+          (define collateral_discount (/ (* trust_score 90) 100))
+
+          ;; Write full attestation
+          (mem-store output_ptr 0 1)               ;; valid = 1
+          (mem-store output_ptr 1 2)               ;; version = 2 (full attest)
+          (mem-store output_ptr 8 now)             ;; timestamp
+          (mem-store output_ptr 16 net_tasks)      ;; net_tasks
+          (mem-store output_ptr 24 rating_x10)     ;; rating_x10
+          (mem-store output_ptr 32 decay_factor)   ;; decay_factor
+          (mem-store output_ptr 40 trust_score)    ;; trust_score
+          (mem-store output_ptr 48 collateral_discount) ;; collateral_discount
+
+          (sol_log_ "Attestation complete")
+          (sol_log_ "Trust score:")
+          (sol_log_64_ trust_score)
+          (sol_log_ "Collateral discount %:")
+          (sol_log_64_ collateral_discount)
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 2: VERIFY THRESHOLD
+  ;; Returns 0 if agent meets minimum requirements, error code otherwise
+  ;; Instruction data: byte 1 = min_tasks, byte 2 = min_rating_x10, byte 3 = max_decay
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 2)
+    (do
+      (sol_log_ ">>> VERIFY THRESHOLD <<<")
+      (if (!= nft_initialized 1)
+        (do
+          (sol_log_ "FAIL: No reputation")
+          (mem-store output_ptr 0 0)
+          10)
+        (do
+          ;; Read threshold requirements from instruction
+          (define min_tasks (mem-load1 instr_ptr 1))
+          (define min_rating_x10 (mem-load1 instr_ptr 2))
+          (define max_decay (mem-load1 instr_ptr 3))
+
+          ;; Calculate current values
+          (define tasks_ok (mem-load nft_ptr 8))
+          (define tasks_fail (mem-load nft_ptr 16))
+          (define net_tasks (- tasks_ok (* tasks_fail 2)))
+
+          (define total_r (mem-load nft_ptr 40))
+          (define sum (mem-load nft_ptr 48))
+          (define rating_x10 (if (> total_r 0)
+                               (/ (* sum 10) total_r)
+                               0))
+
+          (define now (get-clock-timestamp))
+          (define last_active (mem-load nft_ptr 80))
+          (define days_inactive (/ (- now last_active) 86400))
+          (define decay_factor
+            (if (>= days_inactive 30)
+              100
+              (/ (* days_inactive 100) 30)))
+
+          ;; Check thresholds - simplified structure
+          (define pass
+            (if (< net_tasks min_tasks)
+              0
+              (if (< rating_x10 min_rating_x10)
+                0
+                (if (> decay_factor max_decay)
+                  0
+                  1))))
+
+          (if (= pass 0)
+            (do
+              (sol_log_ "FAIL: Threshold not met")
+              (mem-store output_ptr 0 0)
+              11)
+            (do
+              (sol_log_ "PASS: Threshold met")
+              (mem-store output_ptr 0 1)
+              (mem-store output_ptr 8 (get-clock-timestamp))
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 3: GET COLLATERAL DISCOUNT
+  ;; Returns the percentage discount (0-90) for collateral requirements
+  ;; Third-party lending/escrow programs can use this to reduce deposits
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 3)
+    (do
+      (sol_log_ ">>> GET COLLATERAL DISCOUNT <<<")
+      (if (!= nft_initialized 1)
+        (do
+          (sol_log_ "No reputation: 0% discount")
+          (mem-store output_ptr 0 1)
+          (mem-store output_ptr 8 0)  ;; 0% discount
+          0)
+        (do
+          ;; Calculate trust score (same as ATTEST)
+          (define tasks_ok (mem-load nft_ptr 8))
+          (define tasks_fail (mem-load nft_ptr 16))
+          (define disputes_won (mem-load nft_ptr 24))
+          (define disputes_lost (mem-load nft_ptr 32))
+          (define total_r (mem-load nft_ptr 40))
+          (define sum (mem-load nft_ptr 48))
+          (define last_active (mem-load nft_ptr 80))
+
+          (define net_tasks (- tasks_ok (* tasks_fail 2)))
+          (define total_tasks (+ tasks_ok tasks_fail))
+          (define task_score
+            (if (= total_tasks 0)
+              0
+              (if (< net_tasks 0)
+                0
+                (/ (* net_tasks 50) total_tasks))))
+
+          (define rating_x10 (if (> total_r 0)
+                               (/ (* sum 10) total_r)
+                               0))
+          (define rating_score (/ (* rating_x10 30) 50))
+
+          (define total_disputes (+ disputes_won disputes_lost))
+          (define dispute_score
+            (if (= total_disputes 0)
+              10
+              (/ (* disputes_won 20) total_disputes)))
+
+          (define raw_trust (+ task_score (+ rating_score dispute_score)))
+
+          ;; Apply decay
+          (define now (get-clock-timestamp))
+          (define days_inactive (/ (- now last_active) 86400))
+          (define trust_score
+            (if (>= days_inactive 30)
+              0
+              (/ (* raw_trust (- 30 days_inactive)) 30)))
+
+          ;; Calculate discount: trust_score * 90 / 100
+          (define discount (/ (* trust_score 90) 100))
+
+          (mem-store output_ptr 0 1)
+          (mem-store output_ptr 8 discount)
+
+          (sol_log_ "Discount %:")
+          (sol_log_64_ discount)
+          discount)))
+    null)
+
+  ;; Unknown instruction
+  (if (> discriminator 3)
+    (do (sol_log_ "ERROR: Unknown") 99)
+    null)
+
+  (sol_log_ "=== ATTESTATION COMPLETE ===")
+  0)

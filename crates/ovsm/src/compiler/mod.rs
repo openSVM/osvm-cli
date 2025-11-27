@@ -30,6 +30,7 @@ pub mod runtime;
 pub mod debug;
 pub mod solana_abi;
 pub mod regalloc_analyzer;
+pub mod graph_coloring;
 
 pub use types::{OvsmType, TypeChecker, TypeEnv};
 pub use ir::{IrProgram, IrInstruction, IrReg, IrGenerator};

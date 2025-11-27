@@ -568,11 +568,11 @@ impl SbpfInstruction {
 // REGISTER ALLOCATOR
 // =============================================================================
 
-/// Linear scan register allocator
+/// Register allocator with graph coloring support
 struct RegisterAllocator {
     /// Virtual -> physical register mapping
     allocation: HashMap<IrReg, SbpfReg>,
-    /// Available registers (R6-R9 for general use)
+    /// Available registers (for fallback allocation)
     available: Vec<SbpfReg>,
     /// Spill locations on stack (offset from R10)
     spills: HashMap<IrReg, i16>,
@@ -580,6 +580,8 @@ struct RegisterAllocator {
     next_spill: i16,
     /// Registers that were used (need save/restore)
     used_callee_saved: Vec<SbpfReg>,
+    /// Whether using graph coloring (pre-computed allocation)
+    use_graph_coloring: bool,
 }
 
 impl RegisterAllocator {
@@ -603,13 +605,40 @@ impl RegisterAllocator {
             spills: HashMap::new(),
             next_spill: -8, // Grow downward from frame pointer
             used_callee_saved: Vec::new(),
+            use_graph_coloring: false,
+        }
+    }
+
+    /// Create allocator from graph coloring result
+    fn from_graph_coloring(result: super::graph_coloring::AllocationResult) -> Self {
+        let mut used_callee_saved = Vec::new();
+
+        // Track which callee-saved registers are used
+        for &phys in result.allocation.values() {
+            if phys.is_callee_saved() && !used_callee_saved.contains(&phys) {
+                used_callee_saved.push(phys);
+            }
+        }
+
+        Self {
+            allocation: result.allocation,
+            available: vec![], // Not used with graph coloring
+            spills: result.spills,
+            next_spill: -8 - (result.frame_size as i16),
+            used_callee_saved,
+            use_graph_coloring: true,
         }
     }
 
     /// Allocate a physical register for a virtual register
-    /// Returns (phys_reg, needs_reload) - if needs_reload, must emit ldx from stack
+    /// With graph coloring, this is just a lookup into pre-computed allocation
     fn allocate(&mut self, virt: IrReg) -> SbpfReg {
-        // Already allocated?
+        // With graph coloring, everything is pre-computed
+        if self.use_graph_coloring {
+            return self.allocation.get(&virt).copied().unwrap_or(SbpfReg::R0);
+        }
+
+        // Fallback: linear allocation (original behavior)
         if let Some(&phys) = self.allocation.get(&virt) {
             return phys;
         }
@@ -624,8 +653,6 @@ impl RegisterAllocator {
         }
 
         // All registers used - need to spill
-        // Pick oldest allocation to evict (simple LRU approximation)
-        // For now, just assign a spill slot and return a scratch reg
         if !self.spills.contains_key(&virt) {
             self.spills.insert(virt, self.next_spill);
             self.next_spill -= 8;
@@ -691,6 +718,8 @@ pub struct SbpfCodegen {
     pub string_load_sites: Vec<StringLoadSite>,
     /// SBPF version to generate
     sbpf_version: super::SbpfVersion,
+    /// Whether to use graph coloring register allocation
+    use_graph_coloring: bool,
 }
 
 impl SbpfCodegen {
@@ -706,7 +735,15 @@ impl SbpfCodegen {
             syscall_sites: Vec::new(),
             string_load_sites: Vec::new(),
             sbpf_version,
+            use_graph_coloring: true, // Enable by default for optimal allocation
         }
+    }
+
+    /// Create codegen with graph coloring enabled/disabled
+    pub fn with_graph_coloring(sbpf_version: super::SbpfVersion, enabled: bool) -> Self {
+        let mut codegen = Self::new(sbpf_version);
+        codegen.use_graph_coloring = enabled;
+        codegen
     }
 
     /// Add a string to rodata and return its index
@@ -740,6 +777,15 @@ impl SbpfCodegen {
 
     /// Generate sBPF from IR
     pub fn generate(&mut self, ir: &IrProgram) -> Result<Vec<SbpfInstruction>> {
+        // Run graph coloring register allocation if enabled
+        if self.use_graph_coloring {
+            let mut gc_alloc = super::graph_coloring::GraphColoringAllocator::new();
+            let result = gc_alloc.allocate(ir);
+
+            // Replace the default allocator with one using graph coloring results
+            self.reg_alloc = RegisterAllocator::from_graph_coloring(result);
+        }
+
         // Copy string table from IR to rodata
         for s in &ir.string_table {
             self.add_string(s);

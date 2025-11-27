@@ -141,3 +141,106 @@ This is useful for testing:
 - Keyboard input handling
 - Animation/refresh behavior
 - Real terminal escape code rendering
+
+## tmux Auto-Tiling (btop-style)
+
+For parallel testing of multiple TUI views, use `TmuxTiledSession` with auto-tiling layouts:
+
+### Available Layouts
+
+| Layout | Description |
+|--------|-------------|
+| `TileLayout::Single` | Single pane (no tiling) |
+| `TileLayout::MainVertical` | Main pane left, stacked panes right (i3-style) |
+| `TileLayout::MainHorizontal` | Main pane top, stacked panes below |
+| `TileLayout::EvenHorizontal` | All panes side-by-side |
+| `TileLayout::EvenVertical` | All panes stacked vertically |
+| `TileLayout::Tiled` | Grid layout (tmux built-in tiled) |
+| `TileLayout::MainVerticalRatio(70)` | Main pane takes 70% width |
+| `TileLayout::MainHorizontalRatio(65)` | Main pane takes 65% height |
+
+### Basic Usage
+
+```rust
+use osvm::utils::tui::{TmuxTiledSession, TileLayout};
+
+// Create a 2x2 tiled session
+let mut session = TmuxTiledSession::new(160, 48)?
+    .with_layout(TileLayout::Tiled);
+
+// Split into 4 panes
+session.split_panes(4)?;
+
+// Run different commands in each pane
+session.run_in_pane(0, "osvm research WALLET1 --tui")?;
+session.run_in_pane(1, "osvm research WALLET2 --tui")?;
+session.run_in_pane(2, "osvm chat")?;
+session.run_in_pane(3, "htop")?;
+
+// Capture all panes at once
+let captures = session.capture_all()?;
+println!("Pane 0: {}", captures.get_pane(0).unwrap());
+```
+
+### Predefined Layouts
+
+For common testing scenarios, use predefined layouts:
+
+```rust
+// Dashboard: Main view (70%) + 3 smaller panes stacked
+let session = TmuxTiledSession::create_test_layout("dashboard", 160, 48)?;
+
+// Side-by-side comparison (2 panes)
+let session = TmuxTiledSession::create_test_layout("comparison", 160, 48)?;
+
+// 2x2 grid
+let session = TmuxTiledSession::create_test_layout("quad", 160, 48)?;
+
+// btop-style: large top panel + 2 bottom panels
+let session = TmuxTiledSession::create_test_layout("monitoring", 160, 48)?;
+
+// Vertical stack (3 panes)
+let session = TmuxTiledSession::create_test_layout("vertical-stack", 160, 48)?;
+```
+
+### TiledTestBuilder for Declarative Tests
+
+For complex test scenarios with validation:
+
+```rust
+use osvm::utils::tui::{TiledTestBuilder, TileLayout};
+
+let result = TiledTestBuilder::new(160, 48)
+    .layout(TileLayout::EvenHorizontal)
+    .add_command("echo_test", "echo 'Expected output'")
+    .add_command("pwd_test", "pwd")
+    .run()?;
+
+// Check if all validations passed
+assert!(result.all_passed);
+println!("{}", result.summary());
+
+// Save all captures for review
+result.save_captures(Path::new("/tmp/test_output"), "my_test")?;
+```
+
+### Features
+
+- **Auto-tiling**: Automatic pane arrangement like i3wm/sway
+- **Parallel capture**: Capture all panes simultaneously
+- **Synchronized input**: Send keystrokes to all panes at once
+- **Wait for stability**: Wait until output stops changing
+- **Unique sessions**: Each test gets a unique tmux session name (thread-safe)
+- **Auto-cleanup**: Sessions are automatically killed on drop
+
+### Running tmux Integration Tests
+
+The tmux integration tests are marked as `#[ignore]` by default (require tmux):
+
+```bash
+# Run tmux integration tests
+cargo test --lib utils::tui::screenshot_test::tmux_integration_tests -- --ignored
+
+# Run with verbose output
+cargo test --lib utils::tui::screenshot_test::tmux_integration_tests -- --ignored --nocapture
+```

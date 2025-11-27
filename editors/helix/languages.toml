@@ -1,0 +1,38 @@
+# OVSM Language Support for Helix
+# ================================
+# Copy this file to ~/.config/helix/languages.toml
+# or merge with your existing configuration
+
+[[language]]
+name = "ovsm"
+scope = "source.ovsm"
+injection-regex = "ovsm"
+file-types = ["ovsm"]
+roots = []
+comment-token = ";"
+indent = { tab-width = 2, unit = "  " }
+language-servers = ["ovsm-lsp"]
+# Use Scheme grammar for basic S-expression highlighting
+grammar = "scheme"
+
+# Auto-pairs for parentheses, brackets, braces, and strings
+[[language.auto-pairs]]
+open = "("
+close = ")"
+
+[[language.auto-pairs]]
+open = "["
+close = "]"
+
+[[language.auto-pairs]]
+open = "{"
+close = "}"
+
+[[language.auto-pairs]]
+open = '"'
+close = '"'
+
+# OVSM Language Server configuration
+[language-server.ovsm-lsp]
+command = "ovsm-lsp"
+args = []

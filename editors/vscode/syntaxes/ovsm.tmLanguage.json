@@ -1,0 +1,103 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "OVSM",
+  "scopeName": "source.ovsm",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#boolean" },
+    { "include": "#null" },
+    { "include": "#keyword" },
+    { "include": "#builtin" },
+    { "include": "#operator" },
+    { "include": "#keyword-argument" },
+    { "include": "#identifier" },
+    { "include": "#brackets" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.semicolon.ovsm",
+      "match": ";.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.ovsm",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.ovsm",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.ovsm",
+          "match": "-?[0-9]+\\.[0-9]+"
+        },
+        {
+          "name": "constant.numeric.integer.ovsm",
+          "match": "-?[0-9]+"
+        }
+      ]
+    },
+    "boolean": {
+      "name": "constant.language.boolean.ovsm",
+      "match": "\\b(true|false)\\b"
+    },
+    "null": {
+      "name": "constant.language.null.ovsm",
+      "match": "\\b(null|nil)\\b"
+    },
+    "keyword": {
+      "name": "keyword.control.ovsm",
+      "match": "(?<=\\()\\s*(if|define|set!|let|let\\*|lambda|do|progn|while|for|when|unless|cond|case|typecase|defun|defn|defmacro|const|catch|throw|loop|flet|labels|destructuring-bind)\\b"
+    },
+    "builtin": {
+      "name": "support.function.ovsm",
+      "match": "(?<=\\()\\s*(null\\?|empty\\?|evenp|oddp|zerop|positivep|negativep|typeof|type-of|atom|consp|listp|length|get|first|rest|last|cons|append|reverse|range|mapcar|map|filter|reduce|member|assoc|elt|subseq|sort|keys|values|merge|concat|split|join|replace|trim|upper|lower|sqrt|pow|expt|exp|ln|abs|min|max|sin|cos|tan|asin|acos|atan|floor|ceiling|ceil|round|truncate|trunc|gcd|lcm|mod|rem|logand|logior|logxor|lognot|ash|int|integer|float|bool|string|parse-int|parse-float|log|print|assert|error|now|not|and|or|incf|decf|gensym|defvar)\\b"
+    },
+    "operator": {
+      "name": "keyword.operator.ovsm",
+      "match": "(?<=\\()\\s*([\\+\\-\\*\\/\\%]|==|!=|<=|>=|<|>|=)(?=\\s)"
+    },
+    "keyword-argument": {
+      "name": "variable.parameter.ovsm",
+      "match": ":[a-zA-Z_][a-zA-Z0-9_\\-]*"
+    },
+    "identifier": {
+      "name": "variable.other.ovsm",
+      "match": "[a-zA-Z_][a-zA-Z0-9_\\-\\?\\!\\*\\+\\/]*"
+    },
+    "brackets": {
+      "patterns": [
+        {
+          "name": "punctuation.paren.open.ovsm",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.paren.close.ovsm",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.bracket.open.ovsm",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.bracket.close.ovsm",
+          "match": "\\]"
+        },
+        {
+          "name": "punctuation.brace.open.ovsm",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.brace.close.ovsm",
+          "match": "\\}"
+        }
+      ]
+    }
+  }
+}
