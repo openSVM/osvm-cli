@@ -25,10 +25,12 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_yaml = "0.9.34"
 # solana-clap-utils removed - replaced by src/utils/validators.rs to eliminate clap 2.x vulnerabilities
 # solana-cli-config removed - replaced by src/utils/config_loader.rs (it depends on solana-clap-utils)
-solana-client = "3.0.1"
-solana-logger = "3.0.0"
-solana-remote-wallet = { version = "3.0.1", optional = true }
-solana-sdk = "3.0.0"
+# Anza/Agave SDK crates - updated to latest available versions 2025-11-27
+# Note: Crates are independently versioned by Anza
+solana-client = "3.1"           # 3.1.2 (updated from 3.0.1)
+solana-logger = "3.0"           # 3.0.0 (no newer version)
+solana-remote-wallet = { version = "3.0", optional = true }
+solana-sdk = "3.0"              # 3.0.0 (no newer version)
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs", "process", "signal"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-vsock = "0.4"
@@ -97,12 +99,12 @@ diesel = { version = "2.3.2", features = ["sqlite", "returning_clauses_for_sqlit
 meshtastic = "0.1.7"
 # config crate removed - was unused dependency pulling in json5 vulnerability
 validator = { version = "0.20", features = ["derive"] }
-solana-commitment-config = "3.0.0"
-solana-sdk-ids = "3.0.0"
-solana-program = "3.0.0"
-solana-transaction-status = "3.0.0"
-solana-system-interface = "2.0.0"
-solana-loader-v3-interface = { version = "6.1.0", features = ["bincode"] }
+solana-commitment-config = "3.1"    # 3.1.0 (updated)
+solana-sdk-ids = "3.1"              # 3.1.0 (updated)
+solana-program = "3.0"              # 3.0.0 (no newer)
+solana-transaction-status = "3.1"   # 3.1.2 (updated)
+solana-system-interface = { version = "3.0", features = ["bincode"] }  # 3.0.0 (was 2.0)
+solana-loader-v3-interface = { version = "6.1", features = ["bincode"] }
 # Terminal markdown rendering
 termimad = "0.30"
 # PNG screenshot generation for TUI testing
