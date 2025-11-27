@@ -579,6 +579,9 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     // Get Tokio runtime handle for spawning async tasks
     let runtime_handle = tokio::runtime::Handle::current();
 
+    // Initialize chat AI integration with the runtime handle
+    app.set_runtime_handle(runtime_handle.clone());
+
     // Spawn real research agent in background thread
     let agent_handle = std::thread::spawn(move || {
         // Block on async agent execution

@@ -1188,10 +1188,26 @@ async fn run_autonomous_investigation(
     // Create AI service for synthesis
     let ai_service = crate::services::ai_service::AiService::new();
 
+    // Build hypothesis section if provided
+    let hypothesis_section = if let Some(ref h) = hypothesis {
+        format!(r#"
+
+HYPOTHESIS TO TEST: "{}"
+
+You MUST include a dedicated "Hypothesis Verdict" section with:
+- **SUPPORTED** / **REFUTED** / **INCONCLUSIVE** verdict
+- Evidence supporting the hypothesis
+- Evidence against the hypothesis
+- Confidence level (High/Medium/Low)
+"#, h)
+    } else {
+        String::new()
+    };
+
     let analysis_prompt = format!(
         r#"You are a blockchain forensics expert. Analyze this investigation data and provide a comprehensive report.
 
-TARGET WALLET: {}
+TARGET WALLET: {}{}
 
 EXPLORATION SUMMARY:
 - Wallets explored: {}
@@ -1205,7 +1221,7 @@ WALLET EXPLORATION LOG:
 {}
 
 Generate a forensic report with:
-1. **Executive Summary** (2-3 sentences)
+1. **Executive Summary** (2-3 sentences){}
 2. **Key Findings** (bullet points)
 3. **Risk Assessment** (Low/Medium/High/Critical with explanation)
 4. **Wallet Relationships** (key connections identified)
@@ -1213,11 +1229,13 @@ Generate a forensic report with:
 
 Be specific. Use actual wallet addresses (never truncate). Include amounts where relevant."#,
         target_wallet,
+        hypothesis_section,
         visited.len(),
         all_transfers.len(),
         MAX_INVESTIGATION_DEPTH,
         findings.iter().map(|f| format!("• [{}] {}: {}", severity_str(&f.severity), f.title, f.description)).collect::<Vec<_>>().join("\n"),
-        wallet_summaries.join("\n")
+        wallet_summaries.join("\n"),
+        if hypothesis.is_some() { "\n6. **Hypothesis Verdict** (SUPPORTED/REFUTED/INCONCLUSIVE with evidence)" } else { "" }
     );
 
     let report = match ai_service.query_osvm_ai_with_options(&analysis_prompt, None, Some(true), false).await {
