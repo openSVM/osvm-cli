@@ -465,10 +465,40 @@ impl RegAllocAnalyzer {
                 uses.push(*base);
                 desc = format!("Load R{} = [R{}+{}]", dst.0, base.0, offset);
             }
+            IrInstruction::Load1(dst, base, offset) => {
+                defs.push(*dst);
+                uses.push(*base);
+                desc = format!("Load1 R{} = (u8)[R{}+{}]", dst.0, base.0, offset);
+            }
+            IrInstruction::Load2(dst, base, offset) => {
+                defs.push(*dst);
+                uses.push(*base);
+                desc = format!("Load2 R{} = (u16)[R{}+{}]", dst.0, base.0, offset);
+            }
+            IrInstruction::Load4(dst, base, offset) => {
+                defs.push(*dst);
+                uses.push(*base);
+                desc = format!("Load4 R{} = (u32)[R{}+{}]", dst.0, base.0, offset);
+            }
             IrInstruction::Store(base, src, offset) => {
                 uses.push(*base);
                 uses.push(*src);
                 desc = format!("Store [R{}+{}] = R{}", base.0, offset, src.0);
+            }
+            IrInstruction::Store1(base, src, offset) => {
+                uses.push(*base);
+                uses.push(*src);
+                desc = format!("Store1 (u8)[R{}+{}] = R{}", base.0, offset, src.0);
+            }
+            IrInstruction::Store2(base, src, offset) => {
+                uses.push(*base);
+                uses.push(*src);
+                desc = format!("Store2 (u16)[R{}+{}] = R{}", base.0, offset, src.0);
+            }
+            IrInstruction::Store4(base, src, offset) => {
+                uses.push(*base);
+                uses.push(*src);
+                desc = format!("Store4 (u32)[R{}+{}] = R{}", base.0, offset, src.0);
             }
             IrInstruction::Alloc(dst, size) => {
                 defs.push(*dst);

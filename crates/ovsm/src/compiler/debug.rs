@@ -51,7 +51,13 @@ pub fn format_ir_instr(instr: &IrInstruction) -> String {
         IrInstruction::Move(dst, src) => format!("r{} = r{}", dst.0, src.0),
 
         IrInstruction::Load(dst, base, off) => format!("r{} = [r{} + {}]", dst.0, base.0, off),
+        IrInstruction::Load1(dst, base, off) => format!("r{} = (u8)[r{} + {}]", dst.0, base.0, off),
+        IrInstruction::Load2(dst, base, off) => format!("r{} = (u16)[r{} + {}]", dst.0, base.0, off),
+        IrInstruction::Load4(dst, base, off) => format!("r{} = (u32)[r{} + {}]", dst.0, base.0, off),
         IrInstruction::Store(base, src, off) => format!("[r{} + {}] = r{}", base.0, off, src.0),
+        IrInstruction::Store1(base, src, off) => format!("(u8)[r{} + {}] = r{}", base.0, off, src.0),
+        IrInstruction::Store2(base, src, off) => format!("(u16)[r{} + {}] = r{}", base.0, off, src.0),
+        IrInstruction::Store4(base, src, off) => format!("(u32)[r{} + {}] = r{}", base.0, off, src.0),
 
         IrInstruction::Label(name) => format!("{}:", name),
         IrInstruction::Jump(target) => format!("jmp {}", target),

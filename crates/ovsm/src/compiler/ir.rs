@@ -49,6 +49,20 @@ impl FieldType {
             _ => None,
         }
     }
+
+    /// Convert to Anchor IDL type string
+    pub fn to_idl_type(&self) -> &'static str {
+        match self {
+            FieldType::U8 => "u8",
+            FieldType::U16 => "u16",
+            FieldType::U32 => "u32",
+            FieldType::U64 => "u64",
+            FieldType::I8 => "i8",
+            FieldType::I16 => "i16",
+            FieldType::I32 => "i32",
+            FieldType::I64 => "i64",
+        }
+    }
 }
 
 /// A field in a struct definition
@@ -65,6 +79,35 @@ pub struct StructDef {
     pub name: String,
     pub fields: Vec<StructField>,
     pub total_size: i64,
+}
+
+impl StructDef {
+    /// Generate Anchor IDL JSON for this struct
+    /// This enables TypeScript clients to interact with OVSM programs
+    pub fn to_anchor_idl(&self) -> String {
+        let mut fields_json = Vec::new();
+        for field in &self.fields {
+            fields_json.push(format!(
+                r#"        {{ "name": "{}", "type": "{}" }}"#,
+                field.name,
+                field.field_type.to_idl_type()
+            ));
+        }
+
+        format!(
+            r#"{{
+  "name": "{}",
+  "type": {{
+    "kind": "struct",
+    "fields": [
+{}
+    ]
+  }}
+}}"#,
+            self.name,
+            fields_json.join(",\n")
+        )
+    }
 }
 
 /// Virtual register (infinite supply, mapped to physical during codegen)
@@ -694,6 +737,239 @@ impl IrGenerator {
                 if name == "struct-size" && args.len() == 1 {
                     if let Expression::Variable(struct_name) = &args[0].value {
                         // Get the size first to avoid borrow conflict
+                        let total_size = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .total_size;
+
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, total_size));
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // Handle (struct-ptr StructName base_ptr field_name)
+                // Returns a pointer to a field, useful for nested structs or arrays
+                // Example: (struct-ptr MyState state_ptr inner_struct)
+                if name == "struct-ptr" && args.len() == 3 {
+                    if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
+                        (&args[0].value, &args[2].value)
+                    {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let field = struct_def.fields.iter()
+                            .find(|f| &f.name == field_name)
+                            .ok_or_else(|| Error::runtime(format!(
+                                "Unknown field '{}' in struct '{}'", field_name, struct_name
+                            )))?;
+
+                        let base_reg = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("struct-ptr base_ptr has no result"))?;
+
+                        let dst = self.alloc_reg();
+                        let offset_reg = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(offset_reg, field.offset));
+                        self.emit(IrInstruction::Add(dst, base_reg, offset_reg));
+
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // Handle (struct-offset StructName field_name)
+                // Returns the compile-time offset of a field (no base pointer needed)
+                // Example: (struct-offset MyState counter) => 0
+                if name == "struct-offset" && args.len() == 2 {
+                    if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
+                        (&args[0].value, &args[1].value)
+                    {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let field = struct_def.fields.iter()
+                            .find(|f| &f.name == field_name)
+                            .ok_or_else(|| Error::runtime(format!(
+                                "Unknown field '{}' in struct '{}'", field_name, struct_name
+                            )))?;
+
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, field.offset));
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // Handle (struct-field-size StructName field_name)
+                // Returns the size of a specific field
+                // Example: (struct-field-size MyState counter) => 4
+                if name == "struct-field-size" && args.len() == 2 {
+                    if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
+                        (&args[0].value, &args[1].value)
+                    {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let field = struct_def.fields.iter()
+                            .find(|f| &f.name == field_name)
+                            .ok_or_else(|| Error::runtime(format!(
+                                "Unknown field '{}' in struct '{}'", field_name, struct_name
+                            )))?;
+
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, field.field_type.size()));
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // Handle (struct-idl StructName)
+                // Prints the Anchor IDL JSON for a struct at compile time
+                // Example: (struct-idl MyState) => prints JSON and returns 0
+                if name == "struct-idl" && args.len() == 1 {
+                    if let Expression::Variable(struct_name) = &args[0].value {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        // Print the IDL at compile time
+                        eprintln!("📋 Anchor IDL for struct '{}':", struct_name);
+                        eprintln!("{}", struct_def.to_anchor_idl());
+
+                        // Return 0 at runtime (this is a compile-time-only operation)
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, 0));
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // =============================================================
+                // BORSH SERIALIZATION HELPERS
+                // =============================================================
+                // Borsh uses little-endian format which is what x86/sBPF uses natively
+                // Our struct-get/set already produce the correct Borsh-compatible layout
+
+                // Handle (borsh-serialize StructName src_ptr dst_buffer offset)
+                // Serializes struct fields to a buffer in Borsh format
+                // Returns the number of bytes written
+                if name == "borsh-serialize" && args.len() >= 3 {
+                    if let Expression::Variable(struct_name) = &args[0].value {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let src_ptr = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("borsh-serialize src_ptr has no result"))?;
+
+                        let dst_buffer = self.generate_expr(&args[2].value)?
+                            .ok_or_else(|| Error::runtime("borsh-serialize dst_buffer has no result"))?;
+
+                        // Optional offset argument (defaults to 0)
+                        let base_offset = if args.len() >= 4 {
+                            match &args[3].value {
+                                Expression::IntLiteral(n) => *n,
+                                _ => 0,
+                            }
+                        } else {
+                            0
+                        };
+
+                        // Copy each field from struct to buffer using native endianness (LE)
+                        for field in &struct_def.fields {
+                            let field_offset = field.offset;
+                            let dst_offset = base_offset + field_offset;
+
+                            // Load from source struct
+                            let temp_reg = self.alloc_reg();
+                            match field.field_type {
+                                FieldType::U8 | FieldType::I8 => {
+                                    self.emit(IrInstruction::Load1(temp_reg, src_ptr, field_offset));
+                                    self.emit(IrInstruction::Store1(dst_buffer, temp_reg, dst_offset));
+                                }
+                                FieldType::U16 | FieldType::I16 => {
+                                    self.emit(IrInstruction::Load2(temp_reg, src_ptr, field_offset));
+                                    self.emit(IrInstruction::Store2(dst_buffer, temp_reg, dst_offset));
+                                }
+                                FieldType::U32 | FieldType::I32 => {
+                                    self.emit(IrInstruction::Load4(temp_reg, src_ptr, field_offset));
+                                    self.emit(IrInstruction::Store4(dst_buffer, temp_reg, dst_offset));
+                                }
+                                FieldType::U64 | FieldType::I64 => {
+                                    self.emit(IrInstruction::Load(temp_reg, src_ptr, field_offset));
+                                    self.emit(IrInstruction::Store(dst_buffer, temp_reg, dst_offset));
+                                }
+                            }
+                        }
+
+                        // Return the number of bytes written (total struct size)
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, struct_def.total_size));
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // Handle (borsh-deserialize StructName src_buffer dst_ptr offset)
+                // Deserializes buffer to struct fields in Borsh format
+                // Returns the number of bytes read
+                if name == "borsh-deserialize" && args.len() >= 3 {
+                    if let Expression::Variable(struct_name) = &args[0].value {
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let src_buffer = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("borsh-deserialize src_buffer has no result"))?;
+
+                        let dst_ptr = self.generate_expr(&args[2].value)?
+                            .ok_or_else(|| Error::runtime("borsh-deserialize dst_ptr has no result"))?;
+
+                        // Optional offset argument (defaults to 0)
+                        let base_offset = if args.len() >= 4 {
+                            match &args[3].value {
+                                Expression::IntLiteral(n) => *n,
+                                _ => 0,
+                            }
+                        } else {
+                            0
+                        };
+
+                        // Copy each field from buffer to struct using native endianness (LE)
+                        for field in &struct_def.fields {
+                            let field_offset = field.offset;
+                            let src_offset = base_offset + field_offset;
+
+                            // Load from source buffer
+                            let temp_reg = self.alloc_reg();
+                            match field.field_type {
+                                FieldType::U8 | FieldType::I8 => {
+                                    self.emit(IrInstruction::Load1(temp_reg, src_buffer, src_offset));
+                                    self.emit(IrInstruction::Store1(dst_ptr, temp_reg, field_offset));
+                                }
+                                FieldType::U16 | FieldType::I16 => {
+                                    self.emit(IrInstruction::Load2(temp_reg, src_buffer, src_offset));
+                                    self.emit(IrInstruction::Store2(dst_ptr, temp_reg, field_offset));
+                                }
+                                FieldType::U32 | FieldType::I32 => {
+                                    self.emit(IrInstruction::Load4(temp_reg, src_buffer, src_offset));
+                                    self.emit(IrInstruction::Store4(dst_ptr, temp_reg, field_offset));
+                                }
+                                FieldType::U64 | FieldType::I64 => {
+                                    self.emit(IrInstruction::Load(temp_reg, src_buffer, src_offset));
+                                    self.emit(IrInstruction::Store(dst_ptr, temp_reg, field_offset));
+                                }
+                            }
+                        }
+
+                        // Return the number of bytes read (total struct size)
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(dst, struct_def.total_size));
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // Handle (borsh-size StructName)
+                // Returns the serialized size of a struct (same as struct-size for fixed-size structs)
+                if name == "borsh-size" && args.len() == 1 {
+                    if let Expression::Variable(struct_name) = &args[0].value {
                         let total_size = self.struct_defs.get(struct_name)
                             .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
                             .total_size;
