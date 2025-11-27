@@ -26,6 +26,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 
+use diesel::RunQueryDsl;
 use crate::utils::bbs::db;
 use crate::utils::bbs::federation::{FederationManager, Peer, SyncRequest, SyncResponse, FederatedMessage};
 
@@ -724,6 +725,176 @@ async fn federation_announce(
     }
 }
 
+// ============================================================================
+// Agent Reputation System
+// ============================================================================
+
+/// Agent reputation data
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AgentReputation {
+    pub agent_name: String,
+    pub bids: i32,
+    pub wins: i32,
+    pub deliveries: i32,
+    pub total_revenue: f64,
+    pub avg_price: f64,
+    pub rating: f64,
+    pub last_active: i64,
+}
+
+/// Request to update agent reputation
+#[derive(Debug, Deserialize)]
+pub struct UpdateReputationRequest {
+    pub action: String, // "bid", "win", "deliver"
+    pub price: Option<f64>,
+}
+
+/// List all agents with their reputation
+async fn list_agent_reputation() -> impl IntoResponse {
+    let mut conn = match db::establish_connection() {
+        Ok(c) => c,
+        Err(e) => return api_err(format!("Database error: {}", e)),
+    };
+
+    // Query all agents
+    match diesel::sql_query(
+        "SELECT agent_name, bids, wins, deliveries, total_revenue, avg_price, rating, last_active
+         FROM agent_reputation ORDER BY rating DESC, deliveries DESC"
+    ).load::<AgentReputationRow>(&mut conn) {
+        Ok(agents) => {
+            let result: Vec<AgentReputation> = agents.into_iter().map(|a| AgentReputation {
+                agent_name: a.agent_name,
+                bids: a.bids,
+                wins: a.wins,
+                deliveries: a.deliveries,
+                total_revenue: a.total_revenue,
+                avg_price: a.avg_price,
+                rating: a.rating,
+                last_active: a.last_active,
+            }).collect();
+            ApiResponse::ok(serde_json::json!({
+                "agents": result,
+                "count": result.len()
+            }))
+        }
+        Err(_) => ApiResponse::ok(serde_json::json!({"agents": [], "count": 0})),
+    }
+}
+
+/// Get specific agent reputation
+async fn get_agent_reputation(Path(agent_name): Path<String>) -> impl IntoResponse {
+    let mut conn = match db::establish_connection() {
+        Ok(c) => c,
+        Err(e) => return api_err(format!("Database error: {}", e)),
+    };
+
+    match diesel::sql_query(format!(
+        "SELECT agent_name, bids, wins, deliveries, total_revenue, avg_price, rating, last_active
+         FROM agent_reputation WHERE agent_name = '{}'", agent_name.replace("'", "''")
+    )).load::<AgentReputationRow>(&mut conn) {
+        Ok(agents) if !agents.is_empty() => {
+            let a = &agents[0];
+            ApiResponse::ok(serde_json::json!({
+                "agent_name": a.agent_name,
+                "bids": a.bids,
+                "wins": a.wins,
+                "deliveries": a.deliveries,
+                "total_revenue": a.total_revenue,
+                "avg_price": a.avg_price,
+                "rating": a.rating,
+                "win_rate": if a.bids > 0 { (a.wins as f64 / a.bids as f64) * 100.0 } else { 0.0 },
+                "delivery_rate": if a.wins > 0 { (a.deliveries as f64 / a.wins as f64) * 100.0 } else { 0.0 },
+            }))
+        }
+        _ => api_err(format!("Agent '{}' not found", agent_name)),
+    }
+}
+
+/// Update agent reputation (record bid, win, or delivery)
+async fn update_agent_reputation(
+    Path(agent_name): Path<String>,
+    Json(req): Json<UpdateReputationRequest>,
+) -> impl IntoResponse {
+    let mut conn = match db::establish_connection() {
+        Ok(c) => c,
+        Err(e) => return api_err(format!("Database error: {}", e)),
+    };
+
+    let now = db::now_as_useconds();
+    let safe_name = agent_name.replace("'", "''");
+
+    // Insert agent if not exists
+    let _ = diesel::sql_query(format!(
+        "INSERT OR IGNORE INTO agent_reputation (agent_name, last_active, created_at) VALUES ('{}', {}, {})",
+        safe_name, now, now
+    )).execute(&mut conn);
+
+    // Update based on action
+    let result = match req.action.as_str() {
+        "bid" => diesel::sql_query(format!(
+            "UPDATE agent_reputation SET bids = bids + 1, last_active = {} WHERE agent_name = '{}'",
+            now, safe_name
+        )).execute(&mut conn),
+
+        "win" => {
+            let price = req.price.unwrap_or(0.0);
+            diesel::sql_query(format!(
+                "UPDATE agent_reputation SET
+                    wins = wins + 1,
+                    total_revenue = total_revenue + {},
+                    avg_price = (total_revenue + {}) / (wins + 1),
+                    last_active = {}
+                 WHERE agent_name = '{}'",
+                price, price, now, safe_name
+            )).execute(&mut conn)
+        }
+
+        "deliver" => {
+            // Delivery increases rating significantly
+            diesel::sql_query(format!(
+                "UPDATE agent_reputation SET
+                    deliveries = deliveries + 1,
+                    rating = (deliveries + 1) * 10.0 + (wins * 2.0),
+                    last_active = {}
+                 WHERE agent_name = '{}'",
+                now, safe_name
+            )).execute(&mut conn)
+        }
+
+        _ => return api_err(format!("Unknown action: {}. Use 'bid', 'win', or 'deliver'", req.action)),
+    };
+
+    match result {
+        Ok(_) => ApiResponse::ok(serde_json::json!({
+            "success": true,
+            "agent": agent_name,
+            "action": req.action,
+        })),
+        Err(e) => api_err(format!("Failed to update reputation: {}", e)),
+    }
+}
+
+/// Row type for SQL query
+#[derive(diesel::QueryableByName, Debug)]
+struct AgentReputationRow {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    agent_name: String,
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    bids: i32,
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    wins: i32,
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    deliveries: i32,
+    #[diesel(sql_type = diesel::sql_types::Double)]
+    total_revenue: f64,
+    #[diesel(sql_type = diesel::sql_types::Double)]
+    avg_price: f64,
+    #[diesel(sql_type = diesel::sql_types::Double)]
+    rating: f64,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    last_active: i64,
+}
+
 /// Create the router
 pub fn create_router(state: Arc<ServerState>) -> Router {
     Router::new()
@@ -735,6 +906,9 @@ pub fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/posts/:id/reply", post(reply_to_post))
         // Stats
         .route("/api/stats", get(get_stats))
+        // Agent reputation routes
+        .route("/api/reputation", get(list_agent_reputation))
+        .route("/api/reputation/:agent_name", get(get_agent_reputation).post(update_agent_reputation))
         // Federation routes
         .route("/api/federation/peers", get(list_federation_peers).post(add_federation_peer))
         .route("/api/federation/sync", post(federation_sync))
@@ -791,6 +965,11 @@ pub async fn start_server(host: &str, port: u16) -> Result<(), Box<dyn std::erro
     println!("   POST /api/posts/:id/reply     - Reply to post");
     println!("   GET  /api/stats               - Statistics");
     println!("   WS   /ws                      - Real-time updates");
+    println!("");
+    println!("   Agent Reputation:");
+    println!("   GET  /api/reputation          - List all agents");
+    println!("   GET  /api/reputation/:name    - Get agent reputation");
+    println!("   POST /api/reputation/:name    - Update reputation (bid/win/deliver)");
     println!("");
     println!("   Federation:");
     println!("   GET  /api/federation/peers    - List known peers");

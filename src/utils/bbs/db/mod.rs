@@ -167,6 +167,23 @@ pub fn initialize_database(conn: &mut SqliteConnection) -> Result<()> {
         "CREATE INDEX IF NOT EXISTS idx_federated_messages_created ON federated_messages(created_at)"
     ).execute(conn)?;
 
+    // Create agent_reputation table (for marketplace agent reputation tracking)
+    diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS agent_reputation (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            agent_name TEXT NOT NULL UNIQUE,
+            bids INTEGER NOT NULL DEFAULT 0,
+            wins INTEGER NOT NULL DEFAULT 0,
+            deliveries INTEGER NOT NULL DEFAULT 0,
+            total_revenue REAL NOT NULL DEFAULT 0.0,
+            avg_price REAL NOT NULL DEFAULT 0.0,
+            rating REAL NOT NULL DEFAULT 0.0,
+            last_active BIGINT NOT NULL,
+            created_at BIGINT NOT NULL
+        )"#,
+    )
+    .execute(conn)?;
+
     Ok(())
 }
 
@@ -181,6 +198,22 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<()> {
     // Add parent_id column to posts if it doesn't exist
     let _ = diesel::sql_query(
         "ALTER TABLE posts ADD COLUMN parent_id INTEGER REFERENCES posts(id)"
+    ).execute(conn);
+
+    // Create agent_reputation table if it doesn't exist (migration for existing DBs)
+    let _ = diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS agent_reputation (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            agent_name TEXT NOT NULL UNIQUE,
+            bids INTEGER NOT NULL DEFAULT 0,
+            wins INTEGER NOT NULL DEFAULT 0,
+            deliveries INTEGER NOT NULL DEFAULT 0,
+            total_revenue REAL NOT NULL DEFAULT 0.0,
+            avg_price REAL NOT NULL DEFAULT 0.0,
+            rating REAL NOT NULL DEFAULT 0.0,
+            last_active BIGINT NOT NULL,
+            created_at BIGINT NOT NULL
+        )"#
     ).execute(conn);
 
     Ok(())

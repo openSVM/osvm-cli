@@ -1,0 +1,108 @@
+;; REPUTATION-AWARE AGENT
+;; Records all marketplace activity to the BBS reputation API
+;; Uses reputation for both recording AND querying competitor stats
+;;
+;; This agent:
+;; 1. Queries reputation leaderboard to understand market
+;; 2. Posts BIDs and records them to reputation API
+;; 3. Records wins/deliveries when they happen
+
+(do
+  (define bbs-url "http://localhost:9099")  ;; Using port 9099 for testing
+  (define agent-name "OVSM-ReputationAgent")
+  (define base-price 0.045)
+
+  (log :message "")
+  (log :message "╔═══════════════════════════════════════════════════════════════╗")
+  (log :message "║       🏆 REPUTATION-AWARE AGENT 🏆                            ║")
+  (log :message "╚═══════════════════════════════════════════════════════════════╝")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message "")
+
+  ;; Query reputation leaderboard first
+  (log :message "📊 Querying reputation leaderboard...")
+  (define rep-resp (http-get (concatenate bbs-url "/api/reputation")))
+  (define rep-data (get (parse-json (get rep-resp "body")) "data"))
+  (define agents (get rep-data "agents"))
+
+  (if (null? agents)
+      (log :message "   No agents registered yet")
+      (do
+        (log :message (concatenate "   Found " (str (length agents)) " registered agents"))
+        (for (agent agents)
+          (do
+            (define name (get agent "agent_name"))
+            (define wins (get agent "wins"))
+            (define bids (get agent "bids"))
+            (define rating (get agent "rating"))
+            (define avg-price (get agent "avg_price"))
+            (log :message (concatenate "   • " name ": " (str wins) " wins / " (str bids) " bids, avg $" (str avg-price) ", rating " (str rating)))))))
+  (log :message "")
+
+  ;; Calculate competitive price based on leader data
+  ;; Use floats consistently to avoid type mismatch
+  (define lowest-avg-price 0.1)
+  (define highest-rating 0.0)
+
+  (if (not (null? agents))
+      (for (agent agents)
+        (do
+          (define avg (get agent "avg_price"))
+          (define rating (get agent "rating"))
+          ;; Only process if we have valid data - compare floats to floats
+          (if (not (null? avg))
+              (if (< avg lowest-avg-price)
+                  (set! lowest-avg-price avg)
+                  null)
+              null)))
+      null)
+
+  ;; Price strategy: undercut avg by 5% but maintain minimum margin
+  (define my-price (* lowest-avg-price 0.95))
+  (if (< my-price 0.02)
+      (set! my-price 0.02)
+      null)
+  (log :message (concatenate "💰 Pricing Strategy:"))
+  (log :message (concatenate "   Lowest competitor avg: " (str lowest-avg-price) " SOL"))
+  (log :message (concatenate "   My price: " (str my-price) " SOL"))
+  (log :message "")
+
+  ;; Check for recent requests
+  (define posts-resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=30")))
+  (define posts (get (parse-json (get posts-resp "body")) "data"))
+  (define posted-bid false)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+            (if (and (string-contains msg-upper "REQUEST")
+                     (not posted-bid))
+                (do
+                  (log :message (concatenate "📝 Found request: " (substring msg 0 (min 60 (length msg))) "..."))
+
+                  ;; Post BID
+                  (define bid-msg (concatenate "BID: " agent-name " offers whale tracking at " (str my-price) " SOL. Reputation-backed quality!"))
+                  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                             {:message bid-msg :agent agent-name})
+
+                  ;; Record bid to reputation API
+                  (http-post (concatenate bbs-url "/api/reputation/" agent-name)
+                             {:action "bid"})
+
+                  (log :message (concatenate "   ✅ Posted BID at " (str my-price) " SOL"))
+                  (log :message "   ✅ Recorded bid to reputation API")
+                  (set! posted-bid true))
+                null)))))
+
+  (if (not posted-bid)
+      (log :message "❌ No new requests to bid on")
+      null)
+
+  (log :message "")
+  {:agent agent-name
+   :price my-price
+   :strategy "reputation-aware"
+   :bid-recorded posted-bid})
