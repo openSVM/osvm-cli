@@ -143,6 +143,18 @@ impl AdvancedChatState {
         // Determine if any MCP servers/tools are configured
         let no_configured_tools = available_tools.is_empty();
 
+        // Check if AI service used Ollama fallback and notify user
+        if self.ai_service.did_use_fallback() {
+            let fallback_model = self.ai_service.get_fallback_model().unwrap_or("local model");
+            let _ = self.add_message_to_session(
+                session_id,
+                ChatMessage::System(format!(
+                    "⚡ Using local AI ({}) - primary service unavailable",
+                    fallback_model
+                )),
+            );
+        }
+
         match tool_plan_result {
             Err(_) => {
                 warn!("AI planning timed out");

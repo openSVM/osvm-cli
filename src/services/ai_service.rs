@@ -77,6 +77,8 @@ pub struct AiService {
     /// Fallback to Ollama if primary API fails
     fallback_url: Option<String>,
     fallback_model: Option<String>,
+    /// Track if last request used fallback (for UI notification)
+    last_used_fallback: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AiService {
@@ -257,7 +259,18 @@ impl AiService {
             conversation_history: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             fallback_url,
             fallback_model,
+            last_used_fallback: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
+    }
+
+    /// Check if the last AI request used fallback (and reset the flag)
+    pub fn did_use_fallback(&self) -> bool {
+        self.last_used_fallback.swap(false, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Get the fallback model name if available
+    pub fn get_fallback_model(&self) -> Option<&str> {
+        self.fallback_model.as_deref()
     }
 
     /// Add a message to the conversation history
@@ -574,7 +587,9 @@ impl AiService {
 
                 // Check if Ollama is available before trying
                 if self.is_ollama_available().await {
-                    debug_print!("🔄 Falling back to local Ollama (system prompt preserved)");
+                    // Set fallback flag for UI notification
+                    self.last_used_fallback.store(true, std::sync::atomic::Ordering::SeqCst);
+                    log::info!("AI fallback: using local Ollama instead of osvm.ai");
 
                     // Use Ollama with the SAME system prompt
                     match self.query_ollama_fallback(question, system_prompt.clone(), debug_mode).await {
