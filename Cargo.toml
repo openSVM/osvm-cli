@@ -57,7 +57,7 @@ url = "2.5.7"
 serde_json = "1.0.143"
 dirs = "6.0.0"
 chrono = { version = "0.4.42", features = ["serde"] }
-indicatif = "0.17"
+indicatif = "0.18"
 num_cpus = "1.16"
 rayon = "1.8"
 rmp-serde = "1.1"
@@ -76,7 +76,7 @@ brotli = "7.0"  # Brotli decompression for MCP responses
 bs58 = "0.5.1"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 rocksdb = { version = "0.22", default-features = false, features = ["lz4", "snappy"] }
-notify = "7.0"
+notify = "8.2"
 # Enhanced audit dependencies
 syn = { version = "2.0", features = ["full", "visit"] }
 quote = "1.0"
