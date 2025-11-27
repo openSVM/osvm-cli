@@ -1339,3 +1339,200 @@ fn test_full_suite_with_strategy_router() {
     assert!(total_instructions > 10000, "Complete suite should have >10000 instructions");
     assert!(programs.len() == 13, "Suite should have 13 programs");
 }
+
+// =============================================================================
+// ANCHOR IDL GENERATION TESTS
+// =============================================================================
+
+#[test]
+fn test_generate_idl_from_accountability_demo() {
+    use ovsm::compiler::anchor_idl::IdlGenerator;
+
+    let path = get_examples_dir().join("accountability_demo.ovsm");
+    let source = fs::read_to_string(&path).unwrap();
+
+    let mut generator = IdlGenerator::new(&source);
+    let idl = generator.generate().expect("IDL generation failed");
+
+    // Should extract program name
+    assert!(!idl.name.is_empty(), "Should extract program name");
+
+    // Should extract multiple instructions
+    assert!(idl.instructions.len() >= 8, "Should have at least 8 instructions, got {}", idl.instructions.len());
+
+    // Should extract errors
+    assert!(idl.errors.len() >= 1, "Should have extracted errors");
+
+    // Generate JSON and verify it's valid
+    let json = generator.generate_json().expect("JSON serialization failed");
+    assert!(json.contains("\"version\""));
+    assert!(json.contains("\"instructions\""));
+
+    println!("\n✅ Generated Anchor IDL from accountability_demo.ovsm:");
+    println!("   Name: {}", idl.name);
+    println!("   Version: {}", idl.version);
+    println!("   Instructions: {}", idl.instructions.len());
+    println!("   Errors: {}", idl.errors.len());
+    println!("\n   Instruction names:");
+    for instr in &idl.instructions {
+        println!("     - {} (disc: {:?})", instr.name, instr.discriminator);
+    }
+}
+
+#[test]
+fn test_idl_json_format() {
+    use ovsm::compiler::anchor_idl::IdlGenerator;
+
+    let source = r#"
+;;; SIMPLE PROGRAM - Test
+;;;
+;;; Accounts:
+;;;   0: State (writable)
+;;;   1: Authority (signer)
+
+(do
+  (define discriminator (mem-load1 instr_ptr 0))
+
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> INITIALIZE <<<")
+      (if false (do (sol_log_ "ERR: Already init") 1) 0))
+    0)
+
+  (if (= discriminator 1)
+    (do
+      (sol_log_ ">>> TRANSFER <<<")
+      0)
+    0)
+
+  0)
+"#;
+
+    let mut generator = IdlGenerator::new(source);
+    let json = generator.generate_json().expect("JSON generation failed");
+
+    // Parse and verify structure
+    let parsed: serde_json::Value = serde_json::from_str(&json).expect("Invalid JSON");
+
+    assert!(parsed["version"].is_string());
+    assert!(parsed["name"].is_string());
+    assert!(parsed["instructions"].is_array());
+
+    println!("\n✅ Valid Anchor IDL JSON generated:");
+    println!("{}", json);
+}
+
+// =============================================================================
+// SPL TOKEN TRANSFER SIGNED TESTS (PDA Authority)
+// =============================================================================
+
+#[test]
+fn test_spl_token_transfer_signed_compiles() {
+    // Create test program inline using temp file
+    let source = r#"
+;;; Test SPL Token Transfer Signed (PDA Authority)
+(do
+  (sol_log_ "=== SPL TOKEN TRANSFER SIGNED ===")
+
+  ;; Heap addresses for seeds
+  (define HEAP_SEED_PREFIX 12884901888)  ;; 0x300000000
+  (define HEAP_SEED_BUMP 12884901920)    ;; 0x300000020
+
+  ;; Read amount from instruction data
+  (define instr_ptr (instruction-data-ptr))
+  (define amount (mem-load instr_ptr 0))
+  (define bump (mem-load1 instr_ptr 8))
+
+  (sol_log_ "Amount:")
+  (sol_log_64_ amount)
+  (sol_log_ "Bump:")
+  (sol_log_64_ bump)
+
+  ;; Store PDA seeds in heap
+  ;; Seed 1: "vault" = [118, 97, 117, 108, 116]
+  (mem-store1 HEAP_SEED_PREFIX 0 118)  ;; 'v'
+  (mem-store1 HEAP_SEED_PREFIX 1 97)   ;; 'a'
+  (mem-store1 HEAP_SEED_PREFIX 2 117)  ;; 'u'
+  (mem-store1 HEAP_SEED_PREFIX 3 108)  ;; 'l'
+  (mem-store1 HEAP_SEED_PREFIX 4 116)  ;; 't'
+
+  ;; Seed 2: bump byte
+  (mem-store1 HEAP_SEED_BUMP 0 bump)
+
+  (sol_log_ "Calling spl-token-transfer-signed...")
+
+  ;; Call SPL Token Transfer with PDA signing
+  ;; token-prog-idx=3, source=0, dest=1, authority=2
+  ;; signers: [[[HEAP_SEED_PREFIX 5] [HEAP_SEED_BUMP 1]]]
+  (define result
+    (spl-token-transfer-signed
+      3                                          ;; Token Program index
+      0                                          ;; Source token account
+      1                                          ;; Destination token account
+      2                                          ;; PDA Authority
+      amount                                     ;; Amount
+      [[[HEAP_SEED_PREFIX 5] [HEAP_SEED_BUMP 1]]]))  ;; Seeds: "vault" + bump
+
+  (sol_log_ "Result:")
+  (sol_log_64_ result)
+
+  result)
+"#;
+
+    // Compile directly from source string
+    let compiler = Compiler::new(CompileOptions::default());
+    let result = compiler.compile(source);
+    assert!(result.is_ok(), "spl-token-transfer-signed test failed to compile: {:?}", result.err());
+
+    let compiled = result.unwrap();
+
+    // Verify reasonable instruction counts
+    assert!(compiled.sbpf_instruction_count > 100, "Should have >100 sBPF instructions, got {}", compiled.sbpf_instruction_count);
+    assert!(compiled.elf_bytes.len() > 1000, "ELF too small: {} bytes", compiled.elf_bytes.len());
+    assert!(compiled.elf_bytes.len() < 10000, "ELF too large: {} bytes", compiled.elf_bytes.len());
+
+    println!("✅ spl-token-transfer-signed test program:");
+    println!("   sBPF instructions: {}", compiled.sbpf_instruction_count);
+    println!("   ELF size: {} bytes", compiled.elf_bytes.len());
+}
+
+#[test]
+fn test_spl_token_transfer_signed_multiple_seeds() {
+    // Test with multiple signers/seeds
+    let source = r#"
+;;; Test SPL Token Transfer Signed with multiple seeds
+(do
+  (sol_log_ "=== MULTI-SEED PDA TRANSFER ===")
+
+  (define HEAP_SEED1 12884901888)  ;; 0x300000000
+  (define HEAP_SEED2 12884901920)  ;; 0x300000020
+  (define HEAP_BUMP  12884901952)  ;; 0x300000040
+
+  ;; Setup 3-part seed: "escrow" + [user_pubkey_byte] + bump
+  (mem-store1 HEAP_SEED1 0 101)  ;; 'e'
+  (mem-store1 HEAP_SEED1 1 115)  ;; 's'
+  (mem-store1 HEAP_SEED1 2 99)   ;; 'c'
+  (mem-store1 HEAP_SEED1 3 114)  ;; 'r'
+  (mem-store1 HEAP_SEED1 4 111)  ;; 'o'
+  (mem-store1 HEAP_SEED1 5 119)  ;; 'w'
+
+  (mem-store1 HEAP_SEED2 0 42)   ;; arbitrary user byte
+
+  (mem-store1 HEAP_BUMP 0 255)   ;; bump
+
+  ;; Transfer with 3-seed PDA
+  (define result
+    (spl-token-transfer-signed
+      3 0 1 2 1000000
+      [[[HEAP_SEED1 6] [HEAP_SEED2 1] [HEAP_BUMP 1]]]))
+
+  result)
+"#;
+
+    // Compile directly from source string
+    let compiler = Compiler::new(CompileOptions::default());
+    let result = compiler.compile(source);
+    assert!(result.is_ok(), "Multi-seed spl-token-transfer-signed failed: {:?}", result.err());
+
+    println!("✅ Multi-seed PDA transfer compiles successfully");
+}

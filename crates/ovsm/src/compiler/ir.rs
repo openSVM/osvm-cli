@@ -2683,6 +2683,40 @@ impl IrGenerator {
                     return Ok(Some(bump));
                 }
 
+                // =================================================================
+                // LOGICAL OPERATORS AS TOOL CALLS
+                // =================================================================
+                // Handle (and expr1 expr2) - logical AND
+                if name == "and" && args.len() == 2 {
+                    let left_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("and left operand has no result"))?;
+                    let right_reg = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("and right operand has no result"))?;
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::And(dst, left_reg, right_reg));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (or expr1 expr2) - logical OR
+                if name == "or" && args.len() == 2 {
+                    let left_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("or left operand has no result"))?;
+                    let right_reg = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("or right operand has no result"))?;
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Or(dst, left_reg, right_reg));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (not expr) - logical NOT
+                if name == "not" && args.len() == 1 {
+                    let operand_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("not operand has no result"))?;
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Not(dst, operand_reg));
+                    return Ok(Some(dst));
+                }
+
                 // Generic tool call
                 let mut arg_regs = Vec::new();
                 for arg in args {
