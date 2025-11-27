@@ -434,10 +434,18 @@ impl DatabaseStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    fn setup_test_db() -> (SnapshotDB, TempDir) {
+        let tmp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = tmp_dir.path().join("test.rocksdb");
+        let db = SnapshotDB::open_path(&db_path).expect("Failed to open test db");
+        (db, tmp_dir)
+    }
 
     #[test]
     fn test_account_storage() {
-        let db = SnapshotDB::open().unwrap();
+        let (db, _tmp_dir) = setup_test_db();
 
         let account = AccountRecord {
             address: "TestAccount123".to_string(),
@@ -458,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_batch_insert() {
-        let db = SnapshotDB::open().unwrap();
+        let (db, _tmp_dir) = setup_test_db();
 
         let accounts = vec![
             AccountRecord {
