@@ -1,0 +1,108 @@
+;; BUYER Agent - Posts requests, evaluates bids, accepts best offers
+;; Completes the economic loop: REQUEST → BID → ACCEPT → DELIVER
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define agent-name "OVSM-Buyer")
+  (define budget 0.06)  ;; Max willing to pay
+
+  (log :message "")
+  (log :message "🛒 === BUYER AGENT === 🛒")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message (concatenate "Budget: " (str budget) " SOL"))
+  (log :message "Strategy: Post request, wait for bids, accept lowest valid bid")
+  (log :message "")
+
+  ;; Post a fresh request with unique ID
+  (define request-id (str (now)))
+  (define request-msg (concatenate "REQUEST: [" request-id "] Need whale wallet tracking. Budget: " (str budget) " SOL. Looking for best offer!"))
+
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message request-msg :agent agent-name})
+  (log :message (concatenate "📝 Posted request: " request-id))
+  (log :message "⏳ Waiting 3 seconds for bids...")
+
+  ;; Wait for bids (in real scenario, this would be longer or polling loop)
+  (sleep 3)
+
+  ;; Fetch recent posts to find bids
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=50")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+
+  ;; Find all BIDs and extract prices
+  (define best-bid null)
+  (define best-price 999.0)
+  (define best-agent "")
+  (define bids-found 0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+
+            ;; Look for BIDs
+            (if (string-contains msg-upper "BID")
+                (do
+                  (set! bids-found (+ bids-found 1))
+
+                  ;; Extract price from bid
+                  (define has-001 (string-contains msg "0.01"))
+                  (define has-002 (string-contains msg "0.02"))
+                  (define has-003 (string-contains msg "0.03"))
+                  (define has-004 (string-contains msg "0.04"))
+                  (define has-005 (string-contains msg "0.05"))
+                  (define has-006 (string-contains msg "0.06"))
+
+                  ;; Find the price mentioned
+                  (define bid-price (if has-001 0.015
+                                       (if has-002 0.02
+                                           (if has-003 0.03
+                                               (if has-004 0.045
+                                                   (if has-005 0.05
+                                                       (if has-006 0.06 0.1)))))))
+
+                  ;; Check if this is the best bid within budget
+                  (if (and (<= bid-price budget)
+                           (< bid-price best-price))
+                      (do
+                        (set! best-price bid-price)
+                        (set! best-bid id)
+                        ;; Extract agent name from message
+                        (define agent-start (if (string-contains msg "OVSM-")
+                                               (+ 0 1) 0))
+                        (set! best-agent msg))
+                      null))
+                null)))))
+
+  (log :message "")
+  (log :message (concatenate "📊 Found " (str bids-found) " total BIDs"))
+
+  (if (not (null? best-bid))
+      (do
+        (log :message (concatenate "✅ Best bid: #" (str best-bid) " at " (str best-price) " SOL"))
+        (log :message (concatenate "   From: " (substring best-agent 0 (min 60 (length best-agent)))))
+
+        ;; Accept the bid!
+        (define accept-msg (concatenate "ACCEPT: " agent-name " accepts bid #" (str best-bid) " at " (str best-price) " SOL! Awaiting delivery."))
+        (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                   {:message accept-msg :agent agent-name})
+        (log :message "")
+        (log :message "🎉 BID ACCEPTED! Waiting for delivery...")
+
+        ;; Calculate savings
+        (define savings (- budget best-price))
+        (log :message (concatenate "💰 Saved: " (str savings) " SOL under budget")))
+      (do
+        (log :message "❌ No acceptable bids found within budget")
+        (set! best-price 0)))
+
+  (log :message "")
+  {:agent agent-name
+   :budget budget
+   :bids-found bids-found
+   :accepted-price best-price
+   :accepted-bid best-bid})

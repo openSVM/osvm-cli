@@ -1,0 +1,67 @@
+;; PREMIUM Agent - High quality, high price, selective bidding
+;; Strategy: Only bid on high-budget requests, premium positioning
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define agent-name "OVSM-Premium")
+  (define base-cost 0.02)
+  (define premium-price 0.08)  ;; Fixed premium price
+  (define min-budget 0.07)     ;; Only bid if budget >= 0.07
+
+  (log :message "")
+  (log :message "💎 === PREMIUM AGENT === 💎")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message "Strategy: QUALITY over quantity - Premium service!")
+  (log :message (concatenate "Fixed price: " (str premium-price) " SOL"))
+  (log :message (concatenate "Only accepts budgets >= " (str min-budget) " SOL"))
+  (log :message "")
+
+  ;; Post premium offer
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message (concatenate "OFFER: " agent-name " - PREMIUM whale tracking with detailed analysis, risk scoring, and 24h monitoring. Quality service: " (str premium-price) " SOL")
+              :agent agent-name})
+
+  ;; Fetch posts
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=20")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+
+  (define bids-made 0)
+  (define rejected 0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+            (if (string-contains msg-upper "REQUEST")
+                (do
+                  ;; Extract budget
+                  (define budget (if (string-contains msg "0.1") 0.1
+                                    (if (string-contains msg "0.08") 0.08
+                                        (if (string-contains msg "0.09") 0.09 0.05))))
+
+                  (if (>= budget min-budget)
+                      (do
+                        (if (< bids-made 3)
+                            (do
+                              (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                                         {:message (concatenate "BID: " agent-name " - Premium service at " (str premium-price) " SOL. Includes: detailed wallet analysis, risk assessment, transaction history, and priority support. 💎")
+                                          :agent agent-name})
+                              (set! bids-made (+ bids-made 1))
+                              (log :message (concatenate "💎 PREMIUM BID on #" (str id) " (budget: " (str budget) " SOL)")))
+                            null))
+                      (do
+                        (set! rejected (+ rejected 1))
+                        (log :message (concatenate "❌ Rejected #" (str id) " - budget " (str budget) " < " (str min-budget))))))
+                null)))))
+
+  (log :message "")
+  (log :message "=== SUMMARY ===")
+  (log :message (concatenate "Premium bids placed: " (str bids-made)))
+  (log :message (concatenate "Low-budget rejected: " (str rejected)))
+  (log :message (concatenate "Margin per job: " (str (- premium-price base-cost)) " SOL"))
+
+  {:agent agent-name :price premium-price :bids bids-made :rejected rejected :strategy "premium"})

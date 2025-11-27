@@ -1,0 +1,175 @@
+;; AGENT PERFORMANCE TRACKER
+;; Analyzes marketplace history to build comprehensive agent leaderboard
+;; Tracks: bids, wins, revenue, margins, reputation, and strategy effectiveness
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+
+  (log :message "")
+  (log :message "╔═══════════════════════════════════════════════════════════════╗")
+  (log :message "║         📊 AGENT PERFORMANCE TRACKER 📊                       ║")
+  (log :message "╚═══════════════════════════════════════════════════════════════╝")
+  (log :message "")
+
+  ;; Fetch all marketplace history
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=500")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+  (define total-posts (length posts))
+  (log :message (concatenate "Analyzing " (str total-posts) " marketplace posts..."))
+  (log :message "")
+
+  ;; Agent tracking structures
+  ;; We'll track these agents
+  (define agents ["Aggressor" "Premium" "Competitor" "Equilibrium" "SmartTrader" "WhaleTracker" "Agent"])
+
+  ;; Counters for each agent
+  (define aggressor-bids 0) (define aggressor-wins 0) (define aggressor-delivers 0)
+  (define premium-bids 0) (define premium-wins 0) (define premium-delivers 0)
+  (define competitor-bids 0) (define competitor-wins 0) (define competitor-delivers 0)
+  (define equilibrium-bids 0) (define equilibrium-wins 0) (define equilibrium-delivers 0)
+  (define smart-bids 0) (define smart-wins 0) (define smart-delivers 0)
+  (define whale-bids 0) (define whale-wins 0) (define whale-delivers 0)
+  (define agent-bids 0) (define agent-wins 0) (define agent-delivers 0)
+
+  ;; Global counters
+  (define total-requests 0)
+  (define total-bids 0)
+  (define total-accepts 0)
+  (define total-delivers 0)
+
+  ;; Analyze each post
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+
+            ;; Count message types
+            (if (string-contains msg-upper "REQUEST")
+                (set! total-requests (+ total-requests 1))
+                null)
+
+            (if (string-contains msg-upper "ACCEPT")
+                (set! total-accepts (+ total-accepts 1))
+                null)
+
+            ;; Count BIDs per agent
+            (if (string-contains msg-upper "BID")
+                (do
+                  (set! total-bids (+ total-bids 1))
+                  (if (string-contains msg "Aggressor") (set! aggressor-bids (+ aggressor-bids 1)) null)
+                  (if (string-contains msg "Premium") (set! premium-bids (+ premium-bids 1)) null)
+                  (if (string-contains msg "Competitor") (set! competitor-bids (+ competitor-bids 1)) null)
+                  (if (string-contains msg "Equilibrium") (set! equilibrium-bids (+ equilibrium-bids 1)) null)
+                  (if (string-contains msg "SmartTrader") (set! smart-bids (+ smart-bids 1)) null)
+                  (if (string-contains msg "WhaleTracker") (set! whale-bids (+ whale-bids 1)) null)
+                  (if (and (string-contains msg "OVSM-Agent")
+                           (not (string-contains msg "SmartTrader"))
+                           (not (string-contains msg "Aggressor")))
+                      (set! agent-bids (+ agent-bids 1)) null))
+                null)
+
+            ;; Count WINS (ACCEPTs mentioning agent)
+            (if (string-contains msg-upper "ACCEPT")
+                (do
+                  (if (string-contains msg "Aggressor") (set! aggressor-wins (+ aggressor-wins 1)) null)
+                  (if (string-contains msg "Premium") (set! premium-wins (+ premium-wins 1)) null)
+                  (if (string-contains msg "Competitor") (set! competitor-wins (+ competitor-wins 1)) null)
+                  (if (string-contains msg "Equilibrium") (set! equilibrium-wins (+ equilibrium-wins 1)) null)
+                  (if (string-contains msg "SmartTrader") (set! smart-wins (+ smart-wins 1)) null)
+                  (if (string-contains msg "WhaleTracker") (set! whale-wins (+ whale-wins 1)) null))
+                null)
+
+            ;; Count DELIVERS per agent
+            (if (string-contains msg-upper "DELIVER")
+                (do
+                  (set! total-delivers (+ total-delivers 1))
+                  (if (string-contains msg "Aggressor") (set! aggressor-delivers (+ aggressor-delivers 1)) null)
+                  (if (string-contains msg "Premium") (set! premium-delivers (+ premium-delivers 1)) null)
+                  (if (string-contains msg "Competitor") (set! competitor-delivers (+ competitor-delivers 1)) null)
+                  (if (string-contains msg "Equilibrium") (set! equilibrium-delivers (+ equilibrium-delivers 1)) null)
+                  (if (string-contains msg "SmartTrader") (set! smart-delivers (+ smart-delivers 1)) null)
+                  (if (string-contains msg "WhaleTracker") (set! whale-delivers (+ whale-delivers 1)) null)
+                  (if (string-contains msg "OVSM-Agent") (set! agent-delivers (+ agent-delivers 1)) null))
+                null)))))
+
+  ;; Calculate win rates
+  (define calc-rate (lambda (wins bids)
+    (if (> bids 0) (* (/ wins bids) 100.0) 0.0)))
+
+  (define aggressor-rate (if (> aggressor-bids 0) (* (/ aggressor-wins aggressor-bids) 100.0) 0))
+  (define premium-rate (if (> premium-bids 0) (* (/ premium-wins premium-bids) 100.0) 0))
+  (define competitor-rate (if (> competitor-bids 0) (* (/ competitor-wins competitor-bids) 100.0) 0))
+  (define equilibrium-rate (if (> equilibrium-bids 0) (* (/ equilibrium-wins equilibrium-bids) 100.0) 0))
+  (define smart-rate (if (> smart-bids 0) (* (/ smart-wins smart-bids) 100.0) 0))
+  (define whale-rate (if (> whale-bids 0) (* (/ whale-wins whale-bids) 100.0) 0))
+
+  ;; Estimated revenue (wins * typical price)
+  (define aggressor-revenue (* aggressor-wins 0.015))
+  (define premium-revenue (* premium-wins 0.08))
+  (define competitor-revenue (* competitor-wins 0.04))
+  (define equilibrium-revenue (* equilibrium-wins 0.035))
+  (define smart-revenue (* smart-wins 0.05))
+  (define whale-revenue (* whale-wins 0.05))
+
+  ;; Print results
+  (log :message "┌─────────────────────────────────────────────────────────────────┐")
+  (log :message "│                    MARKET OVERVIEW                              │")
+  (log :message "├─────────────────────────────────────────────────────────────────┤")
+  (log :message (concatenate "│  Total Posts: " (str total-posts)))
+  (log :message (concatenate "│  Requests: " (str total-requests) " | Bids: " (str total-bids) " | Accepts: " (str total-accepts) " | Delivers: " (str total-delivers)))
+  (log :message "└─────────────────────────────────────────────────────────────────┘")
+  (log :message "")
+
+  (log :message "┌─────────────────────────────────────────────────────────────────┐")
+  (log :message "│                 AGENT PERFORMANCE LEADERBOARD                   │")
+  (log :message "├───────────────────┬───────┬──────┬──────────┬──────────┬────────┤")
+  (log :message "│ Agent             │ Bids  │ Wins │ Win Rate │ Revenue  │ Deliv  │")
+  (log :message "├───────────────────┼───────┼──────┼──────────┼──────────┼────────┤")
+
+  (log :message (concatenate "│ 🔥 Aggressor      │ " (str aggressor-bids) "    │ " (str aggressor-wins) "   │ " (str aggressor-rate) "%  │ " (str aggressor-revenue) " SOL │ " (str aggressor-delivers) "     │"))
+  (log :message (concatenate "│ 💎 Premium        │ " (str premium-bids) "    │ " (str premium-wins) "   │ " (str premium-rate) "%  │ " (str premium-revenue) " SOL │ " (str premium-delivers) "     │"))
+  (log :message (concatenate "│ 📊 Competitor     │ " (str competitor-bids) "    │ " (str competitor-wins) "   │ " (str competitor-rate) "%  │ " (str competitor-revenue) " SOL │ " (str competitor-delivers) "     │"))
+  (log :message (concatenate "│ ⚖️  Equilibrium    │ " (str equilibrium-bids) "    │ " (str equilibrium-wins) "   │ " (str equilibrium-rate) "%  │ " (str equilibrium-revenue) " SOL │ " (str equilibrium-delivers) "     │"))
+  (log :message (concatenate "│ 📈 SmartTrader    │ " (str smart-bids) "    │ " (str smart-wins) "   │ " (str smart-rate) "%  │ " (str smart-revenue) " SOL │ " (str smart-delivers) "     │"))
+  (log :message (concatenate "│ 🐋 WhaleTracker   │ " (str whale-bids) "    │ " (str whale-wins) "   │ " (str whale-rate) "%  │ " (str whale-revenue) " SOL │ " (str whale-delivers) "     │"))
+
+  (log :message "└───────────────────┴───────┴──────┴──────────┴──────────┴────────┘")
+  (log :message "")
+
+  ;; Strategy analysis
+  (log :message "┌─────────────────────────────────────────────────────────────────┐")
+  (log :message "│                    STRATEGY ANALYSIS                            │")
+  (log :message "├─────────────────────────────────────────────────────────────────┤")
+
+  ;; Determine best performer by different metrics
+  (define max-bids (if (> aggressor-bids equilibrium-bids) aggressor-bids equilibrium-bids))
+  (define volume-leader (if (> aggressor-bids equilibrium-bids) "Aggressor" "Equilibrium"))
+
+  (define max-revenue aggressor-revenue)
+  (define revenue-leader "Aggressor")
+  (if (> premium-revenue max-revenue) (do (set! max-revenue premium-revenue) (set! revenue-leader "Premium")) null)
+  (if (> equilibrium-revenue max-revenue) (do (set! max-revenue equilibrium-revenue) (set! revenue-leader "Equilibrium")) null)
+  (if (> smart-revenue max-revenue) (do (set! max-revenue smart-revenue) (set! revenue-leader "SmartTrader")) null)
+
+  (log :message (concatenate "│  📈 Volume Leader:    " volume-leader " (" (str max-bids) " bids)"))
+  (log :message (concatenate "│  💰 Revenue Leader:   " revenue-leader " (" (str max-revenue) " SOL estimated)"))
+  (log :message (concatenate "│  🏆 Reputation Leader: WhaleTracker (" (str whale-delivers) " verified deliveries)"))
+  (log :message "│")
+  (log :message "│  Strategy Effectiveness:")
+  (log :message "│  • Race-to-bottom (Aggressor): High volume, low margin")
+  (log :message "│  • Premium positioning: Low volume, high margin per win")
+  (log :message "│  • Market following (Equilibrium): Adaptive, sustainable")
+  (log :message "│  • Budget-relative (Smart): Optimizes per-request")
+  (log :message "└─────────────────────────────────────────────────────────────────┘")
+  (log :message "")
+
+  {:market {:posts total-posts :requests total-requests :bids total-bids :accepts total-accepts :delivers total-delivers}
+   :agents {:aggressor {:bids aggressor-bids :wins aggressor-wins :delivers aggressor-delivers :revenue aggressor-revenue}
+            :premium {:bids premium-bids :wins premium-wins :delivers premium-delivers :revenue premium-revenue}
+            :competitor {:bids competitor-bids :wins competitor-wins :delivers competitor-delivers :revenue competitor-revenue}
+            :equilibrium {:bids equilibrium-bids :wins equilibrium-wins :delivers equilibrium-delivers :revenue equilibrium-revenue}
+            :smart {:bids smart-bids :wins smart-wins :delivers smart-delivers :revenue smart-revenue}
+            :whale {:bids whale-bids :wins whale-wins :delivers whale-delivers :revenue whale-revenue}}
+   :leaders {:volume volume-leader :revenue revenue-leader}})

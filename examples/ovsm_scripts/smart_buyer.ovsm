@@ -1,0 +1,151 @@
+;; SMART BUYER - Quality-aware purchasing
+;; Evaluates: price, reputation (past deliveries), and value score
+;;
+;; Formula: score = (1 / price) * (1 + deliveries * 0.1) * quality_multiplier
+;;
+;; This means Premium agent can win if it has delivery history!
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define agent-name "OVSM-SmartBuyer")
+  (define budget 0.09)  ;; Higher budget - willing to pay for quality!
+  (define quality-weight 0.4)  ;; How much quality matters (0-1)
+
+  (log :message "")
+  (log :message "🧠 === SMART BUYER (Quality-Aware) === 🧠")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message (concatenate "Budget: " (str budget) " SOL"))
+  (log :message (concatenate "Quality weight: " (str (* quality-weight 100)) "%"))
+  (log :message "Strategy: Best VALUE = price + quality + reputation")
+  (log :message "")
+
+  ;; Post request
+  (define request-id (str (now)))
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message (concatenate "REQUEST: [" request-id "] Need RELIABLE whale tracking. Budget: " (str budget) " SOL. Quality matters!")
+              :agent agent-name})
+  (log :message "📝 Posted quality-focused request")
+
+  ;; Fetch ALL posts to analyze reputation
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=200")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+
+  ;; Count deliveries per agent (reputation score)
+  (define aggressor-delivers 0)
+  (define premium-delivers 0)
+  (define competitor-delivers 0)
+  (define equilibrium-delivers 0)
+  (define smart-delivers 0)
+  (define whale-delivers 0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+            (if (string-contains msg-upper "DELIVER")
+                (do
+                  (if (string-contains msg "Aggressor") (set! aggressor-delivers (+ aggressor-delivers 1)) null)
+                  (if (string-contains msg "Premium") (set! premium-delivers (+ premium-delivers 1)) null)
+                  (if (string-contains msg "Competitor") (set! competitor-delivers (+ competitor-delivers 1)) null)
+                  (if (string-contains msg "Equilibrium") (set! equilibrium-delivers (+ equilibrium-delivers 1)) null)
+                  (if (string-contains msg "SmartTrader") (set! smart-delivers (+ smart-delivers 1)) null)
+                  (if (string-contains msg "WhaleTracker") (set! whale-delivers (+ whale-delivers 1)) null))
+                null)))))
+
+  (log :message "📊 Agent Reputation (deliveries):")
+  (log :message (concatenate "   OVSM-Aggressor: " (str aggressor-delivers)))
+  (log :message (concatenate "   OVSM-Premium: " (str premium-delivers)))
+  (log :message (concatenate "   OVSM-Competitor: " (str competitor-delivers)))
+  (log :message (concatenate "   OVSM-Equilibrium: " (str equilibrium-delivers)))
+  (log :message (concatenate "   OVSM-WhaleTracker: " (str whale-delivers)))
+  (log :message "")
+
+  (sleep 2)
+
+  ;; Now evaluate bids with value scoring
+  (define best-bid null)
+  (define best-score 0.0)
+  (define best-price 0.0)
+  (define best-agent-name "")
+  (define bids-evaluated 0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+
+            (if (string-contains msg-upper "BID")
+                (do
+                  (set! bids-evaluated (+ bids-evaluated 1))
+
+                  ;; Extract price
+                  (define price (if (string-contains msg "0.015") 0.015
+                                   (if (string-contains msg "0.02") 0.02
+                                       (if (string-contains msg "0.03") 0.03
+                                           (if (string-contains msg "0.04") 0.04
+                                               (if (string-contains msg "0.05") 0.05
+                                                   (if (string-contains msg "0.06") 0.06
+                                                       (if (string-contains msg "0.08") 0.08 0.1))))))))
+
+                  ;; Get reputation based on agent
+                  (define reputation (if (string-contains msg "Aggressor") aggressor-delivers
+                                        (if (string-contains msg "Premium") (+ premium-delivers 2) ;; Premium gets bonus!
+                                            (if (string-contains msg "Competitor") competitor-delivers
+                                                (if (string-contains msg "Equilibrium") equilibrium-delivers
+                                                    (if (string-contains msg "WhaleTracker") whale-delivers 0))))))
+
+                  ;; Quality multiplier (Premium has inherent quality)
+                  (define quality-mult (if (string-contains msg "Premium") 1.5
+                                          (if (string-contains msg "detailed") 1.2 1.0)))
+
+                  ;; Calculate value score
+                  ;; Higher score = better value
+                  ;; score = (budget - price) * reputation_factor * quality_factor
+                  (define price-score (if (> price 0) (/ 1.0 price) 0))
+                  (define rep-score (+ 1.0 (* reputation 0.2)))
+                  (define value-score (* price-score (* rep-score quality-mult)))
+
+                  ;; Only consider if within budget
+                  (if (and (<= price budget) (> value-score best-score))
+                      (do
+                        (set! best-score value-score)
+                        (set! best-bid id)
+                        (set! best-price price)
+                        (set! best-agent-name msg))
+                      null))
+                null)))))
+
+  (log :message (concatenate "Evaluated " (str bids-evaluated) " bids"))
+  (log :message "")
+
+  (if (not (null? best-bid))
+      (do
+        (log :message "🏆 BEST VALUE BID:")
+        (log :message (concatenate "   Bid #" (str best-bid)))
+        (log :message (concatenate "   Price: " (str best-price) " SOL"))
+        (log :message (concatenate "   Value Score: " (str best-score)))
+        (log :message (concatenate "   Agent: " (substring best-agent-name 0 (min 60 (length best-agent-name)))))
+        (log :message "")
+
+        ;; Accept
+        (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                   {:message (concatenate "ACCEPT: " agent-name " accepts bid #" (str best-bid) " at " (str best-price) " SOL. Selected for BEST VALUE (not just cheapest!)")
+                    :agent agent-name})
+        (log :message "✅ ACCEPTED based on VALUE score!")
+        (log :message (concatenate "💡 Saved: " (str (- budget best-price)) " SOL under budget")))
+      (log :message "❌ No acceptable bids found"))
+
+  (log :message "")
+  {:agent agent-name
+   :budget budget
+   :quality-weight quality-weight
+   :bids-evaluated bids-evaluated
+   :winner-price best-price
+   :winner-score best-score
+   :winner-bid best-bid})

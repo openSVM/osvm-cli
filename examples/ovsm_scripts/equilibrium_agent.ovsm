@@ -1,0 +1,136 @@
+;; EQUILIBRIUM Agent - Game theory pricing
+;; Analyzes market, computes Nash equilibrium price, adjusts to stable point
+;;
+;; Nash Equilibrium: No agent can improve by changing price unilaterally
+;; Strategy: If my price > market avg + margin → lower it
+;;           If my price < market avg - margin → raise it (leave money on table)
+;;           Converge to stable price point
+
+(do
+  (define bbs-url "http://144.124.231.40:8080")
+  (define agent-name "OVSM-Equilibrium")
+  (define base-cost 0.02)
+  (define max-margin 0.04)  ;; Won't go above cost + this
+  (define equilibrium-band 0.01) ;; How close is "stable"
+
+  (log :message "")
+  (log :message "⚖️ === NASH EQUILIBRIUM AGENT === ⚖️")
+  (log :message (concatenate "Agent: " agent-name))
+  (log :message "Strategy: Converge to market equilibrium price")
+  (log :message (concatenate "Base cost: " (str base-cost) " SOL"))
+  (log :message (concatenate "Equilibrium band: ±" (str equilibrium-band) " SOL"))
+  (log :message "")
+
+  ;; Fetch market data
+  (define resp (http-get (concatenate bbs-url "/api/boards/MARKETPLACE/posts?limit=100")))
+  (define posts (get (parse-json (get resp "body")) "data"))
+
+  ;; Extract all competitor prices from BIDs
+  (define total-price 0.0)
+  (define price-count 0)
+  (define min-price 1.0)
+  (define max-price 0.0)
+
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+            (if (string-contains msg-upper "BID")
+                (do
+                  ;; Extract prices (simplified extraction)
+                  (define price (if (string-contains msg "0.015") 0.015
+                                   (if (string-contains msg "0.02") 0.02
+                                       (if (string-contains msg "0.03") 0.03
+                                           (if (string-contains msg "0.04") 0.04
+                                               (if (string-contains msg "0.05") 0.05
+                                                   (if (string-contains msg "0.06") 0.06
+                                                       (if (string-contains msg "0.08") 0.08 null))))))))
+
+                  (if (not (null? price))
+                      (do
+                        (set! total-price (+ total-price price))
+                        (set! price-count (+ price-count 1))
+                        (if (< price min-price) (set! min-price price) null)
+                        (if (> price max-price) (set! max-price price) null))
+                      null))
+                null)))))
+
+  ;; Calculate market statistics
+  (define market-avg (if (> price-count 0)
+                        (/ total-price price-count)
+                        0.05))
+  (define market-spread (- max-price min-price))
+
+  (log :message (concatenate "📈 Market Analysis (" (str price-count) " prices):"))
+  (log :message (concatenate "   Min: " (str min-price) " SOL"))
+  (log :message (concatenate "   Max: " (str max-price) " SOL"))
+  (log :message (concatenate "   Avg: " (str market-avg) " SOL"))
+  (log :message (concatenate "   Spread: " (str market-spread) " SOL"))
+  (log :message "")
+
+  ;; Calculate Nash equilibrium price
+  ;; In competitive market: equilibrium tends toward marginal cost + small margin
+  ;; We use: avg(market_avg, min_price + margin) to avoid race to bottom
+
+  (define target-equilibrium (/ (+ market-avg (+ min-price 0.01)) 2.0))
+
+  ;; Bound by our constraints
+  (define my-price (if (< target-equilibrium (+ base-cost 0.005))
+                      (+ base-cost 0.005)  ;; Don't go below cost + min margin
+                      (if (> target-equilibrium (+ base-cost max-margin))
+                          (+ base-cost max-margin)  ;; Don't go above max
+                          target-equilibrium)))
+
+  ;; Determine market position
+  (define position (if (< my-price (- market-avg equilibrium-band))
+                       "BELOW"
+                       (if (> my-price (+ market-avg equilibrium-band))
+                           "ABOVE"
+                           "AT EQUILIBRIUM")))
+
+  (log :message "⚖️ Equilibrium Calculation:")
+  (log :message (concatenate "   Target equilibrium: " (str target-equilibrium) " SOL"))
+  (log :message (concatenate "   My price: " (str my-price) " SOL"))
+  (log :message (concatenate "   Position: " position))
+  (log :message "")
+
+  ;; Post offer at equilibrium price
+  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+             {:message (concatenate "OFFER: " agent-name " - Game theory optimized pricing: " (str my-price) " SOL. Nash equilibrium derived!")
+              :agent agent-name})
+
+  ;; Bid on recent requests at equilibrium price
+  (define bids-made 0)
+  (for (post posts)
+    (do
+      (define msg (get post "body"))
+      (define id (get post "id"))
+      (if (null? msg) null
+          (do
+            (define msg-upper (upper msg))
+            (if (and (string-contains msg-upper "REQUEST")
+                     (< bids-made 3))
+                (do
+                  (http-post (concatenate bbs-url "/api/boards/MARKETPLACE/posts")
+                             {:message (concatenate "BID: " agent-name " offers " (str my-price) " SOL - equilibrium optimized, fair for all parties")
+                              :agent agent-name})
+                  (set! bids-made (+ bids-made 1))
+                  (log :message (concatenate "⚖️ Equilibrium BID on #" (str id))))
+                null)))))
+
+  (log :message "")
+  (log :message "=== GAME THEORY SUMMARY ===")
+  (log :message (concatenate "Market avg: " (str market-avg) " SOL"))
+  (log :message (concatenate "My equilibrium price: " (str my-price) " SOL"))
+  (log :message (concatenate "Expected margin: " (str (- my-price base-cost)) " SOL"))
+  (log :message (concatenate "Bids placed: " (str bids-made)))
+
+  {:agent agent-name
+   :strategy "nash-equilibrium"
+   :market-avg market-avg
+   :equilibrium-price my-price
+   :position position
+   :margin (- my-price base-cost)
+   :bids bids-made})
