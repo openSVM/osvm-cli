@@ -1,0 +1,111 @@
+;;; Pump.fun Token Graduation Tracker
+;;;
+;;; Monitors Pump.fun for token graduations (migrations to Raydium)
+;;; Runs for 10 minutes and reports total graduation count
+;;;
+;;; Usage:
+;;;   1. Start streaming server: osvm stream --programs pumpfun --port 8080
+;;;   2. Run this script: osvm ovsm run /tmp/pumpfun_graduation_tracker.ovsm
+
+;; Connect to streaming server (local instance)
+(define stream-id (stream-connect "http://localhost:8080"
+                                  :programs ["pumpfun"]))
+
+(log :message "🎓 PUMP.FUN GRADUATION TRACKER")
+(println "═══════════════════════════════════════════════════")
+(println "Monitoring for token graduations (migration to Raydium)")
+(println "Duration: 10 minutes (600 seconds)")
+(println "═══════════════════════════════════════════════════")
+(println "")
+
+;; Initialize counters
+(define buy-count 0)
+(define sell-count 0)
+(define graduation-count 0)
+(define total-events 0)
+
+;; Monitor for 10 minutes (600 seconds)
+(define start-time (now))
+(define duration 600)
+(define last-status-time (now))
+
+(while (< (- (now) start-time) duration)
+  ;; Wait for next event (blocks up to 5 seconds)
+  (define event (stream-wait stream-id :timeout 5))
+
+  (if (not (null? event))
+      (do
+        (set! total-events (+ total-events 1))
+        (define event-type (get event "type"))
+
+        ;; Only process log_message events
+        (if (= event-type "log_message")
+            (do
+              (define logs (get event "logs"))
+              (define signature (get event "signature"))
+              (define logs-text (str logs))
+
+              ;; Check for Buy transactions
+              (if (string-contains logs-text "Instruction: Buy")
+                  (do
+                    (set! buy-count (+ buy-count 1)))
+                  null)
+
+              ;; Check for Sell transactions
+              (if (string-contains logs-text "Instruction: Sell")
+                  (do
+                    (set! sell-count (+ sell-count 1)))
+                  null)
+
+              ;; Check for Token Graduation (migration to Raydium)
+              (if (or (string-contains logs-text "raydium")
+                      (string-contains logs-text "Instruction: Graduate")
+                      (string-contains logs-text "bonding curve complete"))
+                  (do
+                    (set! graduation-count (+ graduation-count 1))
+                    (println "")
+                    (println (format "🎓🎓🎓 GRADUATION #{} DETECTED! 🎓🎓🎓" graduation-count))
+                    (println (format "   Timestamp: {}" (now)))
+                    (println (format "   Signature: {}" signature))
+                    (println "   Token has successfully migrated to Raydium!")
+                    (println ""))
+                  null))
+            null))
+      null)
+
+  ;; Print status update every 60 seconds
+  (if (>= (- (now) last-status-time) 60)
+      (do
+        (define elapsed (- (now) start-time))
+        (define remaining (- duration elapsed))
+        (println "")
+        (println (format "⏱️  Status Update - Elapsed: {}s | Remaining: {}s" elapsed remaining))
+        (println (format "   Total Events: {} | Buys: {} | Sells: {} | Graduations: {}"
+                       total-events buy-count sell-count graduation-count))
+        (println "")
+        (set! last-status-time (now)))
+      null))
+
+;; Print final summary
+(println "")
+(println "═══════════════════════════════════════════════════")
+(println "📊 FINAL GRADUATION SUMMARY")
+(println "═══════════════════════════════════════════════════")
+(println (format "Monitoring Duration:  {} seconds (10 minutes)" duration))
+(println (format "Total Events Received: {}" total-events))
+(println (format "📈 Buy Transactions:   {}" buy-count))
+(println (format "📉 Sell Transactions:  {}" sell-count))
+(println "")
+(println (format "🎓 TOKEN GRADUATIONS:  {} 🎓" graduation-count))
+(println "")
+(if (> graduation-count 0)
+    (do
+      (define rate (/ (* graduation-count 60.0) duration))
+      (println (format "📈 Graduation Rate:    {:.2f} per minute" rate))
+      (println (format "📊 Projected per Hour: {:.1f}" (* rate 60))))
+    (println "❌ No graduations detected during monitoring period"))
+(println "═══════════════════════════════════════════════════")
+
+;; Close stream
+(stream-close stream-id)
+(log :message "✅ Graduation tracker stopped")

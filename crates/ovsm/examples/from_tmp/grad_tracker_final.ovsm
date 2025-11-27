@@ -1,0 +1,65 @@
+;;; Pump.fun Graduation Tracker - 10 Minutes
+;;; Polls every 3 seconds for new events
+
+(define stream-id (stream-connect "http://localhost:8080" :programs ["pumpfun"]))
+(log :message "🎓 Started graduation tracking for 10 minutes")
+
+(define buy-count 0)
+(define sell-count 0)
+(define grad-count 0)
+(define total-events 0)
+(define start-time (now))
+(define duration 600)
+(define poll-interval 3)
+
+(while (< (- (now) start-time) duration)
+  (define events (stream-poll stream-id :limit 100))
+  (define event-count (length events))
+
+  (if (> event-count 0)
+      (do
+        (set! total-events (+ total-events event-count))
+        (for (event events)
+          (define etype (get event "type"))
+          (if (= etype "log_message")
+              (do
+                (define logs (get event "logs"))
+                (define logs-str (str logs))
+
+                (if (string-contains logs-str "Instruction: Buy")
+                    (set! buy-count (+ buy-count 1))
+                    null)
+
+                (if (string-contains logs-str "Instruction: Sell")
+                    (set! sell-count (+ sell-count 1))
+                    null)
+
+                (if (or (string-contains logs-str "raydium")
+                        (string-contains logs-str "Instruction: Graduate")
+                        (string-contains logs-str "bonding curve complete"))
+                    (do
+                      (set! grad-count (+ grad-count 1))
+                      (define sig (get event "signature"))
+                      (log :message "🎓 GRADUATION!" :value sig))
+                    null))
+              null)))
+      null)
+
+  (define elapsed (- (now) start-time))
+  (if (= (% elapsed 60) 0)
+      (log :message "Status" :value (str "Elapsed: " elapsed "s, Events: " total-events ", Grads: " grad-count))
+      null)
+
+  (define delay 0)
+  (while (< delay (* poll-interval 100000))
+    (set! delay (+ delay 1))
+    null))
+
+(log :message "=== FINAL RESULTS ===")
+(log :message "Total Events" :value total-events)
+(log :message "Buy Transactions" :value buy-count)
+(log :message "Sell Transactions" :value sell-count)
+(log :message "🎓 TOKEN GRADUATIONS 🎓" :value grad-count)
+
+(stream-close stream-id)
+(log :message "Tracking complete")

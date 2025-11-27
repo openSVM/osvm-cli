@@ -1,0 +1,50 @@
+;; Comprehensive SPL token inflow/outflow analysis
+;; Groups transfers by token and shows top counterparties for each
+(do
+  (define target "REVXui3vBCcsDHd7oUaiTNc885YiXT773yoD8DuFuck")
+
+  (log :message "Fetching ALL token transfers for wallet...")
+  (define resp (get_account_transfers {:address target :limit 1000}))
+  (define data (get resp "data"))
+  (log :message "Total transfers:" :value (count data))
+
+  ;; Build token map: {token_mint: {inflow: [{from, amount}], outflow: [{to, amount}]}}
+  (define token_map {})
+
+  (log :message "\nAnalyzing transfers by token...")
+  (for (transfer data)
+    (do
+      (define mint (get transfer "mint"))
+      (define transfer_type (get transfer "transferType"))
+      (define amount (get transfer "tokenAmount"))
+      (define from_addr (get transfer "from"))
+      (define to_addr (get transfer "to"))
+
+      ;; Initialize token entry if not exists
+      (when (null? (get token_map mint))
+        (set! token_map (merge token_map {mint {:inflow [] :outflow []}})))
+
+      ;; Add to inflow or outflow
+      (define token_data (get token_map mint))
+      (if (= transfer_type "IN")
+          ;; Inflow: track who sent TO us
+          (do
+            (define inflows (get token_data "inflow"))
+            (set! inflows (append inflows {:address from_addr :amount amount}))
+            (set! token_data (merge token_data {:inflow inflows}))
+            (set! token_map (merge token_map {mint token_data})))
+          ;; Outflow: track who received FROM us
+          (do
+            (define outflows (get token_data "outflow"))
+            (set! outflows (append outflows {:address to_addr :amount amount}))
+            (set! token_data (merge token_data {:outflow outflows}))
+            (set! token_map (merge token_map {mint token_data}))))))
+
+  (log :message "\n=== TOKEN FLOW ANALYSIS ===")
+  (log :message "Total unique tokens:" :value (count (keys token_map)))
+
+  ;; Return summary for AI formatting
+  {:wallet target
+   :total_transfers (count data)
+   :unique_tokens (count (keys token_map))
+   :token_flows token_map})

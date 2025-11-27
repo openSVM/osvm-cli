@@ -1,0 +1,133 @@
+;;; OSVM V6: Async Event Processing with Lambda Callbacks
+;;;
+;;; This demonstrates the future async streaming API with callbacks
+
+(println "🚀 OSVM V6 - Async Event Processing Demo")
+(println "")
+
+;; Connect to Pump.fun WebSocket stream
+(define stream-id (stream-connect "ws://localhost:8080/ws" :programs ["pumpfun"]))
+
+(println "✅ Connected to WebSocket stream")
+(println "📡 Registering event callbacks...")
+(println "")
+
+;; Define callback for token transfers
+(define handle-transfer (lambda (event)
+  (do
+    (define token (get event "token"))
+    (define amount (get event "amount"))
+    (define from (get event "from"))
+    (define to (get event "to"))
+
+    ;; Check if it's a Pump.fun token
+    (if (> (length token) 4)
+        (do
+          (define last-4 (substring token (- (length token) 4) (length token)))
+          (if (= last-4 "pump")
+              (do
+                (println "═══════════════════════════════════════════════")
+                (println (str "💸 TRANSFER: " amount " tokens"))
+                (println (str "Token: " token))
+                (println (str "From:  " from))
+                (println (str "To:    " to))
+                (println "═══════════════════════════════════════════════"))
+              null))
+        null))))
+
+;; Define callback for buy events
+(define handle-buy (lambda (event)
+  (do
+    (println "🟢 BUY EVENT DETECTED!")
+    (define logs (get event "logs"))
+    (println (str "Logs: " logs)))))
+
+;; Define callback for sell events
+(define handle-sell (lambda (event)
+  (do
+    (println "🔴 SELL EVENT DETECTED!")
+    (define logs (get event "logs"))
+    (println (str "Logs: " logs)))))
+
+;; Define callback for graduation events
+(define handle-graduation (lambda (event)
+  (do
+    (println "")
+    (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+    (println "🎓 TOKEN GRADUATION - MIGRATING TO RAYDIUM 🚀")
+    (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+    (define sig (get event "signature"))
+    (println (str "Signature: " sig))
+    (println (str "osvm.ai:   https://osvm.ai/tx/" sig))
+    (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+    (println ""))))
+
+;; ═══════════════════════════════════════════════════════════════
+;; V6 API (FUTURE): Register callbacks for different event types
+;; ═══════════════════════════════════════════════════════════════
+;; These would automatically dispatch to thread pool for concurrent processing
+;;
+;; (stream-on stream-id "token_transfer" handle-transfer)
+;; (stream-on stream-id "buy" handle-buy)
+;; (stream-on stream-id "sell" handle-sell)
+;; (stream-on stream-id "graduation" handle-graduation)
+;;
+;; ;; Main thread just waits - events processed in background
+;; (stream-wait-forever stream-id)
+
+;; ═══════════════════════════════════════════════════════════════
+;; V5 API (CURRENT): Manual event loop with lambdas
+;; ═══════════════════════════════════════════════════════════════
+(println "📊 Starting manual event loop (V5)...")
+(println "⏱️  Processing for 60 seconds...")
+(println "")
+
+(define start-time (now))
+(define duration 60)
+(define event-count 0)
+
+(while (< (- (now) start-time) duration)
+  (define event (stream-wait stream-id :timeout 1))
+
+  (if (not (null? event))
+      (do
+        (set! event-count (+ event-count 1))
+        (define event-type (get event "type"))
+
+        ;; Manually call the appropriate callback
+        (if (= event-type "token_transfer")
+            (handle-transfer event)
+            null)
+
+        (if (= event-type "log_message")
+            (do
+              (define logs (str (get event "logs")))
+
+              (if (string-contains logs "Instruction: Buy")
+                  (handle-buy event)
+                  null)
+
+              (if (string-contains logs "Instruction: Sell")
+                  (handle-sell event)
+                  null)
+
+              (if (or (string-contains logs "raydium")
+                      (string-contains logs "Instruction: Graduate"))
+                  (handle-graduation event)
+                  null))
+            null))
+      null))
+
+;; Summary
+(println "")
+(println "")
+(println "═══════════════════════════════════════════════")
+(println "  PROCESSING SUMMARY")
+(println "═══════════════════════════════════════════════")
+(println (str "Duration:       " duration " seconds"))
+(println (str "Events Processed: " event-count))
+(println "═══════════════════════════════════════════════")
+
+(stream-close stream-id)
+(println "")
+(println "✅ Stream closed")

@@ -1,0 +1,66 @@
+;; SOL Transfer Program - Written in OVSM
+;;
+;; Transfers SOL from account[0] (source) to account[1] (destination)
+;; Amount is passed as first 8 bytes of instruction data (little-endian u64)
+;;
+;; Account Requirements:
+;;   account[0] = Source (signer, writable)
+;;   account[1] = Destination (writable)
+;;
+;; Instruction Data:
+;;   bytes 0-7: amount in lamports (u64, little-endian)
+
+(do
+  (sol_log_ "=== OVSM SOL Transfer ===")
+
+  ;; Validate: exactly 2 accounts
+  (define num-accts (num-accounts))
+  (if (!= num-accts 2)
+      (do (sol_log_ "ERROR: Need 2 accounts") 1)
+
+      ;; Validate: source is signer
+      (if (= (account-is-signer 0) 0)
+          (do (sol_log_ "ERROR: Source must sign") 1)
+
+          ;; Validate: source is writable
+          (if (= (account-is-writable 0) 0)
+              (do (sol_log_ "ERROR: Source must be writable") 1)
+
+              ;; Validate: dest is writable
+              (if (= (account-is-writable 1) 0)
+                  (do (sol_log_ "ERROR: Dest must be writable") 1)
+
+                  ;; Validate: instruction data length
+                  (if (< (instruction-data-len) 8)
+                      (do (sol_log_ "ERROR: Need 8 bytes for amount") 1)
+
+                      ;; All checks passed - do the transfer
+                      (do
+                        ;; Read amount from instruction data
+                        (define amount (mem-load (instruction-data-ptr) 0))
+                        (sol_log_ "Transfer amount:")
+                        (sol_log_64_ amount)
+
+                        ;; Get balances
+                        (define src-bal (account-lamports 0))
+                        (define dst-bal (account-lamports 1))
+
+                        (sol_log_ "Source before:")
+                        (sol_log_64_ src-bal)
+
+                        ;; Check sufficient balance
+                        (if (< src-bal amount)
+                            (do (sol_log_ "ERROR: Insufficient funds") 1)
+
+                            ;; Execute transfer
+                            (do
+                              (set-lamports 0 (- src-bal amount))
+                              (set-lamports 1 (+ dst-bal amount))
+
+                              (sol_log_ "Source after:")
+                              (sol_log_64_ (account-lamports 0))
+                              (sol_log_ "Dest after:")
+                              (sol_log_64_ (account-lamports 1))
+
+                              (sol_log_ "=== Transfer Complete ===")
+                              0)))))))))

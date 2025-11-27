@@ -1,0 +1,38 @@
+;;; Event-Driven Pump.fun Monitor (No Polling!)
+;;;
+;;; Uses stream-wait instead of stream-poll
+;;; Blocks until event arrives - truly event-driven
+
+(println "Connecting to Pump.fun WebSocket...")
+(define stream-id (stream-connect "ws://localhost:8080/ws" :programs ["pumpfun"]))
+(println "Connected! Waiting for events (event-driven, no polling)...")
+(println "")
+
+(define event-count 0)
+(define start-time (now))
+(define max-events 10)
+
+;; Event-driven loop - blocks on stream-wait
+(while (< event-count max-events)
+  ;; stream-wait BLOCKS until next event (no polling!)
+  (define event (stream-wait stream-id :timeout 10))
+  
+  (if (not (null? event))
+      (do
+        (set! event-count (+ event-count 1))
+        (define event-type (get event "type"))
+        
+        (println (str "[" event-count "] Event arrived! Type: " event-type))
+        
+        (if (= event-type "token_transfer")
+            (println (str "    Transfer: " (get event "amount") " tokens"))
+            null))
+      (println "Timeout waiting for event")))
+
+(define elapsed (- (now) start-time))
+(println "")
+(println (str "Processed " event-count " events in " elapsed " seconds"))
+(println (str "Average: " (/ elapsed event-count) " seconds per event"))
+(println "✅ No polling loop needed - truly event-driven!")
+
+(stream-close stream-id)

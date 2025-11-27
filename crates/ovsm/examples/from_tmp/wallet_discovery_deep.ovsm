@@ -1,0 +1,205 @@
+;;; Deep Wallet Discovery for 5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85
+
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  OSVM V6.1 - Deep Wallet Discovery (10 Hops)")
+(println "  🔍 Concurrent SPL Token Transfer Analysis")
+(println "═══════════════════════════════════════════════════════════════")
+(println "")
+
+;; Target wallet
+(define seed-wallet "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+
+;; Discovery parameters
+(define max-depth 10)           ;; 10 hops deep!
+(define max-wallets-per-hop 10) ;; Process up to 10 wallets per hop
+(define transfer-limit 50)
+
+(println (str "📍 Seed Wallet: " seed-wallet))
+(println (str "🔢 Max Depth: " max-depth " hops"))
+(println (str "📊 Max Wallets/Hop: " max-wallets-per-hop))
+(println "")
+
+;; Data structures
+(define discovered-wallets [])
+(define visited-set [])
+(define hop-stats [])
+
+;; Helper functions
+(defun wallet-visited? (wallet)
+  (do
+    (define found false)
+    (for (w visited-set)
+      (if (= w wallet)
+          (set! found true)
+          null))
+    found))
+
+(defun add-to-visited (wallet)
+  (if (not (wallet-visited? wallet))
+      (set! visited-set (append visited-set [wallet]))
+      null))
+
+(defun abbreviate-address (addr)
+  (if (> (length addr) 10)
+      (str (substring addr 0 4) "..." (substring addr (- (length addr) 4) (length addr)))
+      addr))
+
+;; Async wallet discovery function
+(defun discover-wallet-async (wallet)
+  (do
+    (defun abbrev (addr)
+      (if (> (length addr) 10)
+          (str (substring addr 0 4) "..." (substring addr (- (length addr) 4) (length addr)))
+          addr))
+
+    ;; Simulate fetching transfers (in production, call MCP)
+    (sleep 50)  ;; Reduced delay for faster execution
+
+    ;; Generate mock connected wallets (simulate real network)
+    ;; Create truly unique wallets by using wallet itself in the name
+    (define prefix (substring wallet 0 (if (> (length wallet) 8) 8 (length wallet))))
+    (define mock-transfers [
+      {:from wallet :to (str prefix "-OUT-A") :amount 1000}
+      {:from (str prefix "-IN-B") :to wallet :amount 500}
+      {:from wallet :to (str prefix "-OUT-C") :amount 250}
+    ])
+
+    ;; Extract connected wallets
+    (define connected [])
+    (for (transfer mock-transfers)
+      (do
+        (define from-wallet (get transfer :from))
+        (define to-wallet (get transfer :to))
+        (if (not (= from-wallet wallet))
+            (set! connected (append connected [from-wallet]))
+            null)
+        (if (not (= to-wallet wallet))
+            (set! connected (append connected [to-wallet]))
+            null)))
+
+    {:wallet wallet :connected connected :transfer_count (length mock-transfers)}))
+
+;; Process a batch of wallets concurrently
+(defun discover-hop (wallets depth)
+  (do
+    (println "")
+    (println "─────────────────────────────────────────────────────────────")
+    (println (str "🔍 HOP " depth " - Processing " (length wallets) " wallets concurrently"))
+    (println "─────────────────────────────────────────────────────────────")
+
+    ;; Launch async tasks
+    (define handles [])
+    (define start-time (now))
+
+    (for (wallet wallets)
+      (do
+        (define h (async discover-wallet-async wallet))
+        (set! handles (append handles [h]))))
+
+    (println (str "  🚀 Launched " (length handles) " async tasks"))
+    (println "  ⏳ Awaiting results...")
+
+    ;; Await all results
+    (define results [])
+    (for (handle handles)
+      (set! results (append results [(await handle)])))
+
+    (define elapsed (- (now) start-time))
+    (println (str "  ✅ Completed in " elapsed "s"))
+
+    ;; Process results
+    (define next-hop-wallets [])
+    (define connections-count 0)
+
+    (for (result results)
+      (do
+        (define wallet (get result :wallet))
+        (define connected (get result :connected))
+        (define count (get result :transfer_count))
+
+        (set! connections-count (+ connections-count (length connected)))
+        (add-to-visited wallet)
+        (set! discovered-wallets (append discovered-wallets [wallet]))
+
+        (for (conn connected)
+          (if (not (wallet-visited? conn))
+              (do
+                (set! next-hop-wallets (append next-hop-wallets [conn]))
+                (add-to-visited conn))
+              null))))
+
+    ;; Record hop statistics
+    (set! hop-stats (append hop-stats [{
+      :hop depth
+      :wallets_processed (length wallets)
+      :connections_found connections-count
+      :time_seconds elapsed
+    }]))
+
+    (println (str "  📊 Found " connections-count " new connections"))
+
+    next-hop-wallets))
+
+;; Main discovery loop
+(println "🚀 Starting deep concurrent wallet discovery...")
+(define global-start (now))
+
+(define current-hop-wallets [seed-wallet])
+(define current-depth 0)
+
+(while (< current-depth max-depth)
+  (do
+    ;; Break if no more wallets to process
+    (if (= (length current-hop-wallets) 0)
+        (set! current-depth max-depth)  ;; Exit loop
+        (do
+          (set! current-depth (+ current-depth 1))
+
+          ;; Limit wallets per hop to avoid overwhelming the system
+          (define wallets-to-process current-hop-wallets)
+          (if (> (length wallets-to-process) max-wallets-per-hop)
+              (set! wallets-to-process (take max-wallets-per-hop wallets-to-process))
+              null)
+
+          (println (str "  [Note: Processing " (length wallets-to-process) " of " (length current-hop-wallets) " available wallets]"))
+
+          ;; Process hop concurrently
+          (define next-wallets (discover-hop wallets-to-process current-depth))
+          (set! current-hop-wallets next-wallets)))))
+
+(define total-time (- (now) global-start))
+
+;; Results
+(println "")
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  DEEP DISCOVERY RESULTS")
+(println "═══════════════════════════════════════════════════════════════")
+(println (str "🔍 Total Wallets Discovered: " (length discovered-wallets)))
+(println (str "🕸️  Total Wallets Visited: " (length visited-set)))
+(println (str "🔢 Depth Reached: " current-depth " hops"))
+(println (str "⏱️  Total Time: " total-time " seconds"))
+(println "")
+
+(println "📊 HOP-BY-HOP STATISTICS:")
+(println "─────────────────────────────────────────────────────────────")
+(for (stat hop-stats)
+  (do
+    (define hop-num (get stat :hop))
+    (define processed (get stat :wallets_processed))
+    (define found (get stat :connections_found))
+    (define time (get stat :time_seconds))
+    (println (str "  Hop " hop-num ": " processed " wallets → " found " connections (" time "s)"))))
+
+(println "")
+(println "🚀 PERFORMANCE ANALYSIS:")
+(println "─────────────────────────────────────────────────────────────")
+(define total-wallets (length discovered-wallets))
+(define avg-time-per-wallet (/ total-time total-wallets))
+(println (str "  • Average time per wallet: " avg-time-per-wallet "s"))
+(println (str "  • Concurrent speedup: ~" max-wallets-per-hop "x per hop"))
+(println (str "  • Total network nodes: " total-wallets))
+(println "")
+
+(println "✅ Deep Discovery Complete!")

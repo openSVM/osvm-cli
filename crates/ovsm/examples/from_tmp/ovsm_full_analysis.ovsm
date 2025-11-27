@@ -1,0 +1,93 @@
+(do
+  ;; OVSM token mint address
+  (define MINT "pvv4fu1RvQBkKXozyH5A843sp1mt6gTy9rPoZrBBAGS")
+
+  ;; Get token info
+  (define token_response (get_token_info {:address MINT}))
+  (define token_name (get token_response "name"))
+  (define token_symbol (get token_response "symbol"))
+  (define token_decimals (get token_response "decimals"))
+
+  ;; Get OHLCV market data with correct endpoint parameter
+  (define market_response (get_market_data {:mint MINT :endpoint "ohlcv"}))
+
+  ;; Extract data safely
+  (define data_obj (get market_response "data"))
+  (define items (get data_obj "items"))
+  (define ohlcv (if (null? items) [] items))
+
+  ;; Extract token info from market response
+  (define token_info (get market_response "tokenInfo"))
+  (define liquidity (get token_info "liquidity"))
+  (define price (get token_info "price"))
+  (define volume24h (get token_info "volume24h"))
+
+  ;; Check if we have enough data
+  (define has_data (>= (count ohlcv) 5))
+
+  ;; Only proceed with analysis if we have data
+  (if has_data
+    (do
+      ;; Extract price and volume arrays
+      (define closes (map ohlcv (lambda (c) (float (get c "c")))))
+      (define highs (map ohlcv (lambda (c) (float (get c "h")))))
+      (define lows (map ohlcv (lambda (c) (float (get c "l")))))
+      (define volumes (map ohlcv (lambda (c) (float (get c "v")))))
+
+      ;; Current price (last close)
+      (define current_price (last closes))
+
+      ;; Calculate 5-period SMA (Simple Moving Average)
+      (define recent_closes (slice closes (- (count closes) 6) (count closes)))
+      (define sma_closes (slice recent_closes 1 (count recent_closes)))
+      (define total_recent (reduce sma_closes 0.0 (lambda (sum p) (+ sum p))))
+      (define sma5 (/ total_recent (float (count sma_closes))))
+
+      ;; Determine trend
+      (define trend (if (> current_price sma5) "upward" "downward"))
+
+      ;; Price change percentage (first to last)
+      (define first_price (first closes))
+      (define price_change_pct (* 100.0 (/ (- current_price first_price) first_price)))
+
+      ;; Volatility (average high-low range as percentage of close)
+      (define ranges (map ohlcv
+        (lambda (c)
+          (let ((high (float (get c "h")))
+                (low (float (get c "l")))
+                (close (float (get c "c"))))
+            (/ (- high low) close)))))
+      (define total_ranges (reduce ranges 0.0 (lambda (sum r) (+ sum r))))
+      (define avg_range (/ total_ranges (float (count ranges))))
+      (define volatility_pct (* 100.0 avg_range))
+
+      ;; Volume statistics
+      (define total_volume (reduce volumes 0.0 (lambda (sum v) (+ sum v))))
+      (define avg_volume (/ total_volume (float (count volumes))))
+      (define max_volume (reduce volumes 0.0 (lambda (m v) (if (> v m) v m))))
+
+      ;; Build comprehensive result
+      {:token {:name (if (null? token_name) "OVSM" token_name)
+               :symbol (if (null? token_symbol) "OVSM" token_symbol)
+               :decimals (if (null? token_decimals) 9 token_decimals)}
+       :market {:liquidity (if (null? liquidity) 0.0 liquidity)
+                :price (if (null? price) current_price price)
+                :volume24h (if (null? volume24h) 0.0 volume24h)}
+       :analysis {:current_price current_price
+                  :trend trend
+                  :sma5 sma5
+                  :price_change_pct price_change_pct
+                  :volatility_pct volatility_pct
+                  :avg_volume avg_volume
+                  :max_volume max_volume
+                  :candles_count (count ohlcv)
+                  :data_period "Last 24 hours (hourly candles)"
+                  :summary (format "OVSM shows {} trend with {:.2f}% price change. Avg volume: {:.2f}, volatility: {:.2f}%."
+                                  trend price_change_pct avg_volume volatility_pct)}})
+
+    ;; Not enough data case
+    {:error "Insufficient OHLCV data"
+     :candles_found (count ohlcv)
+     :minimum_required 5
+     :token {:name (if (null? token_name) "OVSM" token_name)
+             :symbol (if (null? token_symbol) "OVSM" token_symbol)}}))

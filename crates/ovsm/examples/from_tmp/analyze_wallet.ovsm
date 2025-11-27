@@ -1,0 +1,57 @@
+(do
+  ;; Analyze wallet transactions for top counterparties
+  (define wallet "REVXui3vBCcsDHd7oUaiTNc885YiXT773yoD8DuFuck")
+
+  ;; Get transactions
+  (define response (get_account_transactions {:address wallet :limit 200}))
+  (define content (get response "content"))
+  (define data (if content content response))
+  (define transactions (get data "transactions"))
+
+  ;; Lists to collect all counterparties
+  (define inflow_addrs [])
+  (define outflow_addrs [])
+
+  ;; Process transactions
+  (if (and transactions (array? transactions))
+    (for (tx transactions)
+      (define transfers (get tx "transfers"))
+      (when (and transfers (array? transfers))
+        (for (transfer transfers)
+          (define from_addr (get transfer "from"))
+          (define to_addr (get transfer "to"))
+          (define amount (get transfer "amount"))
+
+          ;; Collect inflow addresses (someone sent TO our wallet)
+          (when (and to_addr (== to_addr wallet) from_addr (!= from_addr wallet))
+            (set! inflow_addrs (append inflow_addrs [{:address from_addr :amount amount}])))
+
+          ;; Collect outflow addresses (we sent FROM our wallet)
+          (when (and from_addr (== from_addr wallet) to_addr (!= to_addr wallet))
+            (set! outflow_addrs (append outflow_addrs [{:address to_addr :amount amount}]))))))
+    (log :message "No transactions found"))
+
+  ;; Aggregate by address
+  (define inflow_counts {})
+  (define outflow_counts {})
+
+  ;; Count inflows
+  (for (item inflow_addrs)
+    (define addr (get item "address"))
+    (define prev (get inflow_counts addr))
+    (set! inflow_counts (merge inflow_counts {:placeholder_addr addr :placeholder_count (if prev (+ prev 1) 1)})))
+
+  ;; Count outflows
+  (for (item outflow_addrs)
+    (define addr (get item "address"))
+    (define prev (get outflow_counts addr))
+    (set! outflow_counts (merge outflow_counts {:placeholder_addr addr :placeholder_count (if prev (+ prev 1) 1)})))
+
+  ;; Return summary
+  {:wallet wallet
+   :tx_count (if transactions (count transactions) 0)
+   :unique_inflows (count inflow_addrs)
+   :unique_outflows (count outflow_addrs)
+   :sample_inflow_addresses (take 5 inflow_addrs)
+   :sample_outflow_addresses (take 5 outflow_addrs)}
+)

@@ -1,0 +1,140 @@
+(do
+  ;; COMPLETE TOKEN-BY-TOKEN WALLET ANALYSIS - FIXED with new set syntax
+  (define wallet "REVXui3vBCcsDHd7oUaiTNc885YiXT773yoD8DuFuck")
+
+  ;; Fetch multiple batches to get comprehensive history
+  (define batch_size 1000)
+  (define all_txs [])
+
+  ;; Batch 1
+  (define batch1 (get_account_transactions {:address wallet :limit batch_size}))
+  (define txs1 (get batch1 "transactions"))
+  (set! all_txs (if txs1 txs1 []))
+
+  ;; Batch 2 (if we got full batch)
+  (define last_sig1 (if (and txs1 (>= (count txs1) batch_size))
+                        (get (nth txs1 (- (count txs1) 1)) "signature")
+                        null))
+
+  (when last_sig1
+    (define batch2 (get_account_transactions {:address wallet :limit batch_size :before last_sig1}))
+    (define txs2 (get batch2 "transactions"))
+    (when txs2
+      (set! all_txs (append all_txs txs2))))
+
+  ;; Batch 3
+  (define last_sig2 (if (and txs2 (>= (count txs2) batch_size))
+                        (get (nth txs2 (- (count txs2) 1)) "signature")
+                        null))
+
+  (when last_sig2
+    (define batch3 (get_account_transactions {:address wallet :limit batch_size :before last_sig2}))
+    (define txs3 (get batch3 "transactions"))
+    (when txs3
+      (set! all_txs (append all_txs txs3))))
+
+  ;; Now analyze transfers and group by token
+  (define token_map {})
+
+  (for (tx all_txs)
+    (define transfers (get tx "transfers"))
+    (when (and transfers (array? transfers))
+      (for (transfer transfers)
+        (define addr (get transfer "account"))
+        (define change (get transfer "change"))
+
+        ;; Only process if not our wallet and address exists
+        (when (and addr (!= addr wallet))
+          ;; Determine token type - default to SOL
+          (define token "SOL")
+
+          ;; Initialize token entry if needed - USING NEW SET SYNTAX!
+          (when (not (get token_map token))
+            (set! token_map (set token_map token {:inflow_addresses [] :outflow_addresses []})))
+
+          ;; Add address to appropriate list
+          (define token_data (get token_map token))
+
+          ;; If change is negative for our wallet, it's an outflow to this address
+          ;; If change is positive, it's an inflow from this address
+          (if (and change (< change 0))
+            ;; Negative change = outflow
+            (set! token_data (set token_data "outflow_addresses"
+                                  (append (get token_data "outflow_addresses") [addr])))
+            ;; Positive change = inflow
+            (set! token_data (set token_data "inflow_addresses"
+                                  (append (get token_data "inflow_addresses") [addr]))))
+
+          ;; Update token_map with modified token_data - USING NEW SET SYNTAX!
+          (set! token_map (set token_map token token_data))))))
+
+  ;; Now get unique addresses and take top 5 for each token
+  (define results {})
+  (define tokens (keys token_map))
+
+  (for (token tokens)
+    (define token_data (get token_map token))
+    (define inflows (get token_data "inflow_addresses"))
+    (define outflows (get token_data "outflow_addresses"))
+
+    ;; Get unique inflow addresses
+    (define unique_inflows [])
+    (for (addr inflows)
+      (define found false)
+      (for (u unique_inflows)
+        (when (== u addr)
+          (set! found true)))
+      (when (not found)
+        (set! unique_inflows (append unique_inflows [addr]))))
+
+    ;; Get unique outflow addresses
+    (define unique_outflows [])
+    (for (addr outflows)
+      (define found false)
+      (for (u unique_outflows)
+        (when (== u addr)
+          (set! found true)))
+      (when (not found)
+        (set! unique_outflows (append unique_outflows [addr]))))
+
+    ;; Filter out known protocols
+    (define protocols [
+      "11111111111111111111111111111111"
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+      "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+      "ComputeBudget111111111111111111111111111111"
+      "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+      "JUP6LkbVZ8n5p3YKjs5cRJkFnMAqTQv2ZKqFXtZUqhc"
+      "whirLbMicWavNDgCcoMfLzJrSfT6MJEfEZpp8B6gH7s"])
+
+    (define filtered_inflows [])
+    (for (addr unique_inflows)
+      (define is_protocol false)
+      (for (p protocols)
+        (when (== addr p)
+          (set! is_protocol true)))
+      (when (not is_protocol)
+        (set! filtered_inflows (append filtered_inflows [addr]))))
+
+    (define filtered_outflows [])
+    (for (addr unique_outflows)
+      (define is_protocol false)
+      (for (p protocols)
+        (when (== addr p)
+          (set! is_protocol true)))
+      (when (not is_protocol)
+        (set! filtered_outflows (append filtered_outflows [addr]))))
+
+    ;; Store top 5 for this token - USING NEW SET SYNTAX!
+    (set! results (set results token
+                      {:top_5_inflow (take 5 filtered_inflows)
+                       :top_5_outflow (take 5 filtered_outflows)
+                       :total_inflow_wallets (count filtered_inflows)
+                       :total_outflow_wallets (count filtered_outflows)})))
+
+  ;; Return comprehensive analysis
+  {:wallet wallet
+   :total_transactions_analyzed (count all_txs)
+   :batches_fetched 3
+   :tokens_identified (count tokens)
+   :token_breakdown results})

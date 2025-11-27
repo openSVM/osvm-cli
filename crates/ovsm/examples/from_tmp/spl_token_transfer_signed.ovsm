@@ -1,0 +1,57 @@
+;;; Test SPL Token Transfer Signed (PDA Authority)
+;;;
+;;; Accounts:
+;;;   0: Source token account (owned by PDA)
+;;;   1: Destination token account
+;;;   2: PDA Authority (derived from seeds)
+;;;   3: SPL Token Program
+;;;
+;;; This demonstrates how an escrow can transfer tokens
+;;; from a PDA-owned token account.
+
+(do
+  (sol_log_ "=== SPL TOKEN TRANSFER SIGNED ===")
+
+  ;; Heap addresses for seeds
+  (define HEAP_SEED_PREFIX 12884901888)  ;; 0x300000000
+  (define HEAP_SEED_BUMP 12884901920)    ;; 0x300000020
+
+  ;; Read amount from instruction data
+  (define instr_ptr (instruction-data-ptr))
+  (define amount (mem-load instr_ptr 0))
+  (define bump (mem-load1 instr_ptr 8))
+
+  (sol_log_ "Amount:")
+  (sol_log_64_ amount)
+  (sol_log_ "Bump:")
+  (sol_log_64_ bump)
+
+  ;; Store PDA seeds in heap
+  ;; Seed 1: "vault" = [118, 97, 117, 108, 116]
+  (mem-store1 HEAP_SEED_PREFIX 0 118)  ;; 'v'
+  (mem-store1 HEAP_SEED_PREFIX 1 97)   ;; 'a'
+  (mem-store1 HEAP_SEED_PREFIX 2 117)  ;; 'u'
+  (mem-store1 HEAP_SEED_PREFIX 3 108)  ;; 'l'
+  (mem-store1 HEAP_SEED_PREFIX 4 116)  ;; 't'
+
+  ;; Seed 2: bump byte
+  (mem-store1 HEAP_SEED_BUMP 0 bump)
+
+  (sol_log_ "Calling spl-token-transfer-signed...")
+
+  ;; Call SPL Token Transfer with PDA signing
+  ;; token-prog-idx=3, source=0, dest=1, authority=2
+  ;; signers: [[[HEAP_SEED_PREFIX 5] [HEAP_SEED_BUMP 1]]]
+  (define result
+    (spl-token-transfer-signed
+      3                                          ;; Token Program index
+      0                                          ;; Source token account
+      1                                          ;; Destination token account
+      2                                          ;; PDA Authority
+      amount                                     ;; Amount
+      [[[HEAP_SEED_PREFIX 5] [HEAP_SEED_BUMP 1]]]))  ;; Seeds: "vault" + bump
+
+  (sol_log_ "Result:")
+  (sol_log_64_ result)
+
+  result)
