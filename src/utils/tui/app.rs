@@ -15,9 +15,152 @@ use ratatui::{
 };
 use std::io;
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
 use super::graph::{WalletGraph, GraphInput};
+
+/// Response from AI chat processing - supports streaming agent updates
+#[derive(Clone, Debug)]
+pub struct ChatResponse {
+    pub content: String,
+    pub response_type: ChatResponseType,
+}
+
+/// Types of chat responses for streaming agent updates
+#[derive(Clone, Debug, PartialEq)]
+pub enum ChatResponseType {
+    /// Final answer - replace "Thinking..." message
+    FinalAnswer,
+    /// Intermediate thinking step - append to current message
+    ThinkingStep,
+    /// Tool being called - append to current message
+    ToolCall(String),  // tool name
+    /// Tool result received - append to current message
+    ToolResult(String), // tool name
+    /// Error occurred
+    Error,
+    /// Graph update - contains transfer data to visualize
+    GraphUpdate(Vec<TransferData>),
+}
+
+/// Transfer data for graph updates from agent
+#[derive(Clone, Debug, PartialEq)]
+pub struct TransferData {
+    pub from: String,
+    pub to: String,
+    pub amount: f64,
+    pub token: String,
+    pub timestamp: Option<String>,
+}
+
+/// Conversation turn for memory - stores Q&A pairs
+#[derive(Clone, Debug)]
+pub struct ConversationTurn {
+    pub query: String,
+    pub response: String,
+    pub tools_used: Vec<String>,
+    pub timestamp: String,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Autonomous Investigation Types
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// State of an autonomous investigation
+#[derive(Clone, Debug, Default)]
+pub struct InvestigationProgress {
+    pub is_running: bool,
+    pub cancel_requested: bool,  // Flag to gracefully stop investigation
+    pub target_wallet: String,
+    pub hypothesis: Option<String>,  // User's hypothesis to test
+    pub phase: InvestigationPhaseType,
+    pub wallets_explored: usize,
+    pub wallets_pending: usize,
+    pub max_wallets: usize,
+    pub current_depth: usize,
+    pub max_depth: usize,
+    pub transfers_found: usize,
+    pub findings: Vec<InvestigationFinding>,
+    pub evidence_for: Vec<String>,    // Evidence supporting hypothesis
+    pub evidence_against: Vec<String>, // Evidence refuting hypothesis
+    pub start_time: Option<std::time::Instant>,
+    pub status_message: String,
+}
+
+/// Hypothesis keywords that trigger hypothesis-driven investigation
+const HYPOTHESIS_TRIGGERS: &[&str] = &[
+    "i think",
+    "i believe",
+    "i suspect",
+    "check if",
+    "check whether",
+    "investigate if",
+    "investigate whether",
+    "is this",
+    "could this be",
+    "might be",
+    "possibly",
+    "hypothesis:",
+];
+
+/// Phases of autonomous investigation
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum InvestigationPhaseType {
+    #[default]
+    Idle,
+    Initializing,
+    ExploringDepth(usize),  // Current depth level
+    AnalyzingPatterns,
+    GeneratingReport,
+    Complete,
+    Failed(String),
+}
+
+/// A finding from the investigation
+#[derive(Clone, Debug)]
+pub struct InvestigationFinding {
+    pub category: FindingCategory,
+    pub severity: FindingSeverity,
+    pub title: String,
+    pub description: String,
+    pub wallets_involved: Vec<String>,
+    pub evidence: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FindingCategory {
+    FundingSource,
+    LargeTransfer,
+    CircularFlow,
+    ClusterDetected,
+    SuspiciousPattern,
+    HighActivity,
+    DormantWallet,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FindingSeverity {
+    Info,
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Keywords that trigger autonomous investigation
+const INVESTIGATION_TRIGGERS: &[&str] = &[
+    "investigate",
+    "full investigation",
+    "investigate fully",
+    "deep dive",
+    "analyze fully",
+    "full analysis",
+    "forensic",
+    "trace everything",
+    "find everything",
+    "complete analysis",
+];
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum TabIndex {
@@ -27,6 +170,7 @@ pub enum TabIndex {
     Logs = 3,
     SearchResults = 4,
     BBS = 5,            // Meshtastic BBS for agent-human communication
+    Federation = 6,     // Federation network dashboard
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -133,8 +277,27 @@ pub struct OsvmApp {
     pub chat_input_active: bool,
     pub chat_scroll: usize,
     pub chat_auto_scroll: bool,  // Auto-scroll to bottom on new messages
+    // Chat AI integration channels
+    pub chat_response_rx: Option<Receiver<ChatResponse>>,
+    pub chat_response_tx: Option<Sender<ChatResponse>>,
+    pub runtime_handle: Option<tokio::runtime::Handle>,
+    // Conversation memory for context-aware follow-ups
+    pub conversation_history: Arc<Mutex<Vec<ConversationTurn>>>,
+    // Autonomous investigation state
+    pub investigation_progress: Arc<Mutex<InvestigationProgress>>,
     // BBS interface
     pub bbs_state: Arc<Mutex<crate::utils::bbs::tui_widgets::BBSTuiState>>,
+    // Federation dashboard state
+    pub federation_state: Arc<Mutex<FederationDashboardState>>,
+    pub federation_scroll: usize,
+    pub federation_selected_peer: Option<usize>,
+    pub federation_input_active: bool,
+    pub federation_input_buffer: String,
+    pub federation_refresh_pending: bool,
+    pub federation_add_pending: Option<String>,
+    pub federation_delete_pending: Option<String>,
+    pub federation_selected_session: Option<usize>,
+    pub federation_show_annotations: bool,
 }
 
 /// Real-time network statistics
@@ -197,6 +360,60 @@ pub struct TokenMatch {
     pub match_reason: String,
 }
 
+/// Federation network state for TUI dashboard
+#[derive(Clone, Debug, Default)]
+pub struct FederationDashboardState {
+    pub node_id: String,
+    pub peers: Vec<FederationPeerInfo>,
+    pub sessions: Vec<FederationSessionInfo>,
+    pub last_refresh: Option<std::time::Instant>,
+    pub total_annotations: usize,
+    pub connection_graph: Vec<(String, String)>, // (from_node, to_node) edges
+    pub live_annotations: Vec<LiveAnnotation>,   // Real-time annotation stream
+}
+
+/// Live annotation from federated session
+#[derive(Clone, Debug)]
+pub struct LiveAnnotation {
+    pub session_id: String,
+    pub author: String,
+    pub author_node: String,
+    pub target: String,       // wallet or transaction
+    pub text: String,
+    pub severity: String,
+    pub timestamp: String,
+}
+
+/// Peer information for federation dashboard
+#[derive(Clone, Debug)]
+pub struct FederationPeerInfo {
+    pub node_id: String,
+    pub address: String,
+    pub status: PeerStatus,
+    pub latency_ms: Option<u64>,
+    pub sessions_hosted: usize,
+    pub last_seen: Option<String>,
+}
+
+/// Session information for federation dashboard
+#[derive(Clone, Debug)]
+pub struct FederationSessionInfo {
+    pub session_id: String,
+    pub name: String,
+    pub host_node_id: String,
+    pub participant_count: usize,
+    pub status: String,
+}
+
+/// Peer connection status
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum PeerStatus {
+    Online,
+    Offline,
+    Connecting,
+    Unknown,
+}
+
 #[derive(Clone, Debug)]
 pub struct SearchSuggestion {
     pub text: String,
@@ -231,6 +448,1117 @@ impl SearchSuggestion {
             EntityType::Transaction => "Transaction",
             EntityType::Recent => "Recent",
         }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Chat Agent Loop - ReAct-style agent for blockchain investigation
+// With: Conversation Memory, Graph Updates, Multi-Turn Reflection
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Maximum number of reflection iterations to prevent infinite loops
+const MAX_REFLECTION_ITERATIONS: usize = 3;
+
+/// Run the full chat agent loop with conversation memory and graph updates
+async fn run_chat_agent_loop(
+    tx: Sender<ChatResponse>,
+    query: String,
+    target_wallet: String,
+    conversation_history: Arc<Mutex<Vec<ConversationTurn>>>,
+    wallet_graph: Arc<Mutex<WalletGraph>>,
+) {
+    // Step 1: Send initial thinking message
+    let _ = tx.send(ChatResponse {
+        content: "🔍 Analyzing your question...".to_string(),
+        response_type: ChatResponseType::ThinkingStep,
+    });
+
+    // Create AI service
+    let ai_service = crate::services::ai_service::AiService::new();
+
+    // Build conversation context from history
+    let history_context = build_conversation_context(&conversation_history);
+
+    // Step 2: Ask AI to plan what tools to use (with conversation context)
+    let planning_prompt = format!(
+        r#"You are a blockchain investigator assistant. The user is researching wallet: {}.
+
+{}User question: {}
+
+You have access to these blockchain analysis tools:
+- get_account_transfers: Get transfer history (params: address, limit) - USE THIS FOR WALLET RELATIONSHIPS
+- get_account_portfolio: Get current token holdings (params: address)
+- get_account_stats: Get account activity stats (params: address)
+- get_account_transactions: Get detailed transactions (params: address, limit)
+
+Decide what tool(s) to use to answer this question. Respond in this exact JSON format:
+{{
+    "thinking": "Brief explanation of your approach",
+    "tools": [
+        {{"tool": "tool_name", "params": {{"address": "wallet_address", "limit": 100}}}}
+    ],
+    "direct_answer": null
+}}
+
+If the question can be answered from conversation history or general knowledge:
+{{
+    "thinking": "Explanation",
+    "tools": [],
+    "direct_answer": "Your answer here"
+}}
+
+Respond ONLY with valid JSON, no other text."#,
+        target_wallet,
+        history_context,
+        query
+    );
+
+    let plan = match parse_ai_plan(&ai_service, &planning_prompt, &tx).await {
+        Some(p) => p,
+        None => return, // Error already sent
+    };
+
+    // Step 3: Check if we have a direct answer (from history or knowledge)
+    if let Some(direct) = plan.get("direct_answer").and_then(|d| d.as_str()) {
+        if !direct.is_empty() && direct != "null" {
+            let _ = tx.send(ChatResponse {
+                content: direct.to_string(),
+                response_type: ChatResponseType::FinalAnswer,
+            });
+            store_conversation(&conversation_history, &query, direct, &[]);
+            return;
+        }
+    }
+
+    // Step 4: Send thinking step
+    if let Some(thinking) = plan.get("thinking").and_then(|t| t.as_str()) {
+        let _ = tx.send(ChatResponse {
+            content: format!("💭 {}", thinking),
+            response_type: ChatResponseType::ThinkingStep,
+        });
+    }
+
+    // Get initial tools
+    let mut pending_tools: Vec<serde_json::Value> = plan.get("tools")
+        .and_then(|t| t.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if pending_tools.is_empty() {
+        let _ = tx.send(ChatResponse {
+            content: "I don't have specific blockchain data access right now. Let me provide general guidance based on your question.".to_string(),
+            response_type: ChatResponseType::FinalAnswer,
+        });
+        return;
+    }
+
+    // Initialize MCP service
+    let mut mcp_service = crate::services::mcp_service::McpService::new_with_debug(false);
+    let _ = mcp_service.load_config();
+
+    let servers = mcp_service.list_servers();
+    let server_id = if servers.is_empty() {
+        let _ = tx.send(ChatResponse {
+            content: format!(
+                "⚠️ No MCP data servers configured. To get real blockchain data, run:\n\n\
+                `osvm mcp add helius https://helius.dev/api`\n\n\
+                The wallet {} would need an MCP-connected data provider.",
+                target_wallet
+            ),
+            response_type: ChatResponseType::FinalAnswer,
+        });
+        return;
+    } else {
+        servers[0].0.clone()
+    };
+
+    if let Err(e) = mcp_service.initialize_server(&server_id).await {
+        let _ = tx.send(ChatResponse {
+            content: format!("⚠️ Failed to connect to data server: {}", e),
+            response_type: ChatResponseType::Error,
+        });
+        return;
+    }
+
+    // Step 5: Multi-turn execution with reflection
+    let mut all_tool_results: Vec<String> = Vec::new();
+    let mut tools_used: Vec<String> = Vec::new();
+    let mut iteration = 0;
+
+    while !pending_tools.is_empty() && iteration < MAX_REFLECTION_ITERATIONS {
+        iteration += 1;
+
+        // Execute current batch of tools
+        for tool_spec in &pending_tools {
+            let tool_name = tool_spec.get("tool").and_then(|t| t.as_str()).unwrap_or("unknown");
+            let params = tool_spec.get("params").cloned();
+
+            let _ = tx.send(ChatResponse {
+                content: format!("🔧 Calling {}...", tool_name),
+                response_type: ChatResponseType::ToolCall(tool_name.to_string()),
+            });
+
+            match mcp_service.call_tool(&server_id, tool_name, params).await {
+                Ok(result) => {
+                    let result_str = serde_json::to_string_pretty(&result).unwrap_or_default();
+
+                    // Update graph if this is transfer data
+                    if tool_name.contains("transfer") {
+                        update_graph_from_transfers(&wallet_graph, &result, &target_wallet);
+                        let _ = tx.send(ChatResponse {
+                            content: "📊 Graph updated with transfer data".to_string(),
+                            response_type: ChatResponseType::ThinkingStep,
+                        });
+                    }
+
+                    let _ = tx.send(ChatResponse {
+                        content: format!("✅ {} returned {} bytes", tool_name, result_str.len()),
+                        response_type: ChatResponseType::ToolResult(tool_name.to_string()),
+                    });
+
+                    all_tool_results.push(format!("Tool: {}\nResult:\n{}", tool_name, result_str));
+                    tools_used.push(tool_name.to_string());
+                }
+                Err(e) => {
+                    let _ = tx.send(ChatResponse {
+                        content: format!("⚠️ {} failed: {}", tool_name, e),
+                        response_type: ChatResponseType::ToolResult(tool_name.to_string()),
+                    });
+                    all_tool_results.push(format!("Tool: {}\nError: {}", tool_name, e));
+                }
+            }
+        }
+
+        // Reflection: Ask AI if more tools are needed
+        if iteration < MAX_REFLECTION_ITERATIONS {
+            let _ = tx.send(ChatResponse {
+                content: "🤔 Reflecting on results...".to_string(),
+                response_type: ChatResponseType::ThinkingStep,
+            });
+
+            let reflection_prompt = format!(
+                r#"You are investigating wallet {} for the user's question: "{}"
+
+Tool results so far:
+{}
+
+Do you have enough information to answer the question? If not, what additional tools would help?
+
+Respond in JSON:
+{{
+    "have_enough_info": true/false,
+    "reasoning": "explanation",
+    "additional_tools": [
+        {{"tool": "tool_name", "params": {{"address": "...", "limit": 100}}}}
+    ]
+}}
+
+Only request additional tools if TRULY necessary. Respond ONLY with JSON."#,
+                target_wallet,
+                query,
+                all_tool_results.join("\n\n---\n\n")
+            );
+
+            if let Some(reflection) = parse_ai_plan(&ai_service, &reflection_prompt, &tx).await {
+                let have_enough = reflection.get("have_enough_info")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+
+                if have_enough {
+                    pending_tools.clear();
+                } else {
+                    pending_tools = reflection.get("additional_tools")
+                        .and_then(|t| t.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+
+                    if !pending_tools.is_empty() {
+                        if let Some(reasoning) = reflection.get("reasoning").and_then(|r| r.as_str()) {
+                            let _ = tx.send(ChatResponse {
+                                content: format!("💭 {}", reasoning),
+                                response_type: ChatResponseType::ThinkingStep,
+                            });
+                        }
+                    }
+                }
+            } else {
+                pending_tools.clear();
+            }
+        } else {
+            pending_tools.clear();
+        }
+    }
+
+    // Step 6: Synthesize final answer with conversation context
+    let _ = tx.send(ChatResponse {
+        content: "📝 Synthesizing answer...".to_string(),
+        response_type: ChatResponseType::ThinkingStep,
+    });
+
+    let synthesis_prompt = format!(
+        r#"You are a blockchain analyst. The user asked: "{}"
+{}
+About wallet: {}
+
+Tool results:
+{}
+
+Provide a clear, helpful answer. Include:
+1. Direct answer to their question
+2. Key findings (with specific numbers/addresses when available)
+3. Any notable patterns or concerns
+
+Be concise but thorough. Use bullet points for clarity. ALWAYS show full wallet addresses, never truncate."#,
+        query,
+        history_context,
+        target_wallet,
+        all_tool_results.join("\n\n---\n\n")
+    );
+
+    match ai_service.query_osvm_ai_with_options(&synthesis_prompt, None, Some(true), false).await {
+        Ok(answer) => {
+            let _ = tx.send(ChatResponse {
+                content: answer.clone(),
+                response_type: ChatResponseType::FinalAnswer,
+            });
+            store_conversation(&conversation_history, &query, &answer, &tools_used);
+        }
+        Err(e) => {
+            let error_msg = format!(
+                "⚠️ Analysis failed: {}\n\nRaw tool results:\n{}",
+                e,
+                all_tool_results.join("\n\n")
+            );
+            let _ = tx.send(ChatResponse {
+                content: error_msg.clone(),
+                response_type: ChatResponseType::Error,
+            });
+            store_conversation(&conversation_history, &query, &error_msg, &tools_used);
+        }
+    }
+}
+
+/// Build conversation context string from history
+fn build_conversation_context(history: &Arc<Mutex<Vec<ConversationTurn>>>) -> String {
+    if let Ok(turns) = history.lock() {
+        if turns.is_empty() {
+            return String::new();
+        }
+        let context: Vec<String> = turns.iter()
+            .rev()
+            .take(5) // Last 5 turns
+            .rev()
+            .map(|turn| format!(
+                "Previous Q: {}\nPrevious A: {}\n",
+                turn.query,
+                // Truncate long responses
+                if turn.response.len() > 500 {
+                    format!("{}...", &turn.response[..500])
+                } else {
+                    turn.response.clone()
+                }
+            ))
+            .collect();
+        if context.is_empty() {
+            String::new()
+        } else {
+            format!("Conversation history:\n{}\n", context.join("\n"))
+        }
+    } else {
+        String::new()
+    }
+}
+
+/// Store completed conversation turn
+fn store_conversation(
+    history: &Arc<Mutex<Vec<ConversationTurn>>>,
+    query: &str,
+    response: &str,
+    tools: &[String],
+) {
+    if let Ok(mut turns) = history.lock() {
+        turns.push(ConversationTurn {
+            query: query.to_string(),
+            response: response.to_string(),
+            tools_used: tools.to_vec(),
+            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+        });
+        // Keep only last 20 turns to prevent memory bloat
+        if turns.len() > 20 {
+            turns.remove(0);
+        }
+    }
+}
+
+/// Parse AI response as JSON plan
+async fn parse_ai_plan(
+    ai_service: &crate::services::ai_service::AiService,
+    prompt: &str,
+    tx: &Sender<ChatResponse>,
+) -> Option<serde_json::Value> {
+    match ai_service.query_osvm_ai_with_options(prompt, None, Some(true), false).await {
+        Ok(response) => {
+            // Try to parse as JSON
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                return Some(json);
+            }
+            // Try to extract JSON from response
+            if let Some(start) = response.find('{') {
+                if let Some(end) = response.rfind('}') {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response[start..=end]) {
+                        return Some(json);
+                    }
+                }
+            }
+            // Give up - return response as final answer
+            let _ = tx.send(ChatResponse {
+                content: response,
+                response_type: ChatResponseType::FinalAnswer,
+            });
+            None
+        }
+        Err(e) => {
+            let _ = tx.send(ChatResponse {
+                content: format!("⚠️ AI error: {}", e),
+                response_type: ChatResponseType::Error,
+            });
+            None
+        }
+    }
+}
+
+/// Update wallet graph from transfer data
+fn update_graph_from_transfers(
+    wallet_graph: &Arc<Mutex<WalletGraph>>,
+    result: &serde_json::Value,
+    target_wallet: &str,
+) {
+    use super::graph::WalletNodeType;
+
+    // Try to extract transfers from various response formats
+    let transfers = result.get("transfers")
+        .or_else(|| result.get("data"))
+        .or_else(|| result.get("items"))
+        .and_then(|v| v.as_array());
+
+    if let Some(transfer_list) = transfers {
+        if let Ok(mut graph) = wallet_graph.lock() {
+            for transfer in transfer_list.iter().take(50) { // Limit to prevent UI overload
+                let from = transfer.get("from")
+                    .or_else(|| transfer.get("source"))
+                    .or_else(|| transfer.get("sender"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                let to = transfer.get("to")
+                    .or_else(|| transfer.get("destination"))
+                    .or_else(|| transfer.get("receiver"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                let amount = transfer.get("amount")
+                    .or_else(|| transfer.get("value"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+
+                let token = transfer.get("token")
+                    .or_else(|| transfer.get("symbol"))
+                    .or_else(|| transfer.get("mint"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("SOL");
+
+                let timestamp = transfer.get("timestamp")
+                    .or_else(|| transfer.get("blockTime"))
+                    .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+                if !from.is_empty() && !to.is_empty() {
+                    // Determine node types based on relation to target
+                    let from_type = if from == target_wallet {
+                        WalletNodeType::Target
+                    } else {
+                        WalletNodeType::Funding
+                    };
+
+                    let to_type = if to == target_wallet {
+                        WalletNodeType::Target
+                    } else {
+                        WalletNodeType::Recipient
+                    };
+
+                    graph.add_transfer(
+                        from.to_string(),
+                        to.to_string(),
+                        amount,
+                        token.to_string(),
+                        from_type,
+                        to_type,
+                        timestamp,
+                        None, // No signature in this context
+                    );
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Autonomous Investigation Engine
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Configuration for autonomous investigation
+const MAX_INVESTIGATION_DEPTH: usize = 3;
+const MAX_INVESTIGATION_WALLETS: usize = 50;
+const TRANSFERS_PER_WALLET: usize = 100;
+
+/// Check if a query triggers autonomous investigation
+fn is_investigation_trigger(query: &str) -> bool {
+    let query_lower = query.to_lowercase();
+    INVESTIGATION_TRIGGERS.iter().any(|trigger| query_lower.contains(trigger))
+}
+
+/// Extract hypothesis from user query if present
+fn extract_hypothesis(query: &str) -> Option<String> {
+    let query_lower = query.to_lowercase();
+    for trigger in HYPOTHESIS_TRIGGERS {
+        if let Some(pos) = query_lower.find(trigger) {
+            // Extract everything after the trigger phrase
+            let start = pos + trigger.len();
+            let hypothesis = query[start..].trim();
+            if !hypothesis.is_empty() {
+                return Some(hypothesis.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Run autonomous investigation with BFS exploration
+/// Supports hypothesis-driven investigation when hypothesis is provided
+async fn run_autonomous_investigation(
+    tx: Sender<ChatResponse>,
+    target_wallet: String,
+    hypothesis: Option<String>,
+    investigation_progress: Arc<Mutex<InvestigationProgress>>,
+    wallet_graph: Arc<Mutex<WalletGraph>>,
+    conversation_history: Arc<Mutex<Vec<ConversationTurn>>>,
+) {
+    use std::collections::{HashSet, VecDeque};
+
+    let is_hypothesis_mode = hypothesis.is_some();
+
+    // Initialize investigation state (reset all counters)
+    {
+        let mut progress = investigation_progress.lock().unwrap();
+        progress.is_running = true;
+        progress.cancel_requested = false;  // Reset cancel flag
+        progress.target_wallet = target_wallet.clone();
+        progress.hypothesis = hypothesis.clone();
+        progress.phase = InvestigationPhaseType::Initializing;
+        progress.wallets_explored = 0;
+        progress.wallets_pending = 0;
+        progress.evidence_for.clear();
+        progress.evidence_against.clear();
+        progress.max_depth = MAX_INVESTIGATION_DEPTH;
+        progress.max_wallets = MAX_INVESTIGATION_WALLETS;
+        progress.current_depth = 0;
+        progress.transfers_found = 0;
+        progress.findings.clear();
+        progress.start_time = Some(std::time::Instant::now());
+        progress.status_message = "Starting autonomous investigation...".to_string();
+    }
+
+    let hypothesis_msg = if let Some(ref h) = hypothesis {
+        format!("\n🎯 **Hypothesis Mode:** Testing \"{}\"", h)
+    } else {
+        String::new()
+    };
+
+    let _ = tx.send(ChatResponse {
+        content: format!(
+            "🔬 **AUTONOMOUS INVESTIGATION INITIATED**\n\n\
+            Target: `{}`\n\
+            Max Depth: {} hops\n\
+            Max Wallets: {}{}\n\n\
+            Starting BFS exploration...\n\n\
+            💡 Press **Ctrl+X** to cancel investigation",
+            target_wallet, MAX_INVESTIGATION_DEPTH, MAX_INVESTIGATION_WALLETS, hypothesis_msg
+        ),
+        response_type: ChatResponseType::ThinkingStep,
+    });
+
+    // Initialize MCP service
+    let mut mcp_service = crate::services::mcp_service::McpService::new_with_debug(false);
+    let _ = mcp_service.load_config();
+
+    let servers = mcp_service.list_servers();
+    let server_id = if servers.is_empty() {
+        let _ = tx.send(ChatResponse {
+            content: "⚠️ No MCP servers configured. Cannot perform autonomous investigation without data access.".to_string(),
+            response_type: ChatResponseType::Error,
+        });
+        update_investigation_failed(&investigation_progress, "No MCP servers available");
+        return;
+    } else {
+        servers[0].0.clone()
+    };
+
+    if let Err(e) = mcp_service.initialize_server(&server_id).await {
+        let _ = tx.send(ChatResponse {
+            content: format!("⚠️ Failed to initialize MCP server: {}", e),
+            response_type: ChatResponseType::Error,
+        });
+        update_investigation_failed(&investigation_progress, &format!("MCP init failed: {}", e));
+        return;
+    }
+
+    // BFS exploration state
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<(String, usize)> = VecDeque::new(); // (wallet, depth)
+    let mut all_transfers: Vec<serde_json::Value> = Vec::new();
+    let mut wallet_summaries: Vec<String> = Vec::new();
+
+    // Start with target wallet
+    queue.push_back((target_wallet.clone(), 0));
+    visited.insert(target_wallet.clone());
+
+    // BFS exploration loop
+    while let Some((current_wallet, depth)) = queue.pop_front() {
+        // Check for cancellation request
+        {
+            let progress = investigation_progress.lock().unwrap();
+            if progress.cancel_requested {
+                drop(progress);
+                let _ = tx.send(ChatResponse {
+                    content: "🛑 **Investigation cancelled by user.** Proceeding to analyze collected data...".to_string(),
+                    response_type: ChatResponseType::ThinkingStep,
+                });
+                break;
+            }
+        }
+
+        // Check limits
+        if visited.len() > MAX_INVESTIGATION_WALLETS {
+            let _ = tx.send(ChatResponse {
+                content: format!("⚡ Reached wallet limit ({}). Proceeding to analysis.", MAX_INVESTIGATION_WALLETS),
+                response_type: ChatResponseType::ThinkingStep,
+            });
+            break;
+        }
+
+        if depth > MAX_INVESTIGATION_DEPTH {
+            continue;
+        }
+
+        // Update progress
+        {
+            let mut progress = investigation_progress.lock().unwrap();
+            progress.phase = InvestigationPhaseType::ExploringDepth(depth);
+            progress.wallets_explored = visited.len();
+            progress.wallets_pending = queue.len();
+            progress.current_depth = depth;
+            progress.status_message = format!("Exploring {} (depth {})", &current_wallet[..8.min(current_wallet.len())], depth);
+        }
+
+        let _ = tx.send(ChatResponse {
+            content: format!(
+                "🔍 Depth {}: Exploring `{}...{}` ({}/{} wallets)",
+                depth,
+                &current_wallet[..6.min(current_wallet.len())],
+                &current_wallet[current_wallet.len().saturating_sub(4)..],
+                visited.len(),
+                MAX_INVESTIGATION_WALLETS
+            ),
+            response_type: ChatResponseType::ThinkingStep,
+        });
+
+        // Fetch transfers for this wallet
+        let result = mcp_service.call_tool(
+            &server_id,
+            "get_account_transfers",
+            Some(serde_json::json!({
+                "address": current_wallet,
+                "limit": TRANSFERS_PER_WALLET,
+                "compress": true
+            }))
+        ).await;
+
+        match result {
+            Ok(data) => {
+                // Update graph with transfers
+                update_graph_from_transfers(&wallet_graph, &data, &target_wallet);
+
+                // Extract connected wallets
+                let transfers = data.get("transfers")
+                    .or_else(|| data.get("data"))
+                    .or_else(|| data.get("items"))
+                    .and_then(|v| v.as_array());
+
+                if let Some(transfer_list) = transfers {
+                    let transfer_count = transfer_list.len();
+
+                    // Update progress
+                    {
+                        let mut progress = investigation_progress.lock().unwrap();
+                        progress.transfers_found += transfer_count;
+                    }
+
+                    // Store transfers for analysis
+                    all_transfers.extend(transfer_list.clone());
+
+                    // Add connected wallets to queue
+                    for transfer in transfer_list {
+                        let from = transfer.get("from")
+                            .or_else(|| transfer.get("source"))
+                            .and_then(|v| v.as_str());
+                        let to = transfer.get("to")
+                            .or_else(|| transfer.get("destination"))
+                            .and_then(|v| v.as_str());
+
+                        for addr in [from, to].into_iter().flatten() {
+                            if !visited.contains(addr) && visited.len() < MAX_INVESTIGATION_WALLETS {
+                                visited.insert(addr.to_string());
+                                queue.push_back((addr.to_string(), depth + 1));
+                            }
+                        }
+                    }
+
+                    wallet_summaries.push(format!(
+                        "Wallet {} (depth {}): {} transfers found",
+                        &current_wallet[..8.min(current_wallet.len())],
+                        depth,
+                        transfer_count
+                    ));
+                }
+            }
+            Err(e) => {
+                wallet_summaries.push(format!(
+                    "Wallet {} (depth {}): Error - {}",
+                    &current_wallet[..8.min(current_wallet.len())],
+                    depth,
+                    e
+                ));
+            }
+        }
+
+        // Small delay to avoid rate limiting
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    // Phase 2: Pattern Analysis
+    let _ = tx.send(ChatResponse {
+        content: format!(
+            "📊 **EXPLORATION COMPLETE**\n\
+            • Wallets explored: {}\n\
+            • Transfers found: {}\n\
+            • Max depth reached: {}\n\n\
+            Analyzing patterns...",
+            visited.len(),
+            all_transfers.len(),
+            MAX_INVESTIGATION_DEPTH
+        ),
+        response_type: ChatResponseType::ThinkingStep,
+    });
+
+    {
+        let mut progress = investigation_progress.lock().unwrap();
+        progress.phase = InvestigationPhaseType::AnalyzingPatterns;
+        progress.status_message = "Analyzing patterns and generating findings...".to_string();
+    }
+
+    // Analyze patterns and generate findings
+    let findings = analyze_investigation_patterns(&all_transfers, &target_wallet, &visited);
+
+    // Store findings
+    {
+        let mut progress = investigation_progress.lock().unwrap();
+        progress.findings = findings.clone();
+    }
+
+    // Phase 3: AI Synthesis
+    let _ = tx.send(ChatResponse {
+        content: "🤖 Generating AI analysis and report...".to_string(),
+        response_type: ChatResponseType::ThinkingStep,
+    });
+
+    {
+        let mut progress = investigation_progress.lock().unwrap();
+        progress.phase = InvestigationPhaseType::GeneratingReport;
+    }
+
+    // Create AI service for synthesis
+    let ai_service = crate::services::ai_service::AiService::new();
+
+    let analysis_prompt = format!(
+        r#"You are a blockchain forensics expert. Analyze this investigation data and provide a comprehensive report.
+
+TARGET WALLET: {}
+
+EXPLORATION SUMMARY:
+- Wallets explored: {}
+- Total transfers found: {}
+- Max depth: {}
+
+AUTOMATED FINDINGS:
+{}
+
+WALLET EXPLORATION LOG:
+{}
+
+Generate a forensic report with:
+1. **Executive Summary** (2-3 sentences)
+2. **Key Findings** (bullet points)
+3. **Risk Assessment** (Low/Medium/High/Critical with explanation)
+4. **Wallet Relationships** (key connections identified)
+5. **Recommendations** (what to investigate further)
+
+Be specific. Use actual wallet addresses (never truncate). Include amounts where relevant."#,
+        target_wallet,
+        visited.len(),
+        all_transfers.len(),
+        MAX_INVESTIGATION_DEPTH,
+        findings.iter().map(|f| format!("• [{}] {}: {}", severity_str(&f.severity), f.title, f.description)).collect::<Vec<_>>().join("\n"),
+        wallet_summaries.join("\n")
+    );
+
+    let report = match ai_service.query_osvm_ai_with_options(&analysis_prompt, None, Some(true), false).await {
+        Ok(response) => response,
+        Err(e) => format!("AI analysis failed: {}. Raw findings:\n{}", e,
+            findings.iter().map(|f| format!("• {}: {}", f.title, f.description)).collect::<Vec<_>>().join("\n"))
+    };
+
+    // Generate final report
+    let elapsed = investigation_progress.lock().unwrap()
+        .start_time
+        .map(|t| t.elapsed().as_secs())
+        .unwrap_or(0);
+
+    let final_report = format!(
+        "# 🔬 AUTONOMOUS INVESTIGATION REPORT\n\n\
+        **Target:** `{}`\n\
+        **Duration:** {}s\n\
+        **Wallets Analyzed:** {}\n\
+        **Transfers Processed:** {}\n\n\
+        ---\n\n\
+        {}\n\n\
+        ---\n\n\
+        *Report generated by OSVM autonomous investigation engine*",
+        target_wallet,
+        elapsed,
+        visited.len(),
+        all_transfers.len(),
+        report
+    );
+
+    // Export report to file
+    let export_result = export_investigation_report(&target_wallet, &final_report);
+    let export_msg = match &export_result {
+        Ok(path) => format!("\n\n📁 **Report exported to:** `{}`", path),
+        Err(e) => format!("\n\n⚠️ Failed to export report: {}", e),
+    };
+
+    let final_report_with_export = format!("{}{}", final_report, export_msg);
+
+    // Mark complete
+    {
+        let mut progress = investigation_progress.lock().unwrap();
+        progress.phase = InvestigationPhaseType::Complete;
+        progress.is_running = false;
+        progress.status_message = export_result
+            .as_ref()
+            .map(|p| format!("Complete - saved to {}", p))
+            .unwrap_or_else(|_| "Investigation complete".to_string());
+    }
+
+    // Store in conversation history
+    store_conversation(
+        &conversation_history,
+        &format!("Autonomous investigation of {}", target_wallet),
+        &final_report_with_export,
+        &["get_account_transfers".to_string()],
+    );
+
+    // Send final report
+    let _ = tx.send(ChatResponse {
+        content: final_report_with_export,
+        response_type: ChatResponseType::FinalAnswer,
+    });
+}
+
+/// Export investigation report to file
+fn export_investigation_report(target_wallet: &str, report: &str) -> Result<String, String> {
+    use std::fs;
+
+    // Create reports directory
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let reports_dir = format!("{}/.osvm/reports", home);
+
+    if let Err(e) = fs::create_dir_all(&reports_dir) {
+        return Err(format!("Failed to create reports directory: {}", e));
+    }
+
+    // Generate filename with timestamp and wallet prefix
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let wallet_prefix = &target_wallet[..8.min(target_wallet.len())];
+    let filename = format!("investigation_{}_{}.md", wallet_prefix, timestamp);
+    let filepath = format!("{}/{}", reports_dir, filename);
+
+    // Write markdown report
+    if let Err(e) = fs::write(&filepath, report) {
+        return Err(format!("Failed to write report: {}", e));
+    }
+
+    // Also generate HTML version
+    let html_report = generate_html_report(target_wallet, report);
+    let html_filepath = filepath.replace(".md", ".html");
+    if let Err(e) = fs::write(&html_filepath, html_report) {
+        // Non-fatal - markdown was saved
+        eprintln!("Warning: Failed to write HTML report: {}", e);
+    }
+
+    Ok(filepath)
+}
+
+/// Generate HTML version of investigation report
+fn generate_html_report(target_wallet: &str, markdown_report: &str) -> String {
+    // Simple markdown-to-HTML conversion for key elements
+    let html_content = markdown_report
+        .replace("# ", "<h1>")
+        .replace("\n## ", "</h1>\n<h2>")
+        .replace("\n### ", "</h2>\n<h3>")
+        .replace("\n**", "\n<strong>")
+        .replace("**\n", "</strong>\n")
+        .replace("**", "</strong><strong>")  // Handle inline bold
+        .replace("`", "<code>")
+        .replace("• ", "<li>")
+        .replace("\n- ", "\n<li>")
+        .replace("---", "<hr>");
+
+    format!(r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSVM Investigation Report - {}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }}
+        h1 {{ color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }}
+        h2 {{ color: #7ee787; margin-top: 30px; }}
+        h3 {{ color: #ffa657; }}
+        code {{
+            background: #161b22;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            color: #79c0ff;
+        }}
+        strong {{ color: #f0883e; }}
+        hr {{ border: none; border-top: 1px solid #30363d; margin: 20px 0; }}
+        li {{ margin: 5px 0; }}
+        .header {{
+            background: linear-gradient(135deg, #238636 0%, #1f6feb 100%);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }}
+        .header h1 {{ color: white; border: none; margin: 0; }}
+        .finding {{
+            background: #161b22;
+            border-left: 3px solid #ffa657;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 0 4px 4px 0;
+        }}
+        .critical {{ border-left-color: #f85149; }}
+        .high {{ border-left-color: #ffa657; }}
+        .medium {{ border-left-color: #d29922; }}
+        .low {{ border-left-color: #3fb950; }}
+        .footer {{
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #30363d;
+            text-align: center;
+            color: #8b949e;
+            font-size: 0.9em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔬 OSVM Investigation Report</h1>
+    </div>
+    {}
+    <div class="footer">
+        Generated by OSVM Autonomous Investigation Engine<br>
+        Report Date: {}
+    </div>
+</body>
+</html>"#,
+        target_wallet,
+        html_content,
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+    )
+}
+
+/// Analyze patterns in collected transfer data
+fn analyze_investigation_patterns(
+    transfers: &[serde_json::Value],
+    target_wallet: &str,
+    visited_wallets: &std::collections::HashSet<String>,
+) -> Vec<InvestigationFinding> {
+    use std::collections::{HashMap, HashSet};
+
+    let mut findings = Vec::new();
+
+    // Track wallet activity
+    let mut wallet_inflows: HashMap<String, f64> = HashMap::new();
+    let mut wallet_outflows: HashMap<String, f64> = HashMap::new();
+    let mut wallet_counterparties: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for transfer in transfers {
+        let from = transfer.get("from")
+            .or_else(|| transfer.get("source"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let to = transfer.get("to")
+            .or_else(|| transfer.get("destination"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let amount = transfer.get("amount")
+            .or_else(|| transfer.get("value"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+
+        if !from.is_empty() && !to.is_empty() {
+            *wallet_outflows.entry(from.to_string()).or_insert(0.0) += amount;
+            *wallet_inflows.entry(to.to_string()).or_insert(0.0) += amount;
+
+            wallet_counterparties.entry(from.to_string())
+                .or_insert_with(HashSet::new)
+                .insert(to.to_string());
+            wallet_counterparties.entry(to.to_string())
+                .or_insert_with(HashSet::new)
+                .insert(from.to_string());
+        }
+    }
+
+    // Finding 1: Major funding sources
+    let target_inflow = wallet_inflows.get(target_wallet).copied().unwrap_or(0.0);
+    if target_inflow > 0.0 {
+        findings.push(InvestigationFinding {
+            category: FindingCategory::FundingSource,
+            severity: FindingSeverity::Info,
+            title: "Funding Sources Identified".to_string(),
+            description: format!("Target wallet received total inflow of {:.4} across {} transfers", target_inflow, transfers.len()),
+            wallets_involved: vec![target_wallet.to_string()],
+            evidence: format!("Total inflow: {:.4}", target_inflow),
+        });
+    }
+
+    // Finding 2: Large transfers (>100 SOL equivalent)
+    for transfer in transfers {
+        let amount = transfer.get("amount")
+            .or_else(|| transfer.get("value"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+
+        if amount > 100.0 {
+            let from = transfer.get("from").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let to = transfer.get("to").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+            findings.push(InvestigationFinding {
+                category: FindingCategory::LargeTransfer,
+                severity: FindingSeverity::Medium,
+                title: "Large Transfer Detected".to_string(),
+                description: format!("{:.2} transferred from {} to {}", amount, &from[..8.min(from.len())], &to[..8.min(to.len())]),
+                wallets_involved: vec![from.to_string(), to.to_string()],
+                evidence: format!("Amount: {:.4}", amount),
+            });
+        }
+    }
+
+    // Finding 3: High activity wallets (>10 counterparties)
+    for (wallet, counterparties) in &wallet_counterparties {
+        if counterparties.len() > 10 && wallet != target_wallet {
+            findings.push(InvestigationFinding {
+                category: FindingCategory::HighActivity,
+                severity: FindingSeverity::Low,
+                title: "High Activity Wallet".to_string(),
+                description: format!("Wallet {} has {} counterparties", &wallet[..8.min(wallet.len())], counterparties.len()),
+                wallets_involved: vec![wallet.clone()],
+                evidence: format!("Counterparty count: {}", counterparties.len()),
+            });
+        }
+    }
+
+    // Finding 4: Potential clusters (wallets that share many counterparties)
+    let mut cluster_candidates: Vec<(String, String, usize)> = Vec::new();
+    let wallets: Vec<_> = wallet_counterparties.keys().collect();
+    for i in 0..wallets.len() {
+        for j in (i+1)..wallets.len() {
+            let w1 = wallets[i];
+            let w2 = wallets[j];
+            if let (Some(c1), Some(c2)) = (wallet_counterparties.get(w1), wallet_counterparties.get(w2)) {
+                let shared = c1.intersection(c2).count();
+                if shared > 3 {
+                    cluster_candidates.push((w1.clone(), w2.clone(), shared));
+                }
+            }
+        }
+    }
+
+    if !cluster_candidates.is_empty() {
+        cluster_candidates.sort_by(|a, b| b.2.cmp(&a.2));
+        let top = &cluster_candidates[0];
+        findings.push(InvestigationFinding {
+            category: FindingCategory::ClusterDetected,
+            severity: FindingSeverity::High,
+            title: "Potential Wallet Cluster".to_string(),
+            description: format!("Wallets {} and {} share {} common counterparties - possible same owner",
+                &top.0[..8.min(top.0.len())], &top.1[..8.min(top.1.len())], top.2),
+            wallets_involved: vec![top.0.clone(), top.1.clone()],
+            evidence: format!("Shared counterparties: {}", top.2),
+        });
+    }
+
+    // Summary finding
+    findings.push(InvestigationFinding {
+        category: FindingCategory::FundingSource,
+        severity: FindingSeverity::Info,
+        title: "Investigation Summary".to_string(),
+        description: format!("Explored {} wallets, found {} transfers, identified {} findings",
+            visited_wallets.len(), transfers.len(), findings.len()),
+        wallets_involved: vec![target_wallet.to_string()],
+        evidence: "Automated BFS exploration complete".to_string(),
+    });
+
+    findings
+}
+
+/// Helper to get severity string
+fn severity_str(severity: &FindingSeverity) -> &'static str {
+    match severity {
+        FindingSeverity::Info => "INFO",
+        FindingSeverity::Low => "LOW",
+        FindingSeverity::Medium => "MEDIUM",
+        FindingSeverity::High => "HIGH",
+        FindingSeverity::Critical => "CRITICAL",
+    }
+}
+
+/// Update investigation state on failure
+fn update_investigation_failed(progress: &Arc<Mutex<InvestigationProgress>>, reason: &str) {
+    if let Ok(mut p) = progress.lock() {
+        p.is_running = false;
+        p.phase = InvestigationPhaseType::Failed(reason.to_string());
+        p.status_message = format!("Failed: {}", reason);
     }
 }
 
@@ -288,9 +1616,42 @@ impl OsvmApp {
             chat_input_active: false,
             chat_scroll: 0,
             chat_auto_scroll: true,
+            // Chat AI integration - channels created lazily when runtime is set
+            chat_response_rx: None,
+            chat_response_tx: None,
+            runtime_handle: None,
+            // Conversation memory - stores Q&A pairs for context
+            conversation_history: Arc::new(Mutex::new(Vec::new())),
+            // Autonomous investigation - starts idle
+            investigation_progress: Arc::new(Mutex::new(InvestigationProgress::default())),
             // BBS interface initialization
             bbs_state: Arc::new(Mutex::new(crate::utils::bbs::tui_widgets::BBSTuiState::new())),
+            // Federation dashboard initialization
+            federation_state: Arc::new(Mutex::new(FederationDashboardState::default())),
+            federation_scroll: 0,
+            federation_selected_peer: None,
+            federation_input_active: false,
+            federation_input_buffer: String::new(),
+            federation_refresh_pending: true,  // Load on first tick
+            federation_add_pending: None,
+            federation_delete_pending: None,
+            federation_selected_session: None,
+            federation_show_annotations: false,
         }
+    }
+
+    /// Set the tokio runtime handle and initialize chat channels
+    /// This must be called before chat will work
+    pub fn set_runtime_handle(&mut self, handle: tokio::runtime::Handle) {
+        let (tx, rx) = mpsc::channel::<ChatResponse>();
+        self.runtime_handle = Some(handle);
+        self.chat_response_tx = Some(tx);
+        self.chat_response_rx = Some(rx);
+    }
+
+    /// Get a clone of the chat response sender for background tasks
+    pub fn get_chat_tx(&self) -> Option<Sender<ChatResponse>> {
+        self.chat_response_tx.clone()
     }
 
     /// Create welcome message for chat
@@ -336,6 +1697,106 @@ impl OsvmApp {
     /// Get live transactions handle for background thread updates
     pub fn get_live_tx_handle(&self) -> Arc<Mutex<Vec<LiveTransaction>>> {
         Arc::clone(&self.live_transactions)
+    }
+
+    /// Get federation state handle for background thread updates
+    pub fn get_federation_handle(&self) -> Arc<Mutex<FederationDashboardState>> {
+        Arc::clone(&self.federation_state)
+    }
+
+    /// Load federation state from persisted file (synchronous, no health checks)
+    pub fn load_federation_state_sync(&mut self) {
+        use crate::utils::collab::FederationState;
+
+        let state = FederationState::load();
+        let mut fed_state = FederationDashboardState {
+            node_id: state.node_id.clone(),
+            peers: state.peers.iter().map(|(node_id, address)| {
+                FederationPeerInfo {
+                    node_id: node_id.clone(),
+                    address: address.clone(),
+                    status: PeerStatus::Unknown,
+                    latency_ms: None,
+                    sessions_hosted: 0,
+                    last_seen: None,
+                }
+            }).collect(),
+            sessions: state.known_sessions.iter().map(|s| {
+                FederationSessionInfo {
+                    session_id: s.session_id.clone(),
+                    name: s.name.clone(),
+                    host_node_id: s.host_node_id.clone(),
+                    participant_count: s.participant_count,
+                    status: format!("{:?}", s.status),
+                }
+            }).collect(),
+            last_refresh: Some(std::time::Instant::now()),
+            total_annotations: 0,
+            connection_graph: Vec::new(),
+            live_annotations: Vec::new(),
+        };
+
+        // Generate node_id if empty
+        if fed_state.node_id.is_empty() {
+            fed_state.node_id = format!("!{:08x}", std::process::id());
+        }
+
+        if let Ok(mut lock) = self.federation_state.lock() {
+            *lock = fed_state;
+        }
+    }
+
+    /// Handle adding a federation peer (synchronous)
+    fn handle_federation_add_peer(&mut self, address: &str) {
+        use crate::utils::collab::FederationState;
+
+        // Load current state
+        let mut state = FederationState::load();
+
+        // Generate node ID from address
+        let node_id = format!("!{:08x}", crc32fast::hash(address.as_bytes()));
+
+        // Add peer
+        state.peers.insert(node_id.clone(), address.to_string());
+
+        // Save state
+        if let Err(e) = state.save() {
+            self.add_log(format!("❌ Failed to save peer: {}", e));
+            return;
+        }
+
+        self.add_log(format!("✓ Added peer {} ({})", node_id, address));
+
+        // Reload state to update UI
+        self.load_federation_state_sync();
+    }
+
+    /// Handle deleting a federation peer (synchronous)
+    fn handle_federation_delete_peer(&mut self, node_id: &str) {
+        use crate::utils::collab::FederationState;
+
+        // Load current state
+        let mut state = FederationState::load();
+
+        // Remove peer
+        if state.peers.remove(node_id).is_none() {
+            self.add_log(format!("⚠️ Peer {} not found", node_id));
+            return;
+        }
+
+        // Save state
+        if let Err(e) = state.save() {
+            self.add_log(format!("❌ Failed to save: {}", e));
+            return;
+        }
+
+        self.add_log(format!("✓ Removed peer {}", node_id));
+
+        // Clear selection if deleted peer was selected
+        self.federation_selected_peer = None;
+
+        // Reload state to update UI
+        self.load_federation_state_sync();
     }
 
     /// Start background thread to poll RPC for real-time network stats AND live transactions
@@ -429,6 +1890,81 @@ impl OsvmApp {
 
                 // Sleep 5 seconds before next poll
                 std::thread::sleep(std::time::Duration::from_secs(5));
+            }
+        });
+    }
+
+    /// Start background thread for federation peer health checks
+    pub fn start_federation_health_polling(&mut self) {
+        let federation_handle = Arc::clone(&self.federation_state);
+
+        std::thread::spawn(move || {
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .unwrap_or_else(|_| reqwest::blocking::Client::new());
+
+            loop {
+                // Read current peers
+                let peers_to_check: Vec<(String, String)> = {
+                    let state = federation_handle.lock().unwrap();
+                    state.peers.iter()
+                        .map(|p| (p.node_id.clone(), p.address.clone()))
+                        .collect()
+                };
+
+                // Check each peer's health
+                let mut updated_peers: Vec<FederationPeerInfo> = Vec::new();
+
+                for (node_id, address) in peers_to_check {
+                    let start = std::time::Instant::now();
+                    let health_url = format!("{}/api/health", address);
+
+                    let (status, latency_ms) = match client.get(&health_url).send() {
+                        Ok(response) => {
+                            let latency = start.elapsed().as_millis() as u64;
+                            if response.status().is_success() {
+                                (PeerStatus::Online, Some(latency))
+                            } else {
+                                // Try root URL
+                                match client.get(&address).send() {
+                                    Ok(_) => (PeerStatus::Online, Some(start.elapsed().as_millis() as u64)),
+                                    Err(_) => (PeerStatus::Offline, None),
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Try root URL as fallback
+                            match client.get(&address).send() {
+                                Ok(_) => (PeerStatus::Online, Some(start.elapsed().as_millis() as u64)),
+                                Err(_) => (PeerStatus::Offline, None),
+                            }
+                        }
+                    };
+
+                    updated_peers.push(FederationPeerInfo {
+                        node_id,
+                        address,
+                        status,
+                        latency_ms,
+                        sessions_hosted: 0,
+                        last_seen: if status == PeerStatus::Online {
+                            Some(chrono::Local::now().format("%H:%M:%S").to_string())
+                        } else {
+                            None
+                        },
+                    });
+                }
+
+                // Update shared state
+                if let Ok(mut state) = federation_handle.lock() {
+                    // Preserve node_id and other fields
+                    state.peers = updated_peers;
+                    state.last_refresh = Some(std::time::Instant::now());
+                }
+
+                // Sleep 30 seconds before next health check
+                std::thread::sleep(std::time::Duration::from_secs(30));
             }
         });
     }
@@ -884,17 +2420,142 @@ impl OsvmApp {
         // Log the query
         self.add_log(format!("🤖 Processing query: {}", user_message));
 
-        // TODO: In the future, this will trigger the research agent to process the query
-        // For now, we'll just show a placeholder response
-        // The actual implementation will spawn a background task to:
-        // 1. Send query to research agent
-        // 2. Stream response back
-        // 3. Update the last message in chat_messages with the response
+        // Check if this is an investigation trigger
+        let is_investigation = is_investigation_trigger(&user_message);
+
+        // Spawn background task
+        if let (Some(handle), Some(tx)) = (&self.runtime_handle, &self.chat_response_tx) {
+            let tx = tx.clone();
+            let query = user_message.clone();
+            let target_wallet = self.target_wallet.clone();
+            let conversation_history = Arc::clone(&self.conversation_history);
+            let wallet_graph = Arc::clone(&self.wallet_graph);
+            let investigation_progress = Arc::clone(&self.investigation_progress);
+
+            if is_investigation {
+                // Check if investigation is already running
+                let already_running = investigation_progress.lock()
+                    .map(|p| p.is_running)
+                    .unwrap_or(false);
+
+                if already_running {
+                    // Already running - update chat message
+                    if let Ok(mut messages) = self.chat_messages.lock() {
+                        if let Some(last) = messages.last_mut() {
+                            if last.role == "assistant" {
+                                last.content = "⚠️ An investigation is already in progress. Please wait for it to complete.".to_string();
+                                last.status = MessageStatus::Complete;
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                // Extract hypothesis if user provided one
+                let hypothesis = extract_hypothesis(&query);
+
+                // Note: Investigation is being launched (logged above with query)
+                handle.spawn(async move {
+                    // Run autonomous investigation (with optional hypothesis)
+                    run_autonomous_investigation(
+                        tx,
+                        target_wallet,
+                        hypothesis,
+                        investigation_progress,
+                        wallet_graph,
+                        conversation_history,
+                    ).await;
+                });
+            } else {
+                handle.spawn(async move {
+                    // Run the regular agent loop with conversation history and graph updates
+                    run_chat_agent_loop(tx, query, target_wallet, conversation_history, wallet_graph).await;
+                });
+            }
+        } else {
+            // No runtime available - show error immediately
+            if let Ok(mut messages) = self.chat_messages.lock() {
+                if let Some(last) = messages.last_mut() {
+                    if last.role == "assistant" && last.status == MessageStatus::Streaming {
+                        last.content = "⚠️ Chat AI not initialized. Please restart the TUI with a valid context.".to_string();
+                        last.status = MessageStatus::Error;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check for incoming chat responses and update UI
+    /// Handles streaming updates from the agent loop
+    fn poll_chat_responses(&mut self) {
+        if let Some(rx) = &self.chat_response_rx {
+            // Non-blocking check for responses
+            while let Ok(response) = rx.try_recv() {
+                if let Ok(mut messages) = self.chat_messages.lock() {
+                    // Find the last assistant message that's still streaming
+                    if let Some(last) = messages.last_mut() {
+                        if last.role == "assistant" && last.status == MessageStatus::Streaming {
+                            match response.response_type {
+                                ChatResponseType::ThinkingStep => {
+                                    // Append thinking step to existing content
+                                    if last.content == "Thinking..." {
+                                        last.content = response.content;
+                                    } else {
+                                        last.content = format!("{}\n{}", last.content, response.content);
+                                    }
+                                }
+                                ChatResponseType::ToolCall(_) | ChatResponseType::ToolResult(_) => {
+                                    // Append tool status to existing content
+                                    last.content = format!("{}\n{}", last.content, response.content);
+                                }
+                                ChatResponseType::FinalAnswer => {
+                                    // Replace with final answer
+                                    last.content = response.content;
+                                    last.status = MessageStatus::Complete;
+                                }
+                                ChatResponseType::Error => {
+                                    // Show error
+                                    last.content = response.content;
+                                    last.status = MessageStatus::Error;
+                                }
+                                ChatResponseType::GraphUpdate(_) => {
+                                    // Graph updates are handled directly in the agent loop
+                                    // Just append a note to the chat
+                                    last.content = format!("{}\n📊 Graph visualization updated", last.content);
+                                }
+                            }
+                            last.timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                        }
+                    }
+                }
+                // Enable auto-scroll when new response arrives
+                self.chat_auto_scroll = true;
+            }
+        }
     }
 
     /// Update activity sparkline - called on each tick
     pub fn tick(&mut self) {
         self.iteration += 1;
+
+        // Poll for chat AI responses (non-blocking)
+        self.poll_chat_responses();
+
+        // Handle federation refresh (synchronous load from file)
+        if self.federation_refresh_pending {
+            self.load_federation_state_sync();
+            self.federation_refresh_pending = false;
+        }
+
+        // Handle federation add peer operation
+        if let Some(address) = self.federation_add_pending.take() {
+            self.handle_federation_add_peer(&address);
+        }
+
+        // Handle federation delete peer operation
+        if let Some(node_id) = self.federation_delete_pending.take() {
+            self.handle_federation_delete_peer(&node_id);
+        }
 
         // Update activity history based on current state
         let (nodes, edges) = self.wallet_graph.lock()
@@ -1072,6 +2733,23 @@ impl OsvmApp {
                             self.chat_input_active = false;
                             self.add_log("Chat input cancelled".to_string());
                         }
+                        // Ctrl+X to cancel running investigation
+                        KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            let was_running = if let Ok(mut progress) = self.investigation_progress.lock() {
+                                if progress.is_running && !progress.cancel_requested {
+                                    progress.cancel_requested = true;
+                                    progress.status_message = "Cancellation requested...".to_string();
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            };
+                            if was_running {
+                                self.add_log("🛑 Investigation cancellation requested (Ctrl+X)".to_string());
+                            }
+                        }
                         // Chat scrolling (j/k when not in input mode)
                         KeyCode::Char('j') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
                             self.chat_scroll = self.chat_scroll.saturating_add(1);
@@ -1188,6 +2866,156 @@ impl OsvmApp {
                                 self.add_log("🔄 BBS refreshed".to_string());
                             }
                         }
+                        // FEDERATION: Refresh (r key triggers async health check)
+                        KeyCode::Char('r') if self.active_tab == TabIndex::Federation => {
+                            self.federation_refresh_pending = true;
+                            self.add_log("🔄 Refreshing federation with health checks...".to_string());
+                        }
+                        // FEDERATION: Scroll sessions (j/k)
+                        KeyCode::Char('j') | KeyCode::Down if self.active_tab == TabIndex::Federation => {
+                            self.federation_scroll = self.federation_scroll.saturating_add(1);
+                        }
+                        KeyCode::Char('k') | KeyCode::Up if self.active_tab == TabIndex::Federation => {
+                            self.federation_scroll = self.federation_scroll.saturating_sub(1);
+                        }
+                        // FEDERATION: Navigate peer selection
+                        KeyCode::Char('n') | KeyCode::Char('N') if self.active_tab == TabIndex::Federation => {
+                            // Select next peer
+                            let peer_count = self.federation_state.lock()
+                                .map(|s| s.peers.len())
+                                .unwrap_or(0);
+                            if peer_count > 0 {
+                                self.federation_selected_peer = Some(
+                                    self.federation_selected_peer
+                                        .map(|i| (i + 1) % peer_count)
+                                        .unwrap_or(0)
+                                );
+                            }
+                        }
+                        KeyCode::Char('p') | KeyCode::Char('P') if self.active_tab == TabIndex::Federation => {
+                            // Select previous peer
+                            let peer_count = self.federation_state.lock()
+                                .map(|s| s.peers.len())
+                                .unwrap_or(0);
+                            if peer_count > 0 {
+                                self.federation_selected_peer = Some(
+                                    self.federation_selected_peer
+                                        .map(|i| if i == 0 { peer_count - 1 } else { i - 1 })
+                                        .unwrap_or(peer_count - 1)
+                                );
+                            }
+                        }
+                        // FEDERATION: Add peer (a key opens input mode)
+                        KeyCode::Char('a') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                            self.federation_input_active = true;
+                            self.federation_input_buffer.clear();
+                            self.add_log("Adding peer - enter address (e.g., http://192.168.1.100:8080)".to_string());
+                        }
+                        // FEDERATION: Delete selected peer (d key)
+                        KeyCode::Char('d') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                            if let Some(idx) = self.federation_selected_peer {
+                                let node_id = self.federation_state.lock()
+                                    .ok()
+                                    .and_then(|s| s.peers.get(idx).map(|p| p.node_id.clone()));
+                                if let Some(node_id) = node_id {
+                                    self.federation_delete_pending = Some(node_id.clone());
+                                    self.add_log(format!("🗑️ Deleting peer {}...", node_id));
+                                }
+                            }
+                        }
+                        // FEDERATION: Input handling
+                        KeyCode::Char(c) if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                            self.federation_input_buffer.push(c);
+                        }
+                        KeyCode::Backspace if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                            self.federation_input_buffer.pop();
+                        }
+                        KeyCode::Enter if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                            if !self.federation_input_buffer.trim().is_empty() {
+                                self.federation_add_pending = Some(self.federation_input_buffer.clone());
+                                self.add_log(format!("➕ Adding peer {}...", self.federation_input_buffer));
+                            }
+                            self.federation_input_buffer.clear();
+                            self.federation_input_active = false;
+                        }
+                        KeyCode::Esc if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                            self.federation_input_buffer.clear();
+                            self.federation_input_active = false;
+                            self.add_log("Add peer cancelled".to_string());
+                        }
+                        // FEDERATION: Session selection (s to select next, S to select prev)
+                        KeyCode::Char('s') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                            let session_count = self.federation_state.lock()
+                                .map(|s| s.sessions.len())
+                                .unwrap_or(0);
+                            if session_count > 0 {
+                                self.federation_selected_session = Some(
+                                    self.federation_selected_session
+                                        .map(|i| (i + 1) % session_count)
+                                        .unwrap_or(0)
+                                );
+                            }
+                        }
+                        KeyCode::Char('S') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                            let session_count = self.federation_state.lock()
+                                .map(|s| s.sessions.len())
+                                .unwrap_or(0);
+                            if session_count > 0 {
+                                self.federation_selected_session = Some(
+                                    self.federation_selected_session
+                                        .map(|i| if i == 0 { session_count - 1 } else { i - 1 })
+                                        .unwrap_or(session_count - 1)
+                                );
+                            }
+                        }
+                        // FEDERATION: Join selected session (J key)
+                        KeyCode::Char('J') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                            if let Some(idx) = self.federation_selected_session {
+                                let session_info = self.federation_state.lock()
+                                    .ok()
+                                    .and_then(|s| s.sessions.get(idx).cloned());
+                                if let Some(session) = session_info {
+                                    // Show join command
+                                    self.add_log(format!("📌 Session: {} ({})", session.name, session.session_id));
+                                    self.add_log(format!("👤 Host: {} | Users: {}", session.host_node_id, session.participant_count));
+                                    self.add_log(format!("🔗 Join: osvm collab join {}", session.session_id));
+                                    self.add_log("   (Copy command and run in new terminal to join)".to_string());
+                                }
+                            } else {
+                                self.add_log("⚠️ Select a session first (s/S to navigate)".to_string());
+                            }
+                        }
+                        // FEDERATION: Toggle annotation stream display (A key)
+                        KeyCode::Char('A') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                            self.federation_show_annotations = !self.federation_show_annotations;
+                            if self.federation_show_annotations {
+                                // Show annotations from selected session (or all)
+                                let annotations = self.federation_state.lock()
+                                    .map(|s| s.live_annotations.clone())
+                                    .unwrap_or_default();
+
+                                if annotations.is_empty() {
+                                    self.add_log("📝 ANNOTATION STREAM ENABLED".to_string());
+                                    self.add_log("   No annotations yet. To add:".to_string());
+                                    self.add_log("   osvm collab annotate <wallet> \"Note\"".to_string());
+                                } else {
+                                    self.add_log("📝 LIVE ANNOTATIONS:".to_string());
+                                    for ann in annotations.iter().take(10) {
+                                        let severity_icon = match ann.severity.as_str() {
+                                            "critical" => "🚨",
+                                            "warning" => "⚠️",
+                                            "important" => "⭐",
+                                            "question" => "❓",
+                                            _ => "ℹ️",
+                                        };
+                                        self.add_log(format!("   {} {} @{}: {}", severity_icon, ann.timestamp, ann.author, ann.text));
+                                        self.add_log(format!("      Target: {}", ann.target));
+                                    }
+                                }
+                            } else {
+                                self.add_log("📝 Annotation stream disabled".to_string());
+                            }
+                        }
                         KeyCode::Char('?') | KeyCode::F(1) => {
                             self.show_help = !self.show_help;
                             if !self.show_help {
@@ -1202,6 +3030,7 @@ impl OsvmApp {
                         KeyCode::Char('3') => self.active_tab = TabIndex::Logs,
                         KeyCode::Char('4') => self.active_tab = TabIndex::SearchResults,
                         KeyCode::Char('5') => self.active_tab = TabIndex::BBS,
+                        KeyCode::Char('6') => self.active_tab = TabIndex::Federation,
                         KeyCode::Char('t') | KeyCode::Char('T') => {
                             // Toggle investigation trail visibility in graph view
                             if self.active_tab == TabIndex::Graph {
@@ -1487,18 +3316,20 @@ impl OsvmApp {
             TabIndex::Graph => TabIndex::Logs,
             TabIndex::Logs => TabIndex::SearchResults,
             TabIndex::SearchResults => TabIndex::BBS,
-            TabIndex::BBS => TabIndex::Chat,
+            TabIndex::BBS => TabIndex::Federation,
+            TabIndex::Federation => TabIndex::Chat,
         };
     }
 
     fn previous_tab(&mut self) {
         self.active_tab = match self.active_tab {
-            TabIndex::Chat => TabIndex::BBS,
+            TabIndex::Chat => TabIndex::Federation,
             TabIndex::Dashboard => TabIndex::Chat,
             TabIndex::Graph => TabIndex::Dashboard,
             TabIndex::Logs => TabIndex::Graph,
             TabIndex::SearchResults => TabIndex::Logs,
             TabIndex::BBS => TabIndex::SearchResults,
+            TabIndex::Federation => TabIndex::BBS,
         };
     }
 
@@ -1512,6 +3343,13 @@ impl OsvmApp {
             TabIndex::Logs => self.render_full_logs(f, size),
             TabIndex::SearchResults => self.render_search_results_tab(f, size),
             TabIndex::BBS => {
+                if let Ok(mut bbs_state) = self.bbs_state.lock() {
+                    crate::utils::bbs::tui_widgets::render_bbs_tab(f, size, &mut bbs_state);
+                }
+            }
+            TabIndex::Federation => {
+                // TODO: Implement federation dashboard
+                // For now, reuse the BBS render since federation is related
                 if let Ok(mut bbs_state) = self.bbs_state.lock() {
                     crate::utils::bbs::tui_widgets::render_bbs_tab(f, size, &mut bbs_state);
                 }
@@ -1531,19 +3369,30 @@ impl OsvmApp {
 
     /// btop-style dashboard with all panels visible
     fn render_dashboard(&mut self, f: &mut Frame, area: Rect) {
-        // Main vertical split: header bar, network stats, content, footer
+        // Check if investigation is running or has data
+        let show_investigation_panel = self.investigation_progress.lock()
+            .map(|p| p.is_running || p.wallets_explored > 0)
+            .unwrap_or(false);
+
+        // Main vertical split: header bar, network stats/investigation, content, footer
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),   // Header with tabs
-                Constraint::Length(5),   // Real-time network stats (NEW!)
+                Constraint::Length(if show_investigation_panel { 7 } else { 5 }),   // Investigation or network stats
                 Constraint::Min(0),      // Content
                 Constraint::Length(2),   // Status bar (btop style)
             ])
             .split(area);
 
         self.render_btop_header(f, main_chunks[0]);
-        self.render_network_stats_panel(f, main_chunks[1]);  // NEW!
+
+        // Show investigation progress panel when investigation is running or completed
+        if show_investigation_panel {
+            self.render_investigation_progress(f, main_chunks[1]);
+        } else {
+            self.render_network_stats_panel(f, main_chunks[1]);
+        }
 
         // Content area: left (50%) + right (50%)
         let content_chunks = Layout::default()
@@ -2087,6 +3936,127 @@ impl OsvmApp {
         ]))
     }
 
+    /// Investigation progress panel - shows when autonomous investigation is running
+    fn render_investigation_progress(&self, f: &mut Frame, area: Rect) {
+        let progress = self.investigation_progress.lock().ok();
+
+        let (is_running, phase, wallets_explored, wallets_pending, max_wallets,
+             current_depth, max_depth, transfers_found, findings_count, elapsed_secs, status) =
+            progress.map(|p| (
+                p.is_running,
+                format!("{:?}", p.phase),
+                p.wallets_explored,
+                p.wallets_pending,
+                p.max_wallets,
+                p.current_depth,
+                p.max_depth,
+                p.transfers_found,
+                p.findings.len(),
+                p.start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0),
+                p.status_message.clone(),
+            )).unwrap_or((false, "Idle".to_string(), 0, 0, 50, 0, 3, 0, 0, 0, "No investigation".to_string()));
+
+        let title_style = if is_running {
+            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
+        let border_color = if is_running { Color::Green } else { Color::DarkGray };
+
+        let block = Block::default()
+            .title(Span::styled(" 🔬 Investigation ", title_style))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(border_color));
+
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        if !is_running && wallets_explored == 0 {
+            // No investigation running or completed
+            let hint = Paragraph::new(Line::from(vec![
+                Span::styled("Type ", Style::default().fg(Color::DarkGray)),
+                Span::styled("\"investigate\"", Style::default().fg(Color::Yellow)),
+                Span::styled(" to start autonomous forensics", Style::default().fg(Color::DarkGray)),
+            ])).alignment(Alignment::Center);
+            f.render_widget(hint, inner);
+            return;
+        }
+
+        // Layout for progress content
+        let content_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),  // Status line
+                Constraint::Length(1),  // Wallets progress
+                Constraint::Length(1),  // Depth progress
+                Constraint::Length(1),  // Stats line
+                Constraint::Min(0),     // Padding
+            ])
+            .split(inner);
+
+        // Status line with phase indicator
+        let phase_icon = match phase.as_str() {
+            s if s.contains("Initializing") => "🚀",
+            s if s.contains("Exploring") => "🔍",
+            s if s.contains("Analyzing") => "📊",
+            s if s.contains("Generating") => "📝",
+            s if s.contains("Complete") => "✅",
+            s if s.contains("Failed") => "❌",
+            _ => "⏸️",
+        };
+        let status_line = Paragraph::new(Line::from(vec![
+            Span::styled(format!("{} ", phase_icon), Style::default()),
+            Span::styled(&status, Style::default().fg(if is_running { Color::Cyan } else { Color::Green })),
+        ]));
+        f.render_widget(status_line, content_chunks[0]);
+
+        // Wallets progress bar
+        let wallet_pct = if max_wallets > 0 { (wallets_explored as f64 / max_wallets as f64 * 100.0).min(100.0) } else { 0.0 };
+        let wallet_bar_width = inner.width.saturating_sub(20) as usize;
+        let wallet_filled = ((wallet_pct / 100.0) * wallet_bar_width as f64) as usize;
+        let wallet_empty = wallet_bar_width.saturating_sub(wallet_filled);
+        let wallet_line = Paragraph::new(Line::from(vec![
+            Span::styled("Wallets  ", Style::default().fg(Color::White)),
+            Span::styled("█".repeat(wallet_filled), Style::default().fg(Color::Green)),
+            Span::styled("░".repeat(wallet_empty), Style::default().fg(Color::DarkGray)),
+            Span::styled(format!(" {}/{}", wallets_explored, max_wallets), Style::default().fg(Color::Cyan)),
+        ]));
+        f.render_widget(wallet_line, content_chunks[1]);
+
+        // Depth progress bar
+        let depth_pct = if max_depth > 0 { (current_depth as f64 / max_depth as f64 * 100.0).min(100.0) } else { 0.0 };
+        let depth_bar_width = inner.width.saturating_sub(20) as usize;
+        let depth_filled = ((depth_pct / 100.0) * depth_bar_width as f64) as usize;
+        let depth_empty = depth_bar_width.saturating_sub(depth_filled);
+        let depth_line = Paragraph::new(Line::from(vec![
+            Span::styled("Depth    ", Style::default().fg(Color::White)),
+            Span::styled("█".repeat(depth_filled), Style::default().fg(Color::Magenta)),
+            Span::styled("░".repeat(depth_empty), Style::default().fg(Color::DarkGray)),
+            Span::styled(format!(" {}/{}", current_depth, max_depth), Style::default().fg(Color::Cyan)),
+        ]));
+        f.render_widget(depth_line, content_chunks[2]);
+
+        // Stats line
+        let stats_line = Paragraph::new(Line::from(vec![
+            Span::styled("📨 ", Style::default()),
+            Span::styled(format!("{}", transfers_found), Style::default().fg(Color::Yellow)),
+            Span::styled(" transfers │ ", Style::default().fg(Color::DarkGray)),
+            Span::styled("🔎 ", Style::default()),
+            Span::styled(format!("{}", findings_count), Style::default().fg(Color::Red)),
+            Span::styled(" findings │ ", Style::default().fg(Color::DarkGray)),
+            Span::styled("⏱ ", Style::default()),
+            Span::styled(format!("{}s", elapsed_secs), Style::default().fg(Color::Blue)),
+            if wallets_pending > 0 {
+                Span::styled(format!(" │ 📋 {} queued", wallets_pending), Style::default().fg(Color::DarkGray))
+            } else {
+                Span::raw("")
+            },
+        ]));
+        f.render_widget(stats_line, content_chunks[3]);
+    }
+
     /// Token volume bars (btop memory style)
     fn render_volume_bars(&self, f: &mut Frame, area: Rect) {
         let volumes = self.token_volumes.lock().ok();
@@ -2519,7 +4489,7 @@ impl OsvmApp {
             Line::from(Span::styled(" Real-time blockchain investigation TUI ", Style::default().fg(Color::DarkGray))),
             Line::from(""),
             Line::from(Span::styled(" ─── Navigation ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
-            Line::from("   0/1/2/3/4/5  Switch views (Chat/Dashboard/Graph/Logs/Search/BBS)"),
+            Line::from("   0-6          Switch views (Chat/Dash/Graph/Logs/Search/BBS/Fed)"),
             Line::from("   Tab          Cycle through views"),
             Line::from("   ?/F1         Toggle this help"),
             Line::from("   q/Esc        Quit (or close help)"),
@@ -2558,6 +4528,17 @@ impl OsvmApp {
             Line::from("   j/k/↑/↓      Scroll posts (when not typing)"),
             Line::from("   1-9          Select board by number"),
             Line::from("   r            Refresh boards and posts"),
+            Line::from(""),
+            Line::from(Span::styled(" ─── Federation View ─────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from("   r            Refresh peer status from disk"),
+            Line::from("   a            Add new peer (enter address, then Enter)"),
+            Line::from("   d            Delete selected peer"),
+            Line::from("   n/p          Select next/previous peer"),
+            Line::from("   s/S          Select next/previous session"),
+            Line::from("   J            Show join command for selected session"),
+            Line::from("   A            Toggle annotation stream display"),
+            Line::from("   j/k/↑/↓      Scroll sessions list"),
+            Line::from("   Esc          Cancel add peer input"),
             Line::from(""),
             Line::from(Span::styled(" ─── Legend ──────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   🔴 Target    Red wallet being investigated"),
@@ -3163,5 +5144,352 @@ impl OsvmApp {
         ]);
         let status = Paragraph::new(status_text);
         f.render_widget(status, chunks[2]);
+    }
+
+    /// Render Federation Network Dashboard - Real-time peer visualization
+    fn render_federation_dashboard(&mut self, f: &mut Frame, area: Rect) {
+        let fed_state = self.federation_state.lock().unwrap().clone();
+
+        // Main layout: [Header][Network Graph | Peers][Sessions][Status]
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),   // Header
+                Constraint::Length(14),  // Network topology + peers
+                Constraint::Min(8),      // Sessions list
+                Constraint::Length(2),   // Status bar
+            ])
+            .split(area);
+
+        // === HEADER ===
+        let header_text = vec![
+            Line::from(vec![
+                Span::styled(" 🌐 FEDERATION NETWORK DASHBOARD ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("  ", Style::default()),
+                Span::styled(format!("Node: {}", fed_state.node_id), Style::default().fg(Color::Yellow)),
+            ]),
+        ];
+        let header = Paragraph::new(header_text)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title(Span::styled(" Federation ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+        f.render_widget(header, main_chunks[0]);
+
+        // === NETWORK TOPOLOGY + PEERS (side by side) ===
+        let network_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50),  // Network topology graph
+                Constraint::Percentage(50),  // Peer list
+            ])
+            .split(main_chunks[1]);
+
+        // Network Topology (ASCII art visualization)
+        self.render_federation_network_graph(f, network_chunks[0], &fed_state);
+
+        // Peer List
+        self.render_federation_peer_list(f, network_chunks[1], &fed_state);
+
+        // === SESSIONS LIST ===
+        self.render_federation_sessions(f, main_chunks[2], &fed_state);
+
+        // === STATUS BAR ===
+        let refresh_ago = fed_state.last_refresh
+            .map(|t| format!("{}s ago", t.elapsed().as_secs()))
+            .unwrap_or_else(|| "never".to_string());
+
+        // Show different status bar based on input mode
+        let status_text = if self.federation_input_active {
+            Line::from(vec![
+                Span::styled(" ADD PEER: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(&self.federation_input_buffer, Style::default().fg(Color::White)),
+                Span::styled("▏", Style::default().fg(Color::White).add_modifier(Modifier::SLOW_BLINK)),
+                Span::raw(" | "),
+                Span::styled("Enter", Style::default().fg(Color::Green)),
+                Span::raw(" confirm "),
+                Span::styled("Esc", Style::default().fg(Color::Red)),
+                Span::raw(" cancel"),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(" [6] Federation ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::raw(" | "),
+                Span::styled(format!("{} peers", fed_state.peers.len()), Style::default().fg(Color::Green)),
+                Span::raw(" | "),
+                Span::styled(format!("{} sessions", fed_state.sessions.len()), Style::default().fg(Color::Yellow)),
+                Span::raw(" | "),
+                Span::styled(format!("{}s", refresh_ago), Style::default().fg(Color::DarkGray)),
+                Span::raw(" | "),
+                Span::styled("r", Style::default().fg(Color::Green)),
+                Span::raw(" refresh "),
+                Span::styled("a", Style::default().fg(Color::Green)),
+                Span::raw(" add "),
+                Span::styled("d", Style::default().fg(Color::Red)),
+                Span::raw(" del "),
+                Span::styled("s/J", Style::default().fg(Color::Magenta)),
+                Span::raw(" session"),
+            ])
+        };
+        let status = Paragraph::new(status_text);
+        f.render_widget(status, main_chunks[3]);
+    }
+
+    /// Render ASCII network topology graph
+    fn render_federation_network_graph(&self, f: &mut Frame, area: Rect, state: &FederationDashboardState) {
+        let mut lines: Vec<Line> = Vec::new();
+
+        if state.peers.is_empty() {
+            // No peers - show empty state with guidance
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "       ┌─────────────┐",
+                Style::default().fg(Color::DarkGray)
+            )));
+            lines.push(Line::from(vec![
+                Span::styled("       │ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("YOU", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("       │", Style::default().fg(Color::DarkGray)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("       │ ", Style::default().fg(Color::DarkGray)),
+                Span::styled(&state.node_id[..8.min(state.node_id.len())], Style::default().fg(Color::Yellow)),
+                Span::styled("  │", Style::default().fg(Color::DarkGray)),
+            ]));
+            lines.push(Line::from(Span::styled(
+                "       └─────────────┘",
+                Style::default().fg(Color::DarkGray)
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "  No peers connected. Add with:",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+            )));
+            lines.push(Line::from(Span::styled(
+                "  osvm collab peers add <address>",
+                Style::default().fg(Color::Green)
+            )));
+        } else {
+            // Build network topology visualization
+            lines.push(Line::from(""));
+
+            // Center node (us)
+            lines.push(Line::from(Span::styled(
+                "           ┌───────────────┐",
+                Style::default().fg(Color::Cyan)
+            )));
+            lines.push(Line::from(vec![
+                Span::styled("           │ ", Style::default().fg(Color::Cyan)),
+                Span::styled("★ YOU", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("        │", Style::default().fg(Color::Cyan)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("           │ ", Style::default().fg(Color::Cyan)),
+                Span::styled(&state.node_id[..10.min(state.node_id.len())], Style::default().fg(Color::Yellow)),
+                Span::styled("    │", Style::default().fg(Color::Cyan)),
+            ]));
+            lines.push(Line::from(Span::styled(
+                "           └───────┬───────┘",
+                Style::default().fg(Color::Cyan)
+            )));
+
+            // Connection lines to peers
+            let peer_count = state.peers.len();
+            if peer_count > 0 {
+                // Draw connection hub
+                let conn_line = match peer_count {
+                    1 => "                   │",
+                    2 => "            ┌──────┴──────┐",
+                    3 => "       ┌────┼─────────────┼────┐",
+                    _ => "  ┌────┼────┼─────────────┼────┼────┐",
+                };
+                lines.push(Line::from(Span::styled(conn_line, Style::default().fg(Color::Green))));
+
+                // Draw peer boxes (max 4 shown)
+                let shown_peers: Vec<_> = state.peers.iter().take(4).collect();
+                let mut peer_line1 = String::new();
+                let mut peer_line2 = String::new();
+                let mut peer_line3 = String::new();
+
+                for peer in &shown_peers {
+                    let status_icon = match peer.status {
+                        PeerStatus::Online => "●",
+                        PeerStatus::Offline => "○",
+                        PeerStatus::Connecting => "◐",
+                        PeerStatus::Unknown => "?",
+                    };
+
+                    peer_line1.push_str(&format!(" [{} ", status_icon));
+                    peer_line2.push_str(&format!("  {} ", &peer.node_id[..6.min(peer.node_id.len())]));
+                    peer_line3.push_str(&format!("  {}] ", peer.latency_ms.map(|l| format!("{}ms", l)).unwrap_or_else(|| "?".to_string())));
+                }
+
+                lines.push(Line::from(Span::styled(peer_line1.clone(), Style::default().fg(Color::White))));
+                lines.push(Line::from(Span::styled(peer_line2.clone(), Style::default().fg(Color::Yellow))));
+                lines.push(Line::from(Span::styled(peer_line3.clone(), Style::default().fg(Color::DarkGray))));
+
+                if state.peers.len() > 4 {
+                    lines.push(Line::from(Span::styled(
+                        format!("  ... +{} more peers", state.peers.len() - 4),
+                        Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+                    )));
+                }
+            }
+        }
+
+        let graph = Paragraph::new(lines)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green))
+                .title(Span::styled(" Network Topology ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))));
+        f.render_widget(graph, area);
+    }
+
+    /// Render peer list with status and metrics
+    fn render_federation_peer_list(&self, f: &mut Frame, area: Rect, state: &FederationDashboardState) {
+        let mut lines: Vec<Line> = Vec::new();
+
+        if state.peers.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                " No federation peers configured",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+            )));
+        } else {
+            // Column headers
+            lines.push(Line::from(vec![
+                Span::styled(" Status ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Node ID      ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Latency ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Sessions", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(Span::styled(
+                " ───────┼──────────────┼─────────┼─────────",
+                Style::default().fg(Color::DarkGray)
+            )));
+
+            for (idx, peer) in state.peers.iter().enumerate() {
+                let is_selected = self.federation_selected_peer == Some(idx);
+                let (status_icon, status_color) = match peer.status {
+                    PeerStatus::Online => ("● ONLINE ", Color::Green),
+                    PeerStatus::Offline => ("○ OFFLINE", Color::Red),
+                    PeerStatus::Connecting => ("◐ CONN.  ", Color::Yellow),
+                    PeerStatus::Unknown => ("? UNKNOWN", Color::DarkGray),
+                };
+
+                let latency = peer.latency_ms
+                    .map(|l| format!("{:>5}ms", l))
+                    .unwrap_or_else(|| "   N/A".to_string());
+
+                // Highlight selected peer
+                let row_style = if is_selected {
+                    Style::default().bg(Color::DarkGray)
+                } else {
+                    Style::default()
+                };
+                let select_indicator = if is_selected { "▶" } else { " " };
+
+                lines.push(Line::from(vec![
+                    Span::styled(select_indicator, row_style.fg(Color::Cyan)),
+                    Span::styled(format!("{} ", status_icon), row_style.fg(status_color)),
+                    Span::styled("│ ", row_style.fg(Color::DarkGray)),
+                    Span::styled(format!("{:<12} ", &peer.node_id[..12.min(peer.node_id.len())]), row_style.fg(Color::Yellow)),
+                    Span::styled("│ ", row_style.fg(Color::DarkGray)),
+                    Span::styled(format!("{} ", latency), row_style.fg(Color::White)),
+                    Span::styled("│ ", row_style.fg(Color::DarkGray)),
+                    Span::styled(format!("{:>4}", peer.sessions_hosted), row_style.fg(Color::Cyan)),
+                ]));
+            }
+        }
+
+        let peers_widget = Paragraph::new(lines)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow))
+                .title(Span::styled(" Peers ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))));
+        f.render_widget(peers_widget, area);
+    }
+
+    /// Render federation sessions list
+    fn render_federation_sessions(&self, f: &mut Frame, area: Rect, state: &FederationDashboardState) {
+        let mut lines: Vec<Line> = Vec::new();
+
+        if state.sessions.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                " No active sessions discovered",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled(" Start a session: ", Style::default().fg(Color::White)),
+                Span::styled("osvm collab start --name \"Investigation\"", Style::default().fg(Color::Green)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled(" Discover sessions: ", Style::default().fg(Color::White)),
+                Span::styled("osvm collab discover", Style::default().fg(Color::Green)),
+            ]));
+        } else {
+            // Column headers
+            lines.push(Line::from(vec![
+                Span::styled(" Name                    ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Host         ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Users ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("│ ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Status", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(Span::styled(
+                " ────────────────────────┼──────────────┼───────┼────────",
+                Style::default().fg(Color::DarkGray)
+            )));
+
+            for (idx, session) in state.sessions.iter().enumerate() {
+                let is_selected = self.federation_selected_session == Some(idx);
+                let status_color = match session.status.as_str() {
+                    "Active" => Color::Green,
+                    "Full" => Color::Yellow,
+                    "Paused" => Color::Gray,
+                    _ => Color::Red,
+                };
+
+                let name = if session.name.len() > 22 {
+                    format!("{}...", &session.name[..19])
+                } else {
+                    format!("{:<22}", session.name)
+                };
+
+                // Highlight selected session
+                let row_style = if is_selected {
+                    Style::default().bg(Color::DarkGray)
+                } else {
+                    Style::default()
+                };
+                let select_indicator = if is_selected { "▶" } else { " " };
+
+                lines.push(Line::from(vec![
+                    Span::styled(select_indicator, row_style.fg(Color::Cyan)),
+                    Span::styled(format!("{} ", name), row_style.fg(Color::White)),
+                    Span::styled("│ ", row_style.fg(Color::DarkGray)),
+                    Span::styled(format!("{:<12} ", &session.host_node_id[..12.min(session.host_node_id.len())]), row_style.fg(Color::Yellow)),
+                    Span::styled("│ ", row_style.fg(Color::DarkGray)),
+                    Span::styled(format!("{:>5} ", session.participant_count), row_style.fg(Color::Cyan)),
+                    Span::styled("│ ", row_style.fg(Color::DarkGray)),
+                    Span::styled(format!("{:<6}", session.status), row_style.fg(status_color)),
+                ]));
+            }
+        }
+
+        let sessions_widget = Paragraph::new(lines)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Magenta))
+                .title(Span::styled(" Federated Sessions ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))))
+            .scroll((self.federation_scroll as u16, 0));
+        f.render_widget(sessions_widget, area);
     }
 }

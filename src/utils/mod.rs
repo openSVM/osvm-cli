@@ -83,6 +83,8 @@ pub mod themes;
 pub mod tui;
 /// FrozenBBS integration for Meshtastic-based agent-human communication
 pub mod bbs;
+/// Collaborative real-time investigation system with shared TUI sessions
+pub mod collab;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions

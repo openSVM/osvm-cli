@@ -53,6 +53,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "ovsm"
             | "mcp"
             | "bbs"
+            | "collab"
             | "mount"
             | "snapshot"
             | "stream"
@@ -340,6 +341,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return commands::bbs_handler::handle_bbs_command(sub_matches)
             .await
             .map_err(|e| e.into());
+    }
+
+    // Handle collab command early - real-time collaborative investigation
+    if sub_command == "collab" {
+        return handle_collab_command(sub_matches).await;
     }
 
     // Handle snapshot command early - it doesn't need keypair or Solana config
@@ -805,6 +811,92 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let command_duration = command_start_time.elapsed();
     let result = Ok(());
     log_command_execution(sub_command, &command_args[1..], &result, command_duration).await;
+
+    Ok(())
+}
+
+/// Handle collaborative investigation commands
+async fn handle_collab_command(
+    sub_matches: &clap::ArgMatches,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::services::collab_service;
+
+    // Get the subcommand
+    let subcommand = sub_matches.subcommand();
+
+    match subcommand {
+        Some(("start", args)) => {
+            let name = args.get_one::<String>("name").cloned();
+            let wallet = args.get_one::<String>("wallet").cloned();
+            let max = args.get_one::<String>("max").and_then(|s| s.parse().ok());
+            let password = args.get_one::<String>("password").cloned();
+            collab_service::start_session(name, wallet, max, password).await?;
+        }
+        Some(("join", args)) => {
+            let code = args.get_one::<String>("code")
+                .ok_or("Invite code required")?;
+            let name = args.get_one::<String>("name").cloned();
+            collab_service::join_session(code, name).await?;
+        }
+        Some(("list", _)) | Some(("ls", _)) => {
+            collab_service::list_sessions().await?;
+        }
+        Some(("annotate", args)) | Some(("note", args)) => {
+            let target = args.get_one::<String>("target")
+                .ok_or("Target required")?;
+            let text = args.get_one::<String>("text")
+                .ok_or("Annotation text required")?;
+            let severity = args.get_one::<String>("severity").cloned();
+            collab_service::add_annotation(None, target, text, severity).await?;
+        }
+        Some(("annotations", _)) => {
+            collab_service::list_annotations(None).await?;
+        }
+        Some(("server", args)) => {
+            let port = args.get_one::<String>("port")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(8080);
+            let host = args.get_one::<String>("host").cloned();
+            collab_service::start_server(port, host).await?;
+        }
+        // Federation commands
+        Some(("peers", peer_args)) => {
+            match peer_args.subcommand() {
+                Some(("add", add_args)) => {
+                    let address = add_args.get_one::<String>("address")
+                        .ok_or("Peer address required")?;
+                    collab_service::add_federation_peer(address).await?;
+                }
+                Some(("remove", rm_args)) => {
+                    let address = rm_args.get_one::<String>("address")
+                        .ok_or("Peer address required")?;
+                    collab_service::remove_federation_peer(address).await?;
+                }
+                Some(("list", _)) | None => {
+                    collab_service::list_federation_peers().await?;
+                }
+                _ => {
+                    collab_service::list_federation_peers().await?;
+                }
+            }
+        }
+        Some(("discover", _)) => {
+            collab_service::discover_sessions().await?;
+        }
+        Some(("publish", _)) => {
+            collab_service::publish_session_to_federation(None).await?;
+        }
+        Some(("status", _)) => {
+            collab_service::show_federation_status().await?;
+        }
+        Some(("help", _)) | None => {
+            collab_service::print_help();
+        }
+        Some((cmd, _)) => {
+            eprintln!("Unknown collab subcommand: {}", cmd);
+            collab_service::print_help();
+        }
+    }
 
     Ok(())
 }

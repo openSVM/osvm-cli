@@ -7,6 +7,7 @@ pub mod auth_service;
 pub mod blockchain_indexer;
 pub mod chat_ui_test_scenarios;
 pub mod clickhouse_service;
+pub mod collab_service; // Real-time collaborative investigation
 pub mod cross_validator; // Cross-validation for findings
 pub mod enhanced_ascii_graph; // Enhanced ASCII graph with advanced TUI visualization
 pub mod ephemeral_microvm;
