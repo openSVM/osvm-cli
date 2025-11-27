@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::services::{
     ai_service::AiService,
+    mcp_pool::{McpPool, McpPoolConfig},
     mcp_service::McpService,
     ovsm_service::OvsmService,
     research_agent::ResearchAgent,
@@ -790,29 +791,39 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     }
     println!();
 
-    // Initialize services
-    print!("{}", "⏳ Initializing MCP service...".dimmed());
+    // Initialize MCP pool with dynamic scaling
+    print!("{}", "⏳ Initializing MCP pool (dynamic scaling)...".dimmed());
     std::io::stdout().flush()?;
 
-    let mut mcp_service = McpService::new_with_debug(false);
-    let _ = mcp_service.load_config();
-    let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+    let pool_config = McpPoolConfig {
+        min_instances: 1,
+        max_instances: 6, // Scale up to 6 parallel MCP instances
+        idle_timeout: std::time::Duration::from_secs(30),
+        debug: false,
+    };
 
-    // Initialize servers and count tools
-    let mut tool_count = 0;
-    {
-        let mut svc = mcp_arc.lock().await;
+    let mcp_pool = match McpPool::with_config(pool_config).await {
+        Ok(pool) => Arc::new(pool),
+        Err(e) => {
+            println!("\r{} {}", "❌ MCP pool failed:".red(), e);
+            return Err(e);
+        }
+    };
+
+    // Get tool count from first instance for display
+    let tool_count = {
+        let guard = mcp_pool.acquire().await?;
+        let svc = guard.service().await;
         let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
-
+        let mut count = 0;
         for server_id in &servers {
-            if svc.initialize_server(server_id).await.is_ok() {
-                if let Ok(tools) = svc.list_tools(server_id).await {
-                    tool_count += tools.len();
-                }
+            if let Ok(tools) = svc.list_tools(server_id).await {
+                count += tools.len();
             }
         }
-    }
-    println!("\r{} {} tools loaded", "✅ MCP initialized:".green(), tool_count);
+        count
+    };
+    println!("\r{} {} tools, pool ready (1-6 instances)", "✅ MCP pool:".green(), tool_count);
 
     // Initialize OpenSVM API for address labels
     let opensvm_api = OpenSvmApi::new();
@@ -834,94 +845,146 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     println!();
 
     let start_time = std::time::Instant::now();
+    const BATCH_SIZE: usize = 5; // Fetch 5 wallets in parallel via pool
 
-    // BFS exploration loop
-    while let Some((current_wallet, current_depth)) = queue.pop_front() {
-        // Check fetched count (not discovered) against limit
-        if fetched_count >= max_wallets {
-            println!("{}", format!("⚠️  Reached max wallets limit ({}) - {} in queue remaining",
-                max_wallets, queue.len()).yellow());
+    // Create progress bar
+    use indicatif::{ProgressBar, ProgressStyle};
+    let progress = ProgressBar::new(max_wallets as u64);
+    progress.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} wallets ({eta})")
+        .unwrap()
+        .progress_chars("█▓░"));
+    progress.set_message("BFS exploring...");
+
+    // BFS exploration loop with parallel batching via MCP pool
+    while !queue.is_empty() && fetched_count < max_wallets {
+        // Pop up to BATCH_SIZE wallets from queue
+        let mut batch: Vec<(String, usize)> = Vec::with_capacity(BATCH_SIZE);
+        while batch.len() < BATCH_SIZE && !queue.is_empty() {
+            if let Some((w, d)) = queue.pop_front() {
+                if d < depth {
+                    batch.push((w, d));
+                }
+            }
+        }
+
+        if batch.is_empty() {
             break;
         }
 
-        if current_depth >= depth {
-            continue;
-        }
+        // Show pool scaling status
+        let stats = mcp_pool.stats().await;
+        progress.println(format!("  {} batch of {}: {} [pool: {}]",
+            "⚡ Fetching".bright_blue(),
+            batch.len(),
+            batch.iter().map(|(w, _)| truncate_address(w)).collect::<Vec<_>>().join(", "),
+            stats
+        ));
 
-        // Get annotation for current wallet
-        let annotation = opensvm_api.get_annotation(&current_wallet).await.ok().flatten();
-        let label = annotation.as_ref().map(|a| a.label.as_str()).unwrap_or("");
-        let risk = annotation.as_ref().and_then(|a| a.risk.as_deref());
+        // Fetch wallets in parallel via MCP pool (auto-scales as needed!)
+        let fetch_futures: Vec<_> = batch.iter()
+            .map(|(wallet, _)| {
+                let pool = Arc::clone(&mcp_pool);
+                let w = wallet.clone();
+                async move {
+                    let result = fetch_wallet_via_pool(&pool, &w).await;
+                    (w, result)
+                }
+            })
+            .collect();
 
-        // Print exploration status
-        let wallet_display = if label.is_empty() {
-            format!("{}...{}", &current_wallet[..8], &current_wallet[current_wallet.len()-6..])
-        } else {
-            format!("{} ({}...{})", label.bright_cyan(), &current_wallet[..4], &current_wallet[current_wallet.len()-4..])
-        };
+        let results = futures::future::join_all(fetch_futures).await;
 
-        let risk_indicator = match risk {
-            Some("malicious") => "🚨".to_string(),
-            Some("suspicious") => "⚠️".to_string(),
-            Some("safe") => "✅".to_string(),
-            _ => "❓".to_string(),
-        };
+        // Process results
+        for ((wallet, current_depth), (_, result)) in batch.into_iter().zip(results.into_iter()) {
+            fetched_count += 1;
+            progress.set_position(fetched_count as u64);
 
-        fetched_count += 1;
-        print!("{} [{}/{}] {} {} d={} q={}  ",
-            "→".bright_blue(),
-            fetched_count,
-            max_wallets,
-            wallet_display,
-            risk_indicator,
-            current_depth,
-            queue.len()
-        );
-        std::io::stdout().flush()?;
+            // Get annotation (quick lookup, cached)
+            let annotation = opensvm_api.get_annotation(&wallet).await.ok().flatten();
+            let label = annotation.as_ref().map(|a| a.label.as_str()).unwrap_or("");
+            let risk = annotation.as_ref().and_then(|a| a.risk.as_deref());
 
-        // Fetch transfers via MCP
-        let transfers = fetch_wallet_transfers(&mcp_arc, &current_wallet).await;
+            let wallet_display = if label.is_empty() {
+                truncate_address(&wallet)
+            } else {
+                format!("{} ({})", label, truncate_address(&wallet))
+            };
 
-        match transfers {
-            Ok(txs) => {
-                let new_wallets_added = txs.iter()
-                    .filter(|tx| {
+            let risk_indicator = match risk {
+                Some("malicious") => "🚨",
+                Some("suspicious") => "⚠️",
+                Some("safe") => "✅",
+                _ => "❓",
+            };
+
+            match result {
+                Ok(txs) => {
+                    let new_wallets = txs.iter()
+                        .filter(|tx| {
+                            let connected = if tx.direction == "IN" { &tx.from } else { &tx.to };
+                            !discovered.contains(connected) && current_depth + 1 < depth
+                        })
+                        .count();
+
+                    progress.println(format!("  {} [{}/{}] {} {} d={} → {} txs, +{} wallets",
+                        "→".bright_blue(),
+                        fetched_count,
+                        max_wallets,
+                        wallet_display.green(),
+                        risk_indicator,
+                        current_depth,
+                        txs.len().to_string().bright_white(),
+                        new_wallets.to_string().cyan()
+                    ));
+
+                    // Process transfers
+                    for tx in &txs {
+                        all_transfers.push(tx.clone());
+
                         let connected = if tx.direction == "IN" { &tx.from } else { &tx.to };
-                        !discovered.contains(connected) && current_depth + 1 < depth
-                    })
-                    .count();
+                        if !discovered.contains(connected) && current_depth + 1 < depth {
+                            discovered.insert(connected.clone());
+                            queue.push_back((connected.clone(), current_depth + 1));
+                        }
 
-                println!("{}", format!("{} transfers, +{} wallets", txs.len(), new_wallets_added).green());
-
-                // Process transfers
-                for tx in &txs {
-                    all_transfers.push(tx.clone());
-
-                    // Add connected wallets to queue
-                    let connected = if tx.direction == "IN" { &tx.from } else { &tx.to };
-                    if !discovered.contains(connected) && current_depth + 1 < depth {
-                        discovered.insert(connected.clone());
-                        queue.push_back((connected.clone(), current_depth + 1));
-                    }
-
-                    // Check for notable findings
-                    if tx.amount > 10000.0 {
-                        findings.push(Finding {
-                            category: "Large Transfer".to_string(),
-                            severity: "High".to_string(),
-                            description: format!("{:.2} {} {} → {}",
-                                tx.amount, tx.token,
-                                truncate_address(&tx.from),
-                                truncate_address(&tx.to)
-                            ),
-                        });
+                        if tx.amount > 10000.0 {
+                            findings.push(Finding {
+                                category: "Large Transfer".to_string(),
+                                severity: "High".to_string(),
+                                description: format!("{:.2} {} {} → {}",
+                                    tx.amount, tx.token,
+                                    truncate_address(&tx.from),
+                                    truncate_address(&tx.to)
+                                ),
+                            });
+                        }
                     }
                 }
+                Err(e) => {
+                    progress.println(format!("  {} [{}/{}] {} {} d={} → {}",
+                        "→".bright_blue(),
+                        fetched_count,
+                        max_wallets,
+                        wallet_display,
+                        risk_indicator,
+                        current_depth,
+                        format!("error: {}", e).red()
+                    ));
+                }
             }
-            Err(e) => {
-                println!("{}", format!("error: {}", e).red());
+
+            if fetched_count >= max_wallets {
+                break;
             }
         }
+    }
+
+    progress.finish_with_message("BFS complete!");
+
+    if !queue.is_empty() {
+        println!("{}", format!("⚠️  Reached max wallets limit ({}) - {} in queue remaining",
+            max_wallets, queue.len()).yellow());
     }
 
     let exploration_time = start_time.elapsed();
@@ -1087,7 +1150,57 @@ struct Finding {
     description: String,
 }
 
-/// Fetch transfers for a wallet via MCP
+/// Fetch transfers for a wallet via MCP pool (parallel-safe!)
+async fn fetch_wallet_via_pool(
+    pool: &Arc<McpPool>,
+    wallet: &str,
+) -> Result<Vec<TransferRecord>> {
+    // Acquire instance from pool (will scale up if all busy)
+    let guard = pool.acquire().await?;
+
+    let params = serde_json::json!({
+        "address": wallet,
+        "limit": 100,
+        "compress": true
+    });
+
+    // Call via the pooled instance
+    let result = guard.call_tool("get_account_transfers", Some(params)).await?;
+
+    // Parse the result
+    if let Some(data) = result.get("data").and_then(|d| d.as_array()) {
+        let transfers: Vec<TransferRecord> = data.iter()
+            .filter_map(|tx| {
+                Some(TransferRecord {
+                    from: tx.get("from")?.as_str()?.to_string(),
+                    to: tx.get("to")?.as_str()?.to_string(),
+                    amount: tx.get("tokenAmount")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0.0),
+                    token: tx.get("tokenSymbol")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("SOL")
+                        .to_string(),
+                    direction: tx.get("transferType")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("OUT")
+                        .to_string(),
+                    timestamp: tx.get("timestamp")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                })
+            })
+            .collect();
+
+        return Ok(transfers);
+    }
+
+    Ok(Vec::new())
+}
+
+/// Fetch transfers for a wallet via MCP (legacy, holds lock)
+#[allow(dead_code)]
 async fn fetch_wallet_transfers(
     mcp: &Arc<tokio::sync::Mutex<McpService>>,
     wallet: &str,
@@ -1160,8 +1273,8 @@ fn render_ascii_graph(target: &str, transfers: &[TransferRecord]) {
     use std::collections::HashMap;
 
     // Aggregate flows by counterparty
-    let mut inflows: HashMap<String, (f64, Vec<String>)> = HashMap::new(); // from -> (total, tokens)
-    let mut outflows: HashMap<String, (f64, Vec<String>)> = HashMap::new(); // to -> (total, tokens)
+    let mut inflows: HashMap<String, (f64, Vec<String>)> = HashMap::new();
+    let mut outflows: HashMap<String, (f64, Vec<String>)> = HashMap::new();
 
     for tx in transfers {
         if tx.direction == "IN" {
@@ -1188,7 +1301,7 @@ fn render_ascii_graph(target: &str, transfers: &[TransferRecord]) {
     top_outflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
     top_outflows.truncate(5);
 
-    let max_lines = top_inflows.len().max(top_outflows.len()).max(1);
+    let max_lines = top_inflows.len().max(top_outflows.len()).max(3);
     let target_short = truncate_address(target);
 
     println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
@@ -1196,85 +1309,170 @@ fn render_ascii_graph(target: &str, transfers: &[TransferRecord]) {
     println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
     println!();
 
-    // Header
-    println!("{}{}{}",
-        "        INFLOWS (sources)".green(),
-        "                    ",
-        "OUTFLOWS (destinations)".red()
-    );
-    println!();
+    // Print the graph with cleaner layout
+    let mid_row = max_lines / 2;
 
-    // Center target box
-    let target_box_width = target_short.len() + 6;
-    let target_line = format!("┌{}┐", "─".repeat(target_box_width));
-    let target_content = format!("│  {}  │", target_short.bright_white().bold());
-    let target_bottom = format!("└{}┘", "─".repeat(target_box_width));
-
-    // Calculate padding for centering
-    let left_col_width = 30;
-    let center_padding = 5;
-    let center_start = left_col_width + center_padding;
-
-    // Print the graph
     for i in 0..max_lines {
         // Build left side (inflows)
         let left = if i < top_inflows.len() {
-            let (addr, (amount, tokens)) = &top_inflows[i];
+            let (addr, (_, tokens)) = &top_inflows[i];
             let addr_short = truncate_address(addr);
+            // Truncate token names to 6 chars max
+            let tokens_short: Vec<String> = tokens.iter()
+                .take(2)
+                .map(|t| if t.len() > 6 { format!("{}…", &t[..5]) } else { t.clone() })
+                .collect();
             let tokens_str = if tokens.len() > 2 {
-                format!("{},+{}", tokens[0], tokens.len() - 1)
+                format!("{},+{}", tokens_short[0], tokens.len() - 1)
             } else {
-                tokens.join(",")
+                tokens_short.join(",")
             };
-            format!("{:>12} {:>6} ──▶", addr_short.green(), format!("[{}]", tokens_str).dimmed())
+            format!("{:>12} {:>10} ───▶", addr_short.green(), format!("[{}]", tokens_str).dimmed())
         } else {
-            " ".repeat(left_col_width)
+            " ".repeat(28)
         };
 
         // Build right side (outflows)
         let right = if i < top_outflows.len() {
-            let (addr, (amount, tokens)) = &top_outflows[i];
+            let (addr, (_, tokens)) = &top_outflows[i];
             let addr_short = truncate_address(addr);
+            let tokens_short: Vec<String> = tokens.iter()
+                .take(2)
+                .map(|t| if t.len() > 6 { format!("{}…", &t[..5]) } else { t.clone() })
+                .collect();
             let tokens_str = if tokens.len() > 2 {
-                format!("{},+{}", tokens[0], tokens.len() - 1)
+                format!("{},+{}", tokens_short[0], tokens.len() - 1)
             } else {
-                tokens.join(",")
+                tokens_short.join(",")
             };
-            format!("▶── {:>6} {}", format!("[{}]", tokens_str).dimmed(), addr_short.red())
+            format!("▶─── {:<10} {}", format!("[{}]", tokens_str).dimmed(), addr_short.red())
         } else {
             String::new()
         };
 
-        // Print the target box in the middle row
-        let mid_row = max_lines / 2;
-        if i == mid_row.saturating_sub(1) {
-            println!("{:<30}     {}     {}", left, target_line.bright_yellow(), right);
+        // Build center with target box
+        let center = if i == mid_row - 1 {
+            format!("┌{}┐", "─".repeat(14)).bright_yellow().to_string()
         } else if i == mid_row {
-            println!("{:<30} ════{}════ {}", left, target_content, right);
+            format!("│ {} │", target_short.bright_white().bold()).to_string()
         } else if i == mid_row + 1 {
-            println!("{:<30}     {}     {}", left, target_bottom.bright_yellow(), right);
+            format!("└{}┘", "─".repeat(14)).bright_yellow().to_string()
         } else {
-            let connector = if i < mid_row.saturating_sub(1) || i > mid_row + 1 {
-                format!("{:^width$}", "│", width = target_box_width + 10)
-            } else {
-                " ".repeat(target_box_width + 10)
-            };
-            println!("{:<30}{}{}", left, connector, right);
-        }
+            format!("{:^16}", "│")
+        };
+
+        println!("{:<28}  {}  {}", left, center, right);
     }
 
     println!();
 
-    // Summary line
-    let total_in: f64 = top_inflows.iter().map(|(_, (a, _))| a).sum();
-    let total_out: f64 = top_outflows.iter().map(|(_, (a, _))| a).sum();
-    println!("  {} {} sources | {} {} destinations",
-        format!("←").green(),
-        format!("{} unique", top_inflows.len()).green(),
-        format!("{} unique", top_outflows.len()).red(),
-        format!("→").red()
+    // Summary with counts
+    println!("  {}  {} sources sending IN    |    {} destinations receiving OUT  {}",
+        "◀──".green(),
+        format!("{}", top_inflows.len()).bright_green(),
+        format!("{}", top_outflows.len()).bright_red(),
+        "──▶".red()
     );
     println!();
+}
+
+/// Generate plain-text ASCII graph for markdown report (no colors)
+fn generate_ascii_graph_text(target: &str, transfers: &[TransferRecord]) -> String {
+    use std::collections::HashMap;
+
+    let mut output = String::new();
+
+    // Aggregate flows by counterparty
+    let mut inflows: HashMap<String, (f64, Vec<String>)> = HashMap::new();
+    let mut outflows: HashMap<String, (f64, Vec<String>)> = HashMap::new();
+
+    for tx in transfers {
+        if tx.direction == "IN" {
+            let entry = inflows.entry(tx.from.clone()).or_insert((0.0, Vec::new()));
+            entry.0 += tx.amount;
+            if !entry.1.contains(&tx.token) {
+                entry.1.push(tx.token.clone());
+            }
+        } else {
+            let entry = outflows.entry(tx.to.clone()).or_insert((0.0, Vec::new()));
+            entry.0 += tx.amount;
+            if !entry.1.contains(&tx.token) {
+                entry.1.push(tx.token.clone());
+            }
+        }
+    }
+
+    // Sort and take top 5
+    let mut top_inflows: Vec<_> = inflows.into_iter().collect();
+    top_inflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
+    top_inflows.truncate(5);
+
+    let mut top_outflows: Vec<_> = outflows.into_iter().collect();
+    top_outflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
+    top_outflows.truncate(5);
+
+    let max_lines = top_inflows.len().max(top_outflows.len()).max(3);
+    let target_short = truncate_address(target);
+    let mid_row = max_lines / 2;
+
+    output.push_str("        INFLOWS                              OUTFLOWS\n");
+    output.push_str("       (sources)                           (destinations)\n\n");
+
+    for i in 0..max_lines {
+        // Left side
+        let left = if i < top_inflows.len() {
+            let (addr, (_, tokens)) = &top_inflows[i];
+            let addr_short = truncate_address(addr);
+            let tokens_short: Vec<String> = tokens.iter()
+                .take(2)
+                .map(|t| if t.len() > 6 { format!("{}…", &t[..5]) } else { t.clone() })
+                .collect();
+            let tokens_str = if tokens.len() > 2 {
+                format!("{},+{}", tokens_short[0], tokens.len() - 1)
+            } else {
+                tokens_short.join(",")
+            };
+            format!("{:>12} [{:>8}] ───▶", addr_short, tokens_str)
+        } else {
+            " ".repeat(28)
+        };
+
+        // Right side
+        let right = if i < top_outflows.len() {
+            let (addr, (_, tokens)) = &top_outflows[i];
+            let addr_short = truncate_address(addr);
+            let tokens_short: Vec<String> = tokens.iter()
+                .take(2)
+                .map(|t| if t.len() > 6 { format!("{}…", &t[..5]) } else { t.clone() })
+                .collect();
+            let tokens_str = if tokens.len() > 2 {
+                format!("{},+{}", tokens_short[0], tokens.len() - 1)
+            } else {
+                tokens_short.join(",")
+            };
+            format!("▶─── [{:<8}] {}", tokens_str, addr_short)
+        } else {
+            String::new()
+        };
+
+        // Center
+        let center = if i == mid_row - 1 {
+            format!("┌{}┐", "─".repeat(14))
+        } else if i == mid_row {
+            format!("│ {:^12} │", target_short)
+        } else if i == mid_row + 1 {
+            format!("└{}┘", "─".repeat(14))
+        } else {
+            format!("{:^16}", "│")
+        };
+
+        output.push_str(&format!("{:<28}  {}  {}\n", left, center, right));
+    }
+
+    output.push_str(&format!("\n  ◀── {} sources    |    {} destinations ──▶\n",
+        top_inflows.len(), top_outflows.len()));
+
+    output
 }
 
 /// Generate markdown report for auto mode
@@ -1321,9 +1519,16 @@ fn generate_auto_report(
     report.push_str("| Token | Inflows | Outflows |\n");
     report.push_str("|-------|---------|----------|\n");
     for (token, (inflow, outflow)) in &token_volumes {
-        report.push_str(&format!("| {} | {:.4} | {:.4} |\n", token, inflow, outflow));
+        let token_display = if token.len() > 10 { format!("{}…", &token[..9]) } else { token.clone() };
+        report.push_str(&format!("| {} | {:.4} | {:.4} |\n", token_display, inflow, outflow));
     }
     report.push_str("\n");
+
+    // ASCII Graph for report
+    report.push_str("## Wallet Flow Graph\n\n");
+    report.push_str("```\n");
+    report.push_str(&generate_ascii_graph_text(wallet, transfers));
+    report.push_str("```\n\n");
 
     // Findings
     if !findings.is_empty() {
