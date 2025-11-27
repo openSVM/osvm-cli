@@ -13,9 +13,9 @@ use crate::{Statement, Expression, BinaryOp, UnaryOp};
 // STRUCT TYPES (compile-time layout)
 // =============================================================================
 
-/// Field type for struct definitions
+/// Primitive field types (fixed-size scalars)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FieldType {
+pub enum PrimitiveType {
     U8,   // 1 byte
     U16,  // 2 bytes
     U32,  // 4 bytes
@@ -26,41 +26,103 @@ pub enum FieldType {
     I64,  // 8 bytes signed (default)
 }
 
-impl FieldType {
+impl PrimitiveType {
     pub fn size(&self) -> i64 {
         match self {
-            FieldType::U8 | FieldType::I8 => 1,
-            FieldType::U16 | FieldType::I16 => 2,
-            FieldType::U32 | FieldType::I32 => 4,
-            FieldType::U64 | FieldType::I64 => 8,
+            PrimitiveType::U8 | PrimitiveType::I8 => 1,
+            PrimitiveType::U16 | PrimitiveType::I16 => 2,
+            PrimitiveType::U32 | PrimitiveType::I32 => 4,
+            PrimitiveType::U64 | PrimitiveType::I64 => 8,
         }
     }
 
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "u8" => Some(FieldType::U8),
-            "u16" => Some(FieldType::U16),
-            "u32" => Some(FieldType::U32),
-            "u64" => Some(FieldType::U64),
-            "i8" => Some(FieldType::I8),
-            "i16" => Some(FieldType::I16),
-            "i32" => Some(FieldType::I32),
-            "i64" => Some(FieldType::I64),
+            "u8" => Some(PrimitiveType::U8),
+            "u16" => Some(PrimitiveType::U16),
+            "u32" => Some(PrimitiveType::U32),
+            "u64" => Some(PrimitiveType::U64),
+            "i8" => Some(PrimitiveType::I8),
+            "i16" => Some(PrimitiveType::I16),
+            "i32" => Some(PrimitiveType::I32),
+            "i64" => Some(PrimitiveType::I64),
             _ => None,
         }
     }
 
-    /// Convert to Anchor IDL type string
     pub fn to_idl_type(&self) -> &'static str {
         match self {
-            FieldType::U8 => "u8",
-            FieldType::U16 => "u16",
-            FieldType::U32 => "u32",
-            FieldType::U64 => "u64",
-            FieldType::I8 => "i8",
-            FieldType::I16 => "i16",
-            FieldType::I32 => "i32",
-            FieldType::I64 => "i64",
+            PrimitiveType::U8 => "u8",
+            PrimitiveType::U16 => "u16",
+            PrimitiveType::U32 => "u32",
+            PrimitiveType::U64 => "u64",
+            PrimitiveType::I8 => "i8",
+            PrimitiveType::I16 => "i16",
+            PrimitiveType::I32 => "i32",
+            PrimitiveType::I64 => "i64",
+        }
+    }
+}
+
+/// Extended field type supporting primitives, arrays, pubkeys, and nested structs
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldType {
+    /// Primitive integer types (u8-u64, i8-i64)
+    Primitive(PrimitiveType),
+    /// Fixed-size array: [element_type count], e.g., [u32 10] = 40 bytes
+    Array { element_type: PrimitiveType, count: usize },
+    /// Solana public key (32 bytes, special handling)
+    Pubkey,
+    /// Nested struct reference (resolved at struct definition time)
+    Struct(String),
+}
+
+impl FieldType {
+    /// Get size in bytes (for Array and Struct, needs struct_defs for resolution)
+    pub fn size(&self) -> i64 {
+        match self {
+            FieldType::Primitive(p) => p.size(),
+            FieldType::Array { element_type, count } => element_type.size() * (*count as i64),
+            FieldType::Pubkey => 32, // Solana pubkey is always 32 bytes
+            FieldType::Struct(_) => 0, // Requires struct_defs lookup - use size_with_structs
+        }
+    }
+
+    /// Get size with struct definitions for nested struct resolution
+    pub fn size_with_structs(&self, struct_defs: &HashMap<String, StructDef>) -> i64 {
+        match self {
+            FieldType::Struct(name) => {
+                struct_defs.get(name).map(|s| s.total_size).unwrap_or(0)
+            }
+            _ => self.size(),
+        }
+    }
+
+    /// Parse from type string (simple types only - arrays/structs handled separately)
+    pub fn from_str(s: &str) -> Option<Self> {
+        if s == "pubkey" {
+            return Some(FieldType::Pubkey);
+        }
+        PrimitiveType::from_str(s).map(FieldType::Primitive)
+    }
+
+    /// Convert to Anchor IDL type string
+    pub fn to_idl_type(&self) -> String {
+        match self {
+            FieldType::Primitive(p) => p.to_idl_type().to_string(),
+            FieldType::Array { element_type, count } => {
+                format!("{{ \"array\": [\"{}\", {}] }}", element_type.to_idl_type(), count)
+            }
+            FieldType::Pubkey => "publicKey".to_string(),
+            FieldType::Struct(name) => format!("{{ \"defined\": \"{}\" }}", name),
+        }
+    }
+
+    /// Check if this is a primitive type for load/store instruction selection
+    pub fn primitive(&self) -> Option<PrimitiveType> {
+        match self {
+            FieldType::Primitive(p) => Some(*p),
+            _ => None,
         }
     }
 }
@@ -71,6 +133,10 @@ pub struct StructField {
     pub name: String,
     pub field_type: FieldType,
     pub offset: i64,
+    /// For array types, the element size
+    pub element_size: Option<i64>,
+    /// For array types, the element count
+    pub array_count: Option<usize>,
 }
 
 /// A struct definition (compile-time metadata)
@@ -597,31 +663,80 @@ impl IrGenerator {
 
                 // Handle (define-struct StructName (field1 type1) (field2 type2) ...)
                 // Example: (define-struct MyState (counter u32) (owner u64) (flag u8))
+                // Extended syntax:
+                //   (owner pubkey)           - 32-byte Solana public key
+                //   (scores [u32 10])        - Array of 10 u32s (40 bytes)
+                //   (inner OtherStruct)      - Nested struct (size from struct_defs)
                 // This is a compile-time macro - no code is generated, just metadata
                 if name == "define-struct" && args.len() >= 2 {
                     if let Expression::Variable(struct_name) = &args[0].value {
                         let mut fields = Vec::new();
                         let mut current_offset: i64 = 0;
 
-                        // Parse each field: (field_name type_name)
+                        // Parse each field: (field_name type_spec)
                         for field_arg in args.iter().skip(1) {
                             if let Expression::ToolCall { name: field_name, args: field_args } = &field_arg.value {
                                 if field_args.len() == 1 {
-                                    if let Expression::Variable(type_name) = &field_args[0].value {
-                                        let field_type = FieldType::from_str(type_name)
-                                            .ok_or_else(|| Error::runtime(format!(
-                                                "Unknown field type '{}' in struct '{}'. Valid types: u8, u16, u32, u64, i8, i16, i32, i64",
-                                                type_name, struct_name
-                                            )))?;
+                                    // Parse the type specification
+                                    let (field_type, elem_size, arr_count) = match &field_args[0].value {
+                                        // Simple type: u8, u16, u32, u64, i8, i16, i32, i64, pubkey
+                                        Expression::Variable(type_name) => {
+                                            if let Some(ft) = FieldType::from_str(type_name) {
+                                                (ft, None, None)
+                                            } else {
+                                                // Check if it's a reference to another struct
+                                                if self.struct_defs.contains_key(type_name) {
+                                                    (FieldType::Struct(type_name.clone()), None, None)
+                                                } else {
+                                                    return Err(Error::runtime(format!(
+                                                        "Unknown field type '{}' in struct '{}'. Valid types: u8, u16, u32, u64, i8, i16, i32, i64, pubkey, [type count], or a defined struct name",
+                                                        type_name, struct_name
+                                                    )));
+                                                }
+                                            }
+                                        }
+                                        // Array type: [element_type count]
+                                        Expression::ArrayLiteral(elements) if elements.len() == 2 => {
+                                            if let (Expression::Variable(elem_type), Expression::IntLiteral(count)) =
+                                                (&elements[0], &elements[1])
+                                            {
+                                                let primitive = PrimitiveType::from_str(elem_type)
+                                                    .ok_or_else(|| Error::runtime(format!(
+                                                        "Array element type '{}' must be a primitive (u8-u64, i8-i64) in struct '{}'",
+                                                        elem_type, struct_name
+                                                    )))?;
+                                                let cnt = *count as usize;
+                                                (
+                                                    FieldType::Array { element_type: primitive, count: cnt },
+                                                    Some(primitive.size()),
+                                                    Some(cnt)
+                                                )
+                                            } else {
+                                                return Err(Error::runtime(format!(
+                                                    "Array type must be [primitive_type count] in struct '{}'", struct_name
+                                                )));
+                                            }
+                                        }
+                                        _ => {
+                                            return Err(Error::runtime(format!(
+                                                "Invalid type specification in struct '{}'. Use: type_name, pubkey, [type count], or StructName",
+                                                struct_name
+                                            )));
+                                        }
+                                    };
 
-                                        fields.push(StructField {
-                                            name: field_name.clone(),
-                                            field_type,
-                                            offset: current_offset,
-                                        });
+                                    // Calculate size, handling nested structs
+                                    let type_size = field_type.size_with_structs(&self.struct_defs);
 
-                                        current_offset += field_type.size();
-                                    }
+                                    fields.push(StructField {
+                                        name: field_name.clone(),
+                                        field_type,
+                                        offset: current_offset,
+                                        element_size: elem_size,
+                                        array_count: arr_count,
+                                    });
+
+                                    current_offset += type_size;
                                 }
                             }
                         }
@@ -668,18 +783,25 @@ impl IrGenerator {
                         let offset = field.offset;
 
                         // Emit the appropriate load instruction based on field type
-                        match field.field_type {
-                            FieldType::U8 | FieldType::I8 => {
+                        match &field.field_type {
+                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Load1(dst, base_reg, offset));
                             }
-                            FieldType::U16 | FieldType::I16 => {
+                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Load2(dst, base_reg, offset));
                             }
-                            FieldType::U32 | FieldType::I32 => {
+                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Load4(dst, base_reg, offset));
                             }
-                            FieldType::U64 | FieldType::I64 => {
+                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Load(dst, base_reg, offset));
+                            }
+                            FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
+                                // For pubkey/array/struct, return pointer to field (not value)
+                                // Use struct-ptr for these types instead
+                                let offset_reg = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(offset_reg, offset));
+                                self.emit(IrInstruction::Add(dst, base_reg, offset_reg));
                             }
                         }
 
@@ -713,18 +835,26 @@ impl IrGenerator {
                         let offset = field.offset;
 
                         // Emit the appropriate store instruction based on field type
-                        match field.field_type {
-                            FieldType::U8 | FieldType::I8 => {
+                        match &field.field_type {
+                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Store1(base_reg, value_reg, offset));
                             }
-                            FieldType::U16 | FieldType::I16 => {
+                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Store2(base_reg, value_reg, offset));
                             }
-                            FieldType::U32 | FieldType::I32 => {
+                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Store4(base_reg, value_reg, offset));
                             }
-                            FieldType::U64 | FieldType::I64 => {
+                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Store(base_reg, value_reg, offset));
+                            }
+                            FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
+                                // For pubkey/array/struct, value_reg is expected to be a source pointer
+                                // Use memcpy-style (currently not supported - use struct-ptr and manual copy)
+                                return Err(Error::runtime(format!(
+                                    "Cannot use struct-set for field '{}' of type {:?}. Use struct-ptr to get a pointer and copy manually.",
+                                    field_name, field.field_type
+                                )));
                             }
                         }
 
@@ -817,7 +947,8 @@ impl IrGenerator {
                             )))?;
 
                         let dst = self.alloc_reg();
-                        self.emit(IrInstruction::ConstI64(dst, field.field_type.size()));
+                        let field_size = field.field_type.size_with_structs(&self.struct_defs);
+                        self.emit(IrInstruction::ConstI64(dst, field_size));
                         return Ok(Some(dst));
                     }
                 }
@@ -878,24 +1009,66 @@ impl IrGenerator {
                             let field_offset = field.offset;
                             let dst_offset = base_offset + field_offset;
 
-                            // Load from source struct
-                            let temp_reg = self.alloc_reg();
-                            match field.field_type {
-                                FieldType::U8 | FieldType::I8 => {
+                            // Load from source struct and store to buffer
+                            match &field.field_type {
+                                FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load1(temp_reg, src_ptr, field_offset));
                                     self.emit(IrInstruction::Store1(dst_buffer, temp_reg, dst_offset));
                                 }
-                                FieldType::U16 | FieldType::I16 => {
+                                FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load2(temp_reg, src_ptr, field_offset));
                                     self.emit(IrInstruction::Store2(dst_buffer, temp_reg, dst_offset));
                                 }
-                                FieldType::U32 | FieldType::I32 => {
+                                FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load4(temp_reg, src_ptr, field_offset));
                                     self.emit(IrInstruction::Store4(dst_buffer, temp_reg, dst_offset));
                                 }
-                                FieldType::U64 | FieldType::I64 => {
+                                FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load(temp_reg, src_ptr, field_offset));
                                     self.emit(IrInstruction::Store(dst_buffer, temp_reg, dst_offset));
+                                }
+                                FieldType::Pubkey => {
+                                    // Copy 32 bytes (4 x 8-byte loads/stores)
+                                    for i in 0..4 {
+                                        let temp_reg = self.alloc_reg();
+                                        self.emit(IrInstruction::Load(temp_reg, src_ptr, field_offset + i * 8));
+                                        self.emit(IrInstruction::Store(dst_buffer, temp_reg, dst_offset + i * 8));
+                                    }
+                                }
+                                FieldType::Array { element_type, count } => {
+                                    // Copy array elements
+                                    let elem_size = element_type.size();
+                                    for i in 0..(*count as i64) {
+                                        let temp_reg = self.alloc_reg();
+                                        let elem_offset = field_offset + i * elem_size;
+                                        let dst_elem_offset = dst_offset + i * elem_size;
+                                        match element_type {
+                                            PrimitiveType::U8 | PrimitiveType::I8 => {
+                                                self.emit(IrInstruction::Load1(temp_reg, src_ptr, elem_offset));
+                                                self.emit(IrInstruction::Store1(dst_buffer, temp_reg, dst_elem_offset));
+                                            }
+                                            PrimitiveType::U16 | PrimitiveType::I16 => {
+                                                self.emit(IrInstruction::Load2(temp_reg, src_ptr, elem_offset));
+                                                self.emit(IrInstruction::Store2(dst_buffer, temp_reg, dst_elem_offset));
+                                            }
+                                            PrimitiveType::U32 | PrimitiveType::I32 => {
+                                                self.emit(IrInstruction::Load4(temp_reg, src_ptr, elem_offset));
+                                                self.emit(IrInstruction::Store4(dst_buffer, temp_reg, dst_elem_offset));
+                                            }
+                                            PrimitiveType::U64 | PrimitiveType::I64 => {
+                                                self.emit(IrInstruction::Load(temp_reg, src_ptr, elem_offset));
+                                                self.emit(IrInstruction::Store(dst_buffer, temp_reg, dst_elem_offset));
+                                            }
+                                        }
+                                    }
+                                }
+                                FieldType::Struct(_) => {
+                                    // Skip nested structs in basic Borsh serialization
+                                    // Use recursive approach or manual handling
                                 }
                             }
                         }
@@ -937,24 +1110,66 @@ impl IrGenerator {
                             let field_offset = field.offset;
                             let src_offset = base_offset + field_offset;
 
-                            // Load from source buffer
-                            let temp_reg = self.alloc_reg();
-                            match field.field_type {
-                                FieldType::U8 | FieldType::I8 => {
+                            // Load from source buffer and store to struct
+                            match &field.field_type {
+                                FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load1(temp_reg, src_buffer, src_offset));
                                     self.emit(IrInstruction::Store1(dst_ptr, temp_reg, field_offset));
                                 }
-                                FieldType::U16 | FieldType::I16 => {
+                                FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load2(temp_reg, src_buffer, src_offset));
                                     self.emit(IrInstruction::Store2(dst_ptr, temp_reg, field_offset));
                                 }
-                                FieldType::U32 | FieldType::I32 => {
+                                FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load4(temp_reg, src_buffer, src_offset));
                                     self.emit(IrInstruction::Store4(dst_ptr, temp_reg, field_offset));
                                 }
-                                FieldType::U64 | FieldType::I64 => {
+                                FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                                    let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load(temp_reg, src_buffer, src_offset));
                                     self.emit(IrInstruction::Store(dst_ptr, temp_reg, field_offset));
+                                }
+                                FieldType::Pubkey => {
+                                    // Copy 32 bytes (4 x 8-byte loads/stores)
+                                    for i in 0..4 {
+                                        let temp_reg = self.alloc_reg();
+                                        self.emit(IrInstruction::Load(temp_reg, src_buffer, src_offset + i * 8));
+                                        self.emit(IrInstruction::Store(dst_ptr, temp_reg, field_offset + i * 8));
+                                    }
+                                }
+                                FieldType::Array { element_type, count } => {
+                                    // Copy array elements
+                                    let elem_size = element_type.size();
+                                    for i in 0..(*count as i64) {
+                                        let temp_reg = self.alloc_reg();
+                                        let src_elem_offset = src_offset + i * elem_size;
+                                        let dst_elem_offset = field_offset + i * elem_size;
+                                        match element_type {
+                                            PrimitiveType::U8 | PrimitiveType::I8 => {
+                                                self.emit(IrInstruction::Load1(temp_reg, src_buffer, src_elem_offset));
+                                                self.emit(IrInstruction::Store1(dst_ptr, temp_reg, dst_elem_offset));
+                                            }
+                                            PrimitiveType::U16 | PrimitiveType::I16 => {
+                                                self.emit(IrInstruction::Load2(temp_reg, src_buffer, src_elem_offset));
+                                                self.emit(IrInstruction::Store2(dst_ptr, temp_reg, dst_elem_offset));
+                                            }
+                                            PrimitiveType::U32 | PrimitiveType::I32 => {
+                                                self.emit(IrInstruction::Load4(temp_reg, src_buffer, src_elem_offset));
+                                                self.emit(IrInstruction::Store4(dst_ptr, temp_reg, dst_elem_offset));
+                                            }
+                                            PrimitiveType::U64 | PrimitiveType::I64 => {
+                                                self.emit(IrInstruction::Load(temp_reg, src_buffer, src_elem_offset));
+                                                self.emit(IrInstruction::Store(dst_ptr, temp_reg, dst_elem_offset));
+                                            }
+                                        }
+                                    }
+                                }
+                                FieldType::Struct(_) => {
+                                    // Skip nested structs in basic Borsh deserialization
+                                    // Use recursive approach or manual handling
                                 }
                             }
                         }
@@ -2781,6 +2996,994 @@ impl IrGenerator {
                     ));
 
                     return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // SPL-TOKEN-MINT-TO: Mint new tokens to an account
+                // =================================================================
+                // (spl-token-mint-to token-prog-idx mint-idx dest-idx authority-idx amount)
+                //
+                // Builds and executes SPL Token MintTo instruction via CPI.
+                // Instruction data: [7, amount (8 bytes)] = 9 bytes (discriminator 7 = MintTo)
+                //
+                // Accounts (in order):
+                //   - Mint (writable) - the token mint
+                //   - Destination token account (writable)
+                //   - Mint authority (signer)
+                // =================================================================
+                if name == "spl-token-mint-to" && args.len() == 5 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000A00_i64));
+
+                    let token_prog_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-mint-to token-prog-idx has no result"))?;
+                    let mint_idx = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-mint-to mint-idx has no result"))?;
+                    let dest_idx = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-mint-to dest-idx has no result"))?;
+                    let authority_idx = self.generate_expr(&args[3].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-mint-to authority-idx has no result"))?;
+                    let amount = self.generate_expr(&args[4].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-mint-to amount has no result"))?;
+
+                    // Build instruction data: discriminator 7 (MintTo) + amount
+                    let data_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(data_ptr, 0x300000A50_i64));
+                    let disc = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(disc, 7)); // MintTo discriminator
+                    let shift = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(shift, 256));
+                    let combined = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(combined, amount, shift));
+                    self.emit(IrInstruction::Or(combined, combined, disc));
+                    self.emit(IrInstruction::Store(data_ptr, combined, 0));
+
+                    // Constants
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Get token program pubkey
+                    let prog_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(prog_offset, token_prog_idx, account_size));
+                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
+                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
+                    let token_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, prog_offset));
+
+                    // Build SolAccountMeta array (3 accounts)
+                    // Account 0: Mint (writable)
+                    let mint_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(mint_offset, mint_idx, account_size));
+                    let temp = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp, mint_offset, eight));
+                    self.emit(IrInstruction::Add(temp, temp, eight));
+                    let mint_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(mint_pk_ptr, input_ptr, temp));
+                    self.emit(IrInstruction::Store(heap_base, mint_pk_ptr, 0));
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(heap_base, one, 8));
+
+                    // Account 1: Dest (writable)
+                    let dst_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(dst_offset, dest_idx, account_size));
+                    let temp2 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp2, dst_offset, eight));
+                    self.emit(IrInstruction::Add(temp2, temp2, eight));
+                    let dst_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dst_pk_ptr, input_ptr, temp2));
+                    self.emit(IrInstruction::Store(heap_base, dst_pk_ptr, 16));
+                    self.emit(IrInstruction::Store(heap_base, one, 24));
+
+                    // Account 2: Authority (signer)
+                    let auth_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
+                    let temp3 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
+                    self.emit(IrInstruction::Add(temp3, temp3, eight));
+                    let auth_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
+                    self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
+                    let signer_flag = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(signer_flag, 256));
+                    self.emit(IrInstruction::Store(heap_base, signer_flag, 40));
+
+                    // Build SolInstruction
+                    let instr_ptr = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_256));
+
+                    self.emit(IrInstruction::Store(instr_ptr, token_pk_ptr, 0));
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 8));
+                    let three = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(three, 3));
+                    self.emit(IrInstruction::Store(instr_ptr, three, 16));
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24));
+                    let nine = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(nine, 9));
+                    self.emit(IrInstruction::Store(instr_ptr, nine, 32));
+
+                    // Invoke
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // SPL-TOKEN-BURN: Burn tokens from an account
+                // =================================================================
+                // (spl-token-burn token-prog-idx source-idx mint-idx authority-idx amount)
+                //
+                // Instruction data: [8, amount (8 bytes)] = 9 bytes (discriminator 8 = Burn)
+                //
+                // Accounts:
+                //   - Source token account (writable)
+                //   - Mint (writable) - to decrease supply
+                //   - Authority (signer) - owner of source account
+                // =================================================================
+                if name == "spl-token-burn" && args.len() == 5 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000B00_i64));
+
+                    let token_prog_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-burn token-prog-idx has no result"))?;
+                    let source_idx = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-burn source-idx has no result"))?;
+                    let mint_idx = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-burn mint-idx has no result"))?;
+                    let authority_idx = self.generate_expr(&args[3].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-burn authority-idx has no result"))?;
+                    let amount = self.generate_expr(&args[4].value)?
+                        .ok_or_else(|| Error::runtime("spl-token-burn amount has no result"))?;
+
+                    // Build instruction data: discriminator 8 (Burn) + amount
+                    let data_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(data_ptr, 0x300000B50_i64));
+                    let disc = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(disc, 8)); // Burn discriminator
+                    let shift = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(shift, 256));
+                    let combined = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(combined, amount, shift));
+                    self.emit(IrInstruction::Or(combined, combined, disc));
+                    self.emit(IrInstruction::Store(data_ptr, combined, 0));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    let prog_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(prog_offset, token_prog_idx, account_size));
+                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
+                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
+                    let token_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, prog_offset));
+
+                    // Account 0: Source (writable)
+                    let src_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(src_offset, source_idx, account_size));
+                    let temp = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp, src_offset, eight));
+                    self.emit(IrInstruction::Add(temp, temp, eight));
+                    let src_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(src_pk_ptr, input_ptr, temp));
+                    self.emit(IrInstruction::Store(heap_base, src_pk_ptr, 0));
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(heap_base, one, 8));
+
+                    // Account 1: Mint (writable)
+                    let mint_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(mint_offset, mint_idx, account_size));
+                    let temp2 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp2, mint_offset, eight));
+                    self.emit(IrInstruction::Add(temp2, temp2, eight));
+                    let mint_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(mint_pk_ptr, input_ptr, temp2));
+                    self.emit(IrInstruction::Store(heap_base, mint_pk_ptr, 16));
+                    self.emit(IrInstruction::Store(heap_base, one, 24));
+
+                    // Account 2: Authority (signer)
+                    let auth_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
+                    let temp3 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
+                    self.emit(IrInstruction::Add(temp3, temp3, eight));
+                    let auth_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
+                    self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
+                    let signer_flag = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(signer_flag, 256));
+                    self.emit(IrInstruction::Store(heap_base, signer_flag, 40));
+
+                    let instr_ptr = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_256));
+
+                    self.emit(IrInstruction::Store(instr_ptr, token_pk_ptr, 0));
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 8));
+                    let three = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(three, 3));
+                    self.emit(IrInstruction::Store(instr_ptr, three, 16));
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24));
+                    let nine = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(nine, 9));
+                    self.emit(IrInstruction::Store(instr_ptr, nine, 32));
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // SYSTEM-CREATE-ACCOUNT: Create a new account via System Program CPI
+                // =================================================================
+                // (system-create-account payer-idx new-acct-idx lamports space owner-pubkey-ptr)
+                //
+                // Instruction data (52 bytes):
+                //   [0, lamports (8), space (8), owner (32)]
+                //   Discriminator 0 = CreateAccount
+                //
+                // Accounts:
+                //   - Payer (writable, signer) - pays for account creation
+                //   - New account (writable, signer) - the account being created
+                // =================================================================
+                if name == "system-create-account" && args.len() == 5 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000C00_i64));
+
+                    let payer_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("system-create-account payer-idx has no result"))?;
+                    let new_acct_idx = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("system-create-account new-acct-idx has no result"))?;
+                    let lamports = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("system-create-account lamports has no result"))?;
+                    let space = self.generate_expr(&args[3].value)?
+                        .ok_or_else(|| Error::runtime("system-create-account space has no result"))?;
+                    let owner_ptr = self.generate_expr(&args[4].value)?
+                        .ok_or_else(|| Error::runtime("system-create-account owner-pubkey-ptr has no result"))?;
+
+                    // Build System Program ID (all zeros) at heap_base
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 8));
+                    self.emit(IrInstruction::Store(heap_base, zero, 16));
+                    self.emit(IrInstruction::Store(heap_base, zero, 24));
+
+                    // Build instruction data at heap_base + 32
+                    // [discriminant (4 bytes), lamports (8), space (8), owner (32)] = 52 bytes
+                    let data_ptr = self.alloc_reg();
+                    let const_32 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_32, 32));
+                    self.emit(IrInstruction::Add(data_ptr, heap_base, const_32));
+
+                    // Store discriminant 0 (CreateAccount)
+                    self.emit(IrInstruction::Store(data_ptr, zero, 0));
+                    // Store lamports at offset 4 (but we align to 8)
+                    self.emit(IrInstruction::Store(data_ptr, lamports, 8));
+                    // Store space at offset 16
+                    self.emit(IrInstruction::Store(data_ptr, space, 16));
+
+                    // Copy owner pubkey (32 bytes) at offset 24
+                    // Load and store 4 u64s
+                    let owner_chunk0 = self.alloc_reg();
+                    let owner_chunk1 = self.alloc_reg();
+                    let owner_chunk2 = self.alloc_reg();
+                    let owner_chunk3 = self.alloc_reg();
+                    self.emit(IrInstruction::Load(owner_chunk0, owner_ptr, 0));
+                    self.emit(IrInstruction::Load(owner_chunk1, owner_ptr, 8));
+                    self.emit(IrInstruction::Load(owner_chunk2, owner_ptr, 16));
+                    self.emit(IrInstruction::Load(owner_chunk3, owner_ptr, 24));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk0, 24));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk1, 32));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk2, 40));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk3, 48));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Build SolAccountMeta array at heap_base + 128
+                    let meta_base = self.alloc_reg();
+                    let const_128 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_128, 128));
+                    self.emit(IrInstruction::Add(meta_base, heap_base, const_128));
+
+                    // Account 0: Payer (writable, signer)
+                    let payer_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(payer_offset, payer_idx, account_size));
+                    let temp = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp, payer_offset, eight));
+                    self.emit(IrInstruction::Add(temp, temp, eight));
+                    let payer_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(payer_pk_ptr, input_ptr, temp));
+                    self.emit(IrInstruction::Store(meta_base, payer_pk_ptr, 0));
+                    let writable_signer = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(writable_signer, 0x0101)); // writable + signer
+                    self.emit(IrInstruction::Store(meta_base, writable_signer, 8));
+
+                    // Account 1: New account (writable, signer)
+                    let new_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(new_offset, new_acct_idx, account_size));
+                    let temp2 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp2, new_offset, eight));
+                    self.emit(IrInstruction::Add(temp2, temp2, eight));
+                    let new_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(new_pk_ptr, input_ptr, temp2));
+                    self.emit(IrInstruction::Store(meta_base, new_pk_ptr, 16));
+                    self.emit(IrInstruction::Store(meta_base, writable_signer, 24));
+
+                    // Build SolInstruction at heap_base + 256
+                    let instr_ptr = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_256));
+
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 0)); // System Program ID
+                    self.emit(IrInstruction::Store(instr_ptr, meta_base, 8)); // accounts ptr
+                    let two = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(two, 2));
+                    self.emit(IrInstruction::Store(instr_ptr, two, 16)); // accounts_len
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24)); // data
+                    let data_len = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(data_len, 52));
+                    self.emit(IrInstruction::Store(instr_ptr, data_len, 32)); // data_len
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // DERIVE-PDA: Compute Program Derived Address
+                // =================================================================
+                // (derive-pda program-pubkey-ptr seeds-ptr bump-ptr) -> 0 on success, 1 on failure
+                //
+                // Calls sol_try_find_program_address syscall
+                // The result is stored at the provided destination pointer
+                //
+                // seeds-ptr: pointer to array of seed slices
+                // bump-ptr: pointer to u8 where bump seed will be stored
+                //
+                // Note: This is a compile-time helper that generates a syscall.
+                // For fully static PDAs, use a pre-computed constant instead.
+                // =================================================================
+                if name == "derive-pda" && args.len() == 3 {
+                    let program_pk_ptr = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("derive-pda program-pubkey-ptr has no result"))?;
+                    let seeds_ptr = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("derive-pda seeds-ptr has no result"))?;
+                    let bump_ptr = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("derive-pda bump-ptr has no result"))?;
+
+                    // sol_try_find_program_address(seeds_ptr, seeds_len, program_id, bump_seed_ptr)
+                    // For now, assume single seed - user provides seeds array length separately
+                    // Returns 0 on success
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_try_find_program_address".to_string(),
+                        vec![seeds_ptr, one, program_pk_ptr, bump_ptr],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // CREATE-PDA: Higher-level PDA helper
+                // =================================================================
+                // (create-pda dest-ptr program-pubkey-ptr [[seed-ptr seed-len] ...])
+                //
+                // Writes the derived PDA to dest-ptr (32 bytes)
+                // Returns the bump seed
+                // =================================================================
+                if name == "create-pda" && args.len() == 3 {
+                    let dest_ptr = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("create-pda dest-ptr has no result"))?;
+                    let program_pk_ptr = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("create-pda program-pubkey-ptr has no result"))?;
+
+                    // Build seeds array in heap
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000D00_i64));
+
+                    let mut num_seeds = 0usize;
+                    if let Expression::ArrayLiteral(seeds) = &args[2].value {
+                        num_seeds = seeds.len();
+
+                        for (i, seed) in seeds.iter().enumerate() {
+                            if let Expression::ArrayLiteral(pair) = seed {
+                                if pair.len() >= 2 {
+                                    let seed_addr = self.generate_expr(&pair[0])?
+                                        .ok_or_else(|| Error::runtime("create-pda seed addr has no result"))?;
+                                    let seed_len = self.generate_expr(&pair[1])?
+                                        .ok_or_else(|| Error::runtime("create-pda seed len has no result"))?;
+
+                                    let offset = (i * 16) as i64;
+                                    self.emit(IrInstruction::Store(heap_base, seed_addr, offset));
+                                    self.emit(IrInstruction::Store(heap_base, seed_len, offset + 8));
+                                }
+                            }
+                        }
+                    }
+
+                    // Bump storage at heap_base + 256
+                    let bump_ptr = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(bump_ptr, heap_base, const_256));
+
+                    let num_seeds_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(num_seeds_reg, num_seeds as i64));
+
+                    // Call sol_create_program_address to get the PDA
+                    // sol_create_program_address(seeds, seeds_len, program_id, result_address)
+                    let result = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(result),
+                        "sol_create_program_address".to_string(),
+                        vec![heap_base, num_seeds_reg, program_pk_ptr, dest_ptr],
+                    ));
+
+                    // Load and return the bump seed
+                    let bump = self.alloc_reg();
+                    self.emit(IrInstruction::Load1(bump, bump_ptr, 0));
+
+                    return Ok(Some(bump));
+                }
+
+                // =================================================================
+                // GET-ATA: Derive Associated Token Account address
+                // =================================================================
+                // (get-ata dest-ptr wallet-pubkey-ptr mint-pubkey-ptr)
+                //
+                // Derives the Associated Token Account address for a wallet/mint pair.
+                // Uses the standard ATA derivation:
+                //   seeds = [wallet, TOKEN_PROGRAM_ID, mint]
+                //   program = ATA_PROGRAM_ID (ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL)
+                //
+                // The result is written to dest-ptr (32 bytes)
+                // =================================================================
+                if name == "get-ata" && args.len() == 3 {
+                    let dest_ptr = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("get-ata dest-ptr has no result"))?;
+                    let wallet_ptr = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("get-ata wallet-pubkey-ptr has no result"))?;
+                    let mint_ptr = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("get-ata mint-pubkey-ptr has no result"))?;
+
+                    // Build seeds array in heap at 0x300000E00
+                    // Seeds: [wallet (32), token_program (32), mint (32)]
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000E00_i64));
+
+                    // Store seed structures at heap_base
+                    // Each seed: { addr: *u8, len: u64 } = 16 bytes
+
+                    // Seed 0: wallet pubkey (32 bytes)
+                    self.emit(IrInstruction::Store(heap_base, wallet_ptr, 0));
+                    let thirty_two = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(thirty_two, 32));
+                    self.emit(IrInstruction::Store(heap_base, thirty_two, 8));
+
+                    // Seed 1: Token Program ID - store at heap_base + 64 (32 bytes)
+                    // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in bytes
+                    let token_prog_ptr = self.alloc_reg();
+                    let const_64 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_64, 64));
+                    self.emit(IrInstruction::Add(token_prog_ptr, heap_base, const_64));
+
+                    // Token Program ID bytes (hard-coded)
+                    // We'll write the known bytes for TOKEN_PROGRAM_ID
+                    // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+                    // = [6, 221, 246, ...] - first 8 bytes as u64
+                    let token_prog_bytes_0 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(token_prog_bytes_0, 0x8c97258f4e2489f1_u64 as i64));
+                    self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_0, 0));
+                    let token_prog_bytes_1 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(token_prog_bytes_1, 0x39d0a8d9b3b71f14_u64 as i64));
+                    self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_1, 8));
+                    let token_prog_bytes_2 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(token_prog_bytes_2, 0x9d5bce6b0c6a1de5_u64 as i64));
+                    self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_2, 16));
+                    let token_prog_bytes_3 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(token_prog_bytes_3, 0x06ddf6e1d765a193_u64 as i64));
+                    self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_3, 24));
+
+                    // Seed 1 structure at heap_base + 16
+                    self.emit(IrInstruction::Store(heap_base, token_prog_ptr, 16));
+                    self.emit(IrInstruction::Store(heap_base, thirty_two, 24));
+
+                    // Seed 2: mint pubkey
+                    self.emit(IrInstruction::Store(heap_base, mint_ptr, 32));
+                    self.emit(IrInstruction::Store(heap_base, thirty_two, 40));
+
+                    // ATA Program ID at heap_base + 128
+                    // ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
+                    let ata_prog_ptr = self.alloc_reg();
+                    let const_128 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_128, 128));
+                    self.emit(IrInstruction::Add(ata_prog_ptr, heap_base, const_128));
+
+                    let ata_bytes_0 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(ata_bytes_0, 0x8c97258f4e2489f1_u64 as i64)); // placeholder
+                    self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_0, 0));
+                    let ata_bytes_1 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(ata_bytes_1, 0x39d0a8d9b3b71f14_u64 as i64));
+                    self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_1, 8));
+                    let ata_bytes_2 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(ata_bytes_2, 0x9d5bce6b0c6a1de5_u64 as i64));
+                    self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_2, 16));
+                    let ata_bytes_3 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(ata_bytes_3, 0x06ddf6e1d765a193_u64 as i64));
+                    self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_3, 24));
+
+                    // Call sol_create_program_address(seeds, num_seeds, program_id, result)
+                    let three = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(three, 3));
+
+                    let result = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(result),
+                        "sol_create_program_address".to_string(),
+                        vec![heap_base, three, ata_prog_ptr, dest_ptr],
+                    ));
+
+                    return Ok(Some(result));
+                }
+
+                // =================================================================
+                // ACCOUNT VALIDATION MACROS
+                // =================================================================
+                // These provide runtime checks for account properties.
+                // On failure, they abort the program with an error code.
+                // =================================================================
+
+                // (assert-signer account-idx) - Abort if account is not a signer
+                // Returns 0 on success, aborts on failure
+                if name == "assert-signer" && args.len() == 1 {
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("assert-signer account-idx has no result"))?;
+
+                    // Account structure in serialized input:
+                    // Offset 1 from account start = is_signer byte
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Calculate offset to is_signer byte
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight)); // skip num_accounts
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, one)); // is_signer at +1
+
+                    let is_signer_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(is_signer_ptr, input_ptr, acct_offset));
+
+                    // Load is_signer byte
+                    let is_signer = self.alloc_reg();
+                    self.emit(IrInstruction::Load1(is_signer, is_signer_ptr, 0));
+
+                    // If is_signer == 0, abort with error
+                    let label_ok = self.new_label("signer_ok");
+                    let label_fail = self.new_label("signer_fail");
+
+                    self.emit(IrInstruction::JumpIf(is_signer, label_ok.clone()));
+                    self.emit(IrInstruction::Label(label_fail));
+                    // Abort: sol_log_ "Missing signer" then return error
+                    let error_code = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(error_code, 0x1000000)); // Custom error
+                    self.emit(IrInstruction::Syscall(None, "sol_panic_".to_string(), vec![error_code, error_code, error_code, error_code, error_code]));
+
+                    self.emit(IrInstruction::Label(label_ok));
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+
+                    return Ok(Some(zero));
+                }
+
+                // (assert-writable account-idx) - Abort if account is not writable
+                if name == "assert-writable" && args.len() == 1 {
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("assert-writable account-idx has no result"))?;
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // is_writable at offset 2 from account start
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
+                    let two = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(two, 2));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, two));
+
+                    let is_writable_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(is_writable_ptr, input_ptr, acct_offset));
+
+                    let is_writable = self.alloc_reg();
+                    self.emit(IrInstruction::Load1(is_writable, is_writable_ptr, 0));
+
+                    let label_ok = self.new_label("writable_ok");
+                    self.emit(IrInstruction::JumpIf(is_writable, label_ok.clone()));
+                    let error_code = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(error_code, 0x2000000));
+                    self.emit(IrInstruction::Syscall(None, "sol_panic_".to_string(), vec![error_code, error_code, error_code, error_code, error_code]));
+
+                    self.emit(IrInstruction::Label(label_ok));
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+
+                    return Ok(Some(zero));
+                }
+
+                // (assert-owner account-idx expected-owner-ptr) - Abort if account owner doesn't match
+                if name == "assert-owner" && args.len() == 2 {
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("assert-owner account-idx has no result"))?;
+                    let expected_owner = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("assert-owner expected-owner-ptr has no result"))?;
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Owner pubkey at offset 40 from account start (after pubkey at 8)
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
+                    let forty = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(forty, 40));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, forty));
+
+                    let owner_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(owner_ptr, input_ptr, acct_offset));
+
+                    // Compare 32 bytes using sol_memcmp_
+                    let thirty_two = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(thirty_two, 32));
+
+                    let result = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(result),
+                        "sol_memcmp_".to_string(),
+                        vec![owner_ptr, expected_owner, thirty_two, result],
+                    ));
+
+                    // If result != 0, abort
+                    let label_ok = self.new_label("owner_ok");
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Eq(result, result, zero));
+                    self.emit(IrInstruction::JumpIf(result, label_ok.clone()));
+
+                    let error_code = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(error_code, 0x3000000));
+                    self.emit(IrInstruction::Syscall(None, "sol_panic_".to_string(), vec![error_code, error_code, error_code, error_code, error_code]));
+
+                    self.emit(IrInstruction::Label(label_ok));
+
+                    return Ok(Some(zero));
+                }
+
+                // (is-signer account-idx) - Returns 1 if signer, 0 if not (no abort)
+                if name == "is-signer" && args.len() == 1 {
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("is-signer account-idx has no result"))?;
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, one));
+
+                    let is_signer_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(is_signer_ptr, input_ptr, acct_offset));
+
+                    let is_signer = self.alloc_reg();
+                    self.emit(IrInstruction::Load1(is_signer, is_signer_ptr, 0));
+
+                    return Ok(Some(is_signer));
+                }
+
+                // (is-writable account-idx) - Returns 1 if writable, 0 if not
+                if name == "is-writable" && args.len() == 1 {
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("is-writable account-idx has no result"))?;
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
+                    let two = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(two, 2));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, two));
+
+                    let is_writable_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(is_writable_ptr, input_ptr, acct_offset));
+
+                    let is_writable = self.alloc_reg();
+                    self.emit(IrInstruction::Load1(is_writable, is_writable_ptr, 0));
+
+                    return Ok(Some(is_writable));
+                }
+
+                // =================================================================
+                // ZERO-COPY ACCOUNT ACCESS
+                // =================================================================
+                // These macros provide direct memory access to account data
+                // without copying. Essential for high-performance programs.
+                // =================================================================
+
+                // (zerocopy-load StructName account-idx field-name) -> value
+                // Directly loads a field from account data without struct-get overhead
+                // Uses the struct definition for offset calculation
+                if name == "zerocopy-load" && args.len() == 3 {
+                    if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
+                        (&args[0].value, &args[2].value)
+                    {
+                        let account_idx = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("zerocopy-load account-idx has no result"))?;
+
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let field = struct_def.fields.iter()
+                            .find(|f| &f.name == field_name)
+                            .ok_or_else(|| Error::runtime(format!(
+                                "Unknown field '{}' in struct '{}'", field_name, struct_name
+                            )))?;
+
+                        // Calculate account data pointer
+                        // Account data starts at offset 72 from account base
+                        let account_size = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                        let eight = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(eight, 8));
+                        let input_ptr = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                        let acct_offset = self.alloc_reg();
+                        self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                        self.emit(IrInstruction::Add(acct_offset, acct_offset, eight)); // skip header
+
+                        // Data starts at offset 72 from account start (after headers)
+                        let data_offset = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(data_offset, 72));
+                        self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
+
+                        let data_ptr = self.alloc_reg();
+                        self.emit(IrInstruction::Add(data_ptr, input_ptr, acct_offset));
+
+                        // Load field at offset
+                        let dst = self.alloc_reg();
+                        let field_offset = field.offset;
+
+                        match &field.field_type {
+                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                                self.emit(IrInstruction::Load1(dst, data_ptr, field_offset));
+                            }
+                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                                self.emit(IrInstruction::Load2(dst, data_ptr, field_offset));
+                            }
+                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                                self.emit(IrInstruction::Load4(dst, data_ptr, field_offset));
+                            }
+                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                                self.emit(IrInstruction::Load(dst, data_ptr, field_offset));
+                            }
+                            FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
+                                // Return pointer to field for complex types
+                                let offset_reg = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(offset_reg, field_offset));
+                                self.emit(IrInstruction::Add(dst, data_ptr, offset_reg));
+                            }
+                        }
+
+                        return Ok(Some(dst));
+                    }
+                }
+
+                // (zerocopy-store StructName account-idx field-name value) -> void
+                // Directly stores a value to account data
+                if name == "zerocopy-store" && args.len() == 4 {
+                    if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
+                        (&args[0].value, &args[2].value)
+                    {
+                        let account_idx = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("zerocopy-store account-idx has no result"))?;
+                        let value = self.generate_expr(&args[3].value)?
+                            .ok_or_else(|| Error::runtime("zerocopy-store value has no result"))?;
+
+                        let struct_def = self.struct_defs.get(struct_name)
+                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                            .clone();
+
+                        let field = struct_def.fields.iter()
+                            .find(|f| &f.name == field_name)
+                            .ok_or_else(|| Error::runtime(format!(
+                                "Unknown field '{}' in struct '{}'", field_name, struct_name
+                            )))?;
+
+                        let account_size = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                        let eight = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(eight, 8));
+                        let input_ptr = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                        let acct_offset = self.alloc_reg();
+                        self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                        self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
+
+                        let data_offset = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(data_offset, 72));
+                        self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
+
+                        let data_ptr = self.alloc_reg();
+                        self.emit(IrInstruction::Add(data_ptr, input_ptr, acct_offset));
+
+                        let field_offset = field.offset;
+
+                        match &field.field_type {
+                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                                self.emit(IrInstruction::Store1(data_ptr, value, field_offset));
+                            }
+                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                                self.emit(IrInstruction::Store2(data_ptr, value, field_offset));
+                            }
+                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                                self.emit(IrInstruction::Store4(data_ptr, value, field_offset));
+                            }
+                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                                self.emit(IrInstruction::Store(data_ptr, value, field_offset));
+                            }
+                            _ => {
+                                return Err(Error::runtime(format!(
+                                    "zerocopy-store cannot directly store complex type '{}' - use memcpy",
+                                    field_name
+                                )));
+                            }
+                        }
+
+                        let zero = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(zero, 0));
+                        return Ok(Some(zero));
+                    }
+                }
+
+                // (account-data-len account-idx) -> length of account data
+                if name == "account-data-len" && args.len() == 1 {
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-data-len account-idx has no result"))?;
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
+
+                    // Data length at offset 64 from account start
+                    let len_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(len_offset, 64));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, len_offset));
+
+                    let len_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(len_ptr, input_ptr, acct_offset));
+
+                    let data_len = self.alloc_reg();
+                    self.emit(IrInstruction::Load(data_len, len_ptr, 0));
+
+                    return Ok(Some(data_len));
+                }
+
+                // (account-lamports account-idx) -> lamports balance
+                if name == "account-lamports" && args.len() == 1 {
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("account-lamports account-idx has no result"))?;
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
+
+                    // Lamports at offset 56 from account start
+                    let lamports_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(lamports_offset, 56));
+                    self.emit(IrInstruction::Add(acct_offset, acct_offset, lamports_offset));
+
+                    let lamports_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(lamports_ptr, input_ptr, acct_offset));
+
+                    let lamports = self.alloc_reg();
+                    self.emit(IrInstruction::Load(lamports, lamports_ptr, 0));
+
+                    return Ok(Some(lamports));
                 }
 
                 // Handle (build-instruction program-ptr data-ptr data-len) -> instruction ptr
