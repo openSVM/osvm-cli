@@ -76,3 +76,11 @@ pub fn counts(conn: &mut SqliteConnection) -> (i64, i64) {
         .unwrap_or(0);
     (total, active)
 }
+
+/// List all users
+pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<User>> {
+    users::table
+        .order(users::last_seen_at_us.desc())
+        .load::<User>(conn)
+        .map_err(|e| e.into())
+}

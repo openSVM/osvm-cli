@@ -24,8 +24,21 @@ pub struct BBSTuiState {
     pub scroll_offset: usize,
     pub status_message: String,
     pub connected: bool,  // Track if we've initialized the connection
-    pub input_active: bool,  // NEW: Track if input mode is active
-    pub selected_board_index: Option<usize>,  // NEW: Track selected board for visual feedback
+    pub input_active: bool,  // Track if input mode is active
+    pub selected_board_index: Option<usize>,  // Track selected board for visual feedback
+    // Agent integration
+    pub agents: Vec<User>,  // Known AI agents
+    pub agent_status: AgentStatus,  // Current agent listening status
+    /// Cache of user_id -> User for displaying post authors
+    pub user_cache: std::collections::HashMap<i32, User>,
+}
+
+/// Agent listening status for the BBS
+#[derive(Clone, Debug, Default)]
+pub struct AgentStatus {
+    pub osvm_agent_online: bool,
+    pub last_agent_activity: Option<String>,
+    pub agents_listening: usize,
 }
 
 impl BBSTuiState {
@@ -40,9 +53,73 @@ impl BBSTuiState {
             scroll_offset: 0,
             status_message: "Connecting to BBS...".to_string(),
             connected: false,
-            input_active: false,  // NEW
-            selected_board_index: Some(0),  // NEW: Default to first board
+            input_active: false,
+            selected_board_index: Some(0),
+            agents: Vec::new(),
+            agent_status: AgentStatus::default(),
+            user_cache: std::collections::HashMap::new(),
         }
+    }
+
+    /// Check if a user is an AI agent based on naming conventions
+    pub fn is_agent(user: &User) -> bool {
+        let short_upper = user.short_name.to_uppercase();
+        let long_lower = user.long_name.to_lowercase();
+
+        // Agent detection heuristics:
+        // 1. Short name patterns: OSVM, AI, BOT, AGT
+        // 2. Long name contains: agent, bot, assistant, ai
+        // 3. Node ID patterns: !aaaa (reserved for agents)
+        short_upper == "OSVM" ||
+        short_upper == "AI" ||
+        short_upper == "BOT" ||
+        short_upper == "AGT" ||
+        short_upper == "TUI" ||  // TUI user is system
+        long_lower.contains("agent") ||
+        long_lower.contains("bot") ||
+        long_lower.contains("assistant") ||
+        user.node_id.starts_with("!aaaa") ||
+        user.node_id.starts_with("!tui")
+    }
+
+    /// Load agents and update status
+    pub fn refresh_agents(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref mut conn) = *self.conn.lock().unwrap() {
+            // Get all users and filter for agents
+            let all_users = db::users::list_all(conn)?;
+            self.agents = all_users.iter()
+                .filter(|u| Self::is_agent(u))
+                .cloned()
+                .collect();
+
+            // Update agent status
+            self.agent_status.agents_listening = self.agents.len();
+            self.agent_status.osvm_agent_online = self.agents.iter()
+                .any(|a| a.short_name.to_uppercase() == "OSVM");
+
+            // Find most recent agent activity
+            if let Some(most_recent) = self.agents.iter()
+                .filter_map(|a| a.last_acted_at_us)
+                .max()
+            {
+                self.agent_status.last_agent_activity = Some(
+                    crate::utils::bbs::models::User::last_acted_at(
+                        &self.agents.iter().find(|a| a.last_acted_at_us == Some(most_recent)).unwrap()
+                    )
+                );
+            }
+
+            // Cache all users for post author lookup
+            for user in all_users {
+                self.user_cache.insert(user.id, user);
+            }
+        }
+        Ok(())
+    }
+
+    /// Get user by ID from cache
+    pub fn get_user(&self, user_id: i32) -> Option<&User> {
+        self.user_cache.get(&user_id)
     }
 
     /// Initialize BBS connection
@@ -56,8 +133,16 @@ impl BBSTuiState {
 
         *self.conn.lock().unwrap() = Some(conn);
         self.connected = true;
-        self.status_message = "Connected to OSVM BBS".to_string();
         self.refresh_boards()?;
+        self.refresh_agents()?;  // Load agent info
+
+        // Update status with agent info
+        let agent_hint = if self.agent_status.agents_listening > 0 {
+            format!(" | 🤖 {} agents listening", self.agent_status.agents_listening)
+        } else {
+            String::new()
+        };
+        self.status_message = format!("Connected to OSVM BBS{}", agent_hint);
 
         Ok(())
     }
@@ -137,13 +222,22 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
         ])
         .split(area);
 
-    // Header with better info
+    // Header with agent status
     let board_name = state.current_board.and_then(|id| {
         state.boards.iter().find(|b| b.id == id).map(|b| b.name.as_str())
     }).unwrap_or("No board selected");
 
-    let header_text = format!("📡 OSVM BBS - Meshtastic | Board: {} | {} posts",
-        board_name, state.posts.len());
+    // Agent status indicator
+    let agent_indicator = if state.agent_status.agents_listening > 0 {
+        format!(" | 🤖 {} agent{} listening",
+            state.agent_status.agents_listening,
+            if state.agent_status.agents_listening == 1 { "" } else { "s" })
+    } else {
+        " | 🔇 No agents".to_string()
+    };
+
+    let header_text = format!("📡 OSVM BBS | Board: {} | {} posts{}",
+        board_name, state.posts.len(), agent_indicator);
 
     let header = Paragraph::new(header_text)
         .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
@@ -188,23 +282,57 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
             .border_style(Style::default().fg(Color::Cyan)));
     f.render_widget(board_list, main_chunks[0]);
 
-    // Posts area with MUCH better formatting
+    // Posts area with agent badges
     let post_lines: Vec<Line> = if state.posts.is_empty() {
         vec![
             Line::from(""),
             Line::from(Span::styled("  No posts yet in this board.", Style::default().fg(Color::DarkGray))),
             Line::from(""),
             Line::from(Span::styled("  Press 'i' to write a new post!", Style::default().fg(Color::Yellow))),
+            Line::from(""),
+            if state.agent_status.agents_listening > 0 {
+                Line::from(Span::styled("  💡 Tip: Use @agent to get AI assistance!", Style::default().fg(Color::Magenta)))
+            } else {
+                Line::from(Span::styled("  📝 Register an agent with: osvm bbs agent register <name>", Style::default().fg(Color::DarkGray)))
+            },
         ]
     } else {
         state.posts.iter().enumerate().flat_map(|(i, p)| {
+            // Check if this post is from an agent
+            let (author_name, is_agent) = if let Some(user) = state.get_user(p.user_id) {
+                (user.short_name.clone(), BBSTuiState::is_agent(user))
+            } else {
+                (format!("#{}", p.user_id), false)
+            };
+
+            // Build author display with agent badge
+            let author_spans = if is_agent {
+                vec![
+                    Span::styled("🤖 ", Style::default().fg(Color::Magenta)),
+                    Span::styled(author_name, Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                ]
+            } else {
+                vec![
+                    Span::styled(author_name, Style::default().fg(Color::Green)),
+                ]
+            };
+
+            let mut header_spans = vec![
+                Span::styled(format!("#{} ", i + 1), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ];
+            header_spans.extend(author_spans);
+            header_spans.push(Span::styled(format!(" • {}", p.created_at()), Style::default().fg(Color::DarkGray)));
+
+            // Highlight agent posts with different body style
+            let body_style = if is_agent {
+                Style::default().fg(Color::White)
+            } else {
+                Style::default()
+            };
+
             vec![
-                Line::from(vec![
-                    Span::styled(format!("#{} ", i + 1), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("user#{}", p.user_id), Style::default().fg(Color::Green)),
-                    Span::styled(format!(" • {}", p.created_at()), Style::default().fg(Color::DarkGray)),
-                ]),
-                Line::from(Span::raw(format!("  {}", p.body))),
+                Line::from(header_spans),
+                Line::from(Span::styled(format!("  {}", p.body), body_style)),
                 Line::from(""),  // Spacing
             ]
         }).collect()
@@ -219,12 +347,18 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
         .scroll((state.scroll_offset as u16, 0));
     f.render_widget(posts_widget, main_chunks[1]);
 
-    // ACTUAL INPUT BOX (like Chat tab!)
+    // Input box with agent hints
+    let input_placeholder = if state.agent_status.agents_listening > 0 {
+        "Press 'i' to write... (use @agent for AI help)"
+    } else {
+        "Press 'i' to write a message..."
+    };
+
     let input_text = if state.input_active {
         format!("{}█", state.input_buffer)  // Show cursor
     } else {
         if state.input_buffer.is_empty() {
-            "Press 'i' to write a message...".to_string()
+            input_placeholder.to_string()
         } else {
             state.input_buffer.clone()
         }
@@ -242,19 +376,34 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
         Style::default().fg(Color::DarkGray)
     };
 
+    // Input title shows agent availability
+    let input_title = if state.agent_status.agents_listening > 0 {
+        " 📝 Message (🤖 agents available) "
+    } else {
+        " 📝 Message Input "
+    };
+
     let input_widget = Paragraph::new(input_text)
         .style(input_style)
         .block(Block::default()
             .borders(Borders::ALL)
-            .title(" 📝 Message Input ")
+            .title(input_title)
             .border_style(border_style));
     f.render_widget(input_widget, chunks[2]);
 
-    // Status bar with USEFUL info
+    // Status bar - show agent-aware help
     let status_text = if state.input_active {
-        "Press Enter to send • Esc to cancel • Backspace to delete"
+        if state.agent_status.agents_listening > 0 {
+            "Enter=Send • Esc=Cancel • @agent for AI help • Backspace=Delete"
+        } else {
+            "Press Enter to send • Esc to cancel • Backspace to delete"
+        }
     } else {
-        "i=Input • j/k=Scroll • 1-9=Board • r=Refresh • ?=Help"
+        if state.agent_status.agents_listening > 0 {
+            "i=Input • j/k=Scroll • 1-9=Board • r=Refresh • 🤖 Agents listening!"
+        } else {
+            "i=Input • j/k=Scroll • 1-9=Board • r=Refresh • q=Quit"
+        }
     };
 
     let status = Paragraph::new(status_text)
@@ -412,6 +561,57 @@ mod tests {
         assert!(!state.connected);
         assert!(!state.input_active);
         assert_eq!(state.selected_board_index, Some(0));
+        // New agent-related fields
+        assert!(state.agents.is_empty());
+        assert_eq!(state.agent_status.agents_listening, 0);
+        assert!(!state.agent_status.osvm_agent_online);
+        assert!(state.user_cache.is_empty());
+    }
+
+    #[test]
+    fn test_is_agent_detection() {
+        // Test agent detection heuristics
+        let osvm_agent = User {
+            id: 1,
+            node_id: "!aaaabbbb".to_string(),
+            short_name: "OSVM".to_string(),
+            long_name: "OSVM Research Agent".to_string(),
+            jackass: false,
+            in_board: None,
+            created_at_us: 0,
+            last_seen_at_us: 0,
+            last_acted_at_us: None,
+            bio: None,
+        };
+        assert!(BBSTuiState::is_agent(&osvm_agent), "OSVM should be detected as agent");
+
+        let bot_user = User {
+            id: 2,
+            node_id: "!12345678".to_string(),
+            short_name: "BOT".to_string(),
+            long_name: "Some Bot".to_string(),
+            jackass: false,
+            in_board: None,
+            created_at_us: 0,
+            last_seen_at_us: 0,
+            last_acted_at_us: None,
+            bio: None,
+        };
+        assert!(BBSTuiState::is_agent(&bot_user), "BOT should be detected as agent");
+
+        let regular_user = User {
+            id: 3,
+            node_id: "!deadbeef".to_string(),
+            short_name: "USER".to_string(),
+            long_name: "Regular Human".to_string(),
+            jackass: false,
+            in_board: None,
+            created_at_us: 0,
+            last_seen_at_us: 0,
+            last_acted_at_us: None,
+            bio: None,
+        };
+        assert!(!BBSTuiState::is_agent(&regular_user), "Regular user should NOT be detected as agent");
     }
 
     // =========================================================================

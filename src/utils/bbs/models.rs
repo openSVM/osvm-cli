@@ -96,7 +96,7 @@ pub struct NewPost<'a> {
     pub parent_id: Option<i32>,  // For reply threading
 }
 
-#[derive(Debug, Identifiable, Queryable, Selectable)]
+#[derive(Debug, Clone, Identifiable, Queryable, Selectable)]
 #[diesel(table_name = crate::utils::bbs::schema::users)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct User {
