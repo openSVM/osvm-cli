@@ -1,330 +1,46 @@
-//! # Intermediate Representation (IR) for OVSM Compilation
+//! IR Generator - transforms typed AST to IR
 //!
-//! Three-address code IR that bridges the gap between OVSM AST
-//! and sBPF bytecode. This representation makes optimization
-//! and register allocation tractable.
+//! This is the main code generation module containing all macro implementations.
+//!
+//! ## Module Organization
+//!
+//! The macro implementations are organized by domain. Use your editor's search
+//! to jump to sections:
+//!
+//! | Section | Search Term | Line Range |
+//! |---------|-------------|------------|
+//! | Struct Macros | `STRUCT MACROS` | ~350-880 |
+//! | Account Access | `ACCOUNT ACCESS` | ~920-1380 |
+//! | Memory Operations | `MEMORY OPERATIONS` | ~1380-1500 |
+//! | Logging & Debug | `LOGGING MACROS` | ~1520-1600 |
+//! | System CPI | `SYSTEM PROGRAM CPI` | ~1600-2330 |
+//! | SPL Token CPI | `SPL TOKEN CPI` | ~2330-2950 |
+//! | System Create/Allocate | `SYSTEM ALLOCATE/ASSIGN` | ~2950-3970 |
+//! | Anchor Errors | `ANCHOR ERROR HANDLING` | ~3970-4080 |
+//! | PDA Operations | `PDA OPERATIONS` | ~4080-4280 |
+//! | Account Assertions | `ACCOUNT ASSERTIONS` | ~4280-4480 |
+//! | Zerocopy Access | `ZEROCOPY ACCESS` | ~4480-4620 |
+//! | Events | `EVENT EMISSION` | ~4680-4800 |
+//! | Sysvars | `SYSVAR ACCESS` | ~4800-5020 |
+//! | PDA Cache | `PDA CACHE` | ~5020-5220 |
+//! | Control Flow | `CONTROL FLOW` | ~5330-5480 |
+//! | Helper Macros | `HELPER MACROS` | ~5480-5700 |
+//!
+//! ## Adding New Macros
+//!
+//! 1. Find the appropriate section based on functionality
+//! 2. Add an `if name == "macro-name" && args.len() == N` block
+//! 3. Use `self.alloc_reg()` for temp registers
+//! 4. Use `self.emit(IrInstruction::...)` to generate IR
+//! 5. Return `Ok(Some(result_reg))` or `Ok(None)` for void
 
 use std::collections::HashMap;
 use crate::{Result, Error};
-use super::types::{TypedProgram, TypedStatement, OvsmType};
+use crate::compiler::types::{TypedProgram, TypedStatement, OvsmType};
 use crate::{Statement, Expression, BinaryOp, UnaryOp};
-
-// =============================================================================
-// STRUCT TYPES (compile-time layout)
-// =============================================================================
-
-/// Primitive field types (fixed-size scalars)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrimitiveType {
-    U8,   // 1 byte
-    U16,  // 2 bytes
-    U32,  // 4 bytes
-    U64,  // 8 bytes (default for untyped)
-    I8,   // 1 byte signed
-    I16,  // 2 bytes signed
-    I32,  // 4 bytes signed
-    I64,  // 8 bytes signed (default)
-}
-
-impl PrimitiveType {
-    pub fn size(&self) -> i64 {
-        match self {
-            PrimitiveType::U8 | PrimitiveType::I8 => 1,
-            PrimitiveType::U16 | PrimitiveType::I16 => 2,
-            PrimitiveType::U32 | PrimitiveType::I32 => 4,
-            PrimitiveType::U64 | PrimitiveType::I64 => 8,
-        }
-    }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "u8" => Some(PrimitiveType::U8),
-            "u16" => Some(PrimitiveType::U16),
-            "u32" => Some(PrimitiveType::U32),
-            "u64" => Some(PrimitiveType::U64),
-            "i8" => Some(PrimitiveType::I8),
-            "i16" => Some(PrimitiveType::I16),
-            "i32" => Some(PrimitiveType::I32),
-            "i64" => Some(PrimitiveType::I64),
-            _ => None,
-        }
-    }
-
-    pub fn to_idl_type(&self) -> &'static str {
-        match self {
-            PrimitiveType::U8 => "u8",
-            PrimitiveType::U16 => "u16",
-            PrimitiveType::U32 => "u32",
-            PrimitiveType::U64 => "u64",
-            PrimitiveType::I8 => "i8",
-            PrimitiveType::I16 => "i16",
-            PrimitiveType::I32 => "i32",
-            PrimitiveType::I64 => "i64",
-        }
-    }
-}
-
-/// Extended field type supporting primitives, arrays, pubkeys, and nested structs
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FieldType {
-    /// Primitive integer types (u8-u64, i8-i64)
-    Primitive(PrimitiveType),
-    /// Fixed-size array: [element_type count], e.g., [u32 10] = 40 bytes
-    Array { element_type: PrimitiveType, count: usize },
-    /// Solana public key (32 bytes, special handling)
-    Pubkey,
-    /// Nested struct reference (resolved at struct definition time)
-    Struct(String),
-}
-
-impl FieldType {
-    /// Get size in bytes (for Array and Struct, needs struct_defs for resolution)
-    pub fn size(&self) -> i64 {
-        match self {
-            FieldType::Primitive(p) => p.size(),
-            FieldType::Array { element_type, count } => element_type.size() * (*count as i64),
-            FieldType::Pubkey => 32, // Solana pubkey is always 32 bytes
-            FieldType::Struct(_) => 0, // Requires struct_defs lookup - use size_with_structs
-        }
-    }
-
-    /// Get size with struct definitions for nested struct resolution
-    pub fn size_with_structs(&self, struct_defs: &HashMap<String, StructDef>) -> i64 {
-        match self {
-            FieldType::Struct(name) => {
-                struct_defs.get(name).map(|s| s.total_size).unwrap_or(0)
-            }
-            _ => self.size(),
-        }
-    }
-
-    /// Parse from type string (simple types only - arrays/structs handled separately)
-    pub fn from_str(s: &str) -> Option<Self> {
-        if s == "pubkey" {
-            return Some(FieldType::Pubkey);
-        }
-        PrimitiveType::from_str(s).map(FieldType::Primitive)
-    }
-
-    /// Convert to Anchor IDL type string
-    pub fn to_idl_type(&self) -> String {
-        match self {
-            FieldType::Primitive(p) => p.to_idl_type().to_string(),
-            FieldType::Array { element_type, count } => {
-                format!("{{ \"array\": [\"{}\", {}] }}", element_type.to_idl_type(), count)
-            }
-            FieldType::Pubkey => "publicKey".to_string(),
-            FieldType::Struct(name) => format!("{{ \"defined\": \"{}\" }}", name),
-        }
-    }
-
-    /// Check if this is a primitive type for load/store instruction selection
-    pub fn primitive(&self) -> Option<PrimitiveType> {
-        match self {
-            FieldType::Primitive(p) => Some(*p),
-            _ => None,
-        }
-    }
-}
-
-/// A field in a struct definition
-#[derive(Debug, Clone)]
-pub struct StructField {
-    pub name: String,
-    pub field_type: FieldType,
-    pub offset: i64,
-    /// For array types, the element size
-    pub element_size: Option<i64>,
-    /// For array types, the element count
-    pub array_count: Option<usize>,
-}
-
-/// A struct definition (compile-time metadata)
-#[derive(Debug, Clone)]
-pub struct StructDef {
-    pub name: String,
-    pub fields: Vec<StructField>,
-    pub total_size: i64,
-}
-
-impl StructDef {
-    /// Generate Anchor IDL JSON for this struct
-    /// This enables TypeScript clients to interact with OVSM programs
-    pub fn to_anchor_idl(&self) -> String {
-        let mut fields_json = Vec::new();
-        for field in &self.fields {
-            fields_json.push(format!(
-                r#"        {{ "name": "{}", "type": "{}" }}"#,
-                field.name,
-                field.field_type.to_idl_type()
-            ));
-        }
-
-        format!(
-            r#"{{
-  "name": "{}",
-  "type": {{
-    "kind": "struct",
-    "fields": [
-{}
-    ]
-  }}
-}}"#,
-            self.name,
-            fields_json.join(",\n")
-        )
-    }
-}
-
-/// Virtual register (infinite supply, mapped to physical during codegen)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct IrReg(pub u32);
-
-impl IrReg {
-    pub fn new(id: u32) -> Self {
-        Self(id)
-    }
-}
-
-/// IR instruction (three-address code)
-#[derive(Debug, Clone)]
-pub enum IrInstruction {
-    // Constants
-    /// Load 64-bit integer constant into register
-    ConstI64(IrReg, i64),
-    /// Load 64-bit float constant (as bits)
-    ConstF64(IrReg, u64),
-    /// Load boolean constant
-    ConstBool(IrReg, bool),
-    /// Load null
-    ConstNull(IrReg),
-    /// Load string literal (index into string table)
-    ConstString(IrReg, usize),
-
-    // Arithmetic (dst = src1 op src2)
-    Add(IrReg, IrReg, IrReg),
-    Sub(IrReg, IrReg, IrReg),
-    Mul(IrReg, IrReg, IrReg),
-    Div(IrReg, IrReg, IrReg),
-    Mod(IrReg, IrReg, IrReg),
-
-    // Comparison (dst = src1 op src2, result is 0 or 1)
-    Eq(IrReg, IrReg, IrReg),
-    Ne(IrReg, IrReg, IrReg),
-    Lt(IrReg, IrReg, IrReg),
-    Le(IrReg, IrReg, IrReg),
-    Gt(IrReg, IrReg, IrReg),
-    Ge(IrReg, IrReg, IrReg),
-
-    // Logical
-    And(IrReg, IrReg, IrReg),
-    Or(IrReg, IrReg, IrReg),
-    Not(IrReg, IrReg),
-
-    // Unary
-    Neg(IrReg, IrReg),
-
-    // Register operations
-    Move(IrReg, IrReg),
-
-    // Control flow
-    Label(String),
-    Jump(String),
-    /// Jump if register is non-zero
-    JumpIf(IrReg, String),
-    /// Jump if register is zero
-    JumpIfNot(IrReg, String),
-
-    // Function calls
-    /// Call function, store result in optional dst
-    Call(Option<IrReg>, String, Vec<IrReg>),
-    /// Return with optional value
-    Return(Option<IrReg>),
-
-    // Memory operations
-    /// Load from memory: dst = *(base + offset) (64-bit)
-    Load(IrReg, IrReg, i64),
-    /// Load 1 byte (8-bit) from memory: dst = (u8)*(base + offset)
-    Load1(IrReg, IrReg, i64),
-    /// Load 2 bytes (16-bit) from memory: dst = (u16)*(base + offset)
-    Load2(IrReg, IrReg, i64),
-    /// Load 4 bytes (32-bit) from memory: dst = (u32)*(base + offset)
-    Load4(IrReg, IrReg, i64),
-    /// Store to memory: *(base + offset) = src (64-bit)
-    Store(IrReg, IrReg, i64),
-    /// Store 1 byte to memory: *(base + offset) = (u8)src
-    Store1(IrReg, IrReg, i64),
-    /// Store 2 bytes (16-bit) to memory: *(base + offset) = (u16)src
-    Store2(IrReg, IrReg, i64),
-    /// Store 4 bytes (32-bit) to memory: *(base + offset) = (u32)src
-    Store4(IrReg, IrReg, i64),
-    /// Allocate heap memory: dst = alloc(size)
-    Alloc(IrReg, IrReg),
-
-    // Syscalls (Solana-specific)
-    /// dst = syscall(name, args...)
-    Syscall(Option<IrReg>, String, Vec<IrReg>),
-
-    // Debug
-    /// Debug log (will be sol_log syscall): Log(ptr_reg, length)
-    Log(IrReg, usize),
-
-    // No-op (placeholder, removed by optimizer)
-    Nop,
-}
-
-/// Basic block in the control flow graph
-#[derive(Debug, Clone)]
-pub struct BasicBlock {
-    pub label: String,
-    pub instructions: Vec<IrInstruction>,
-    pub successors: Vec<String>,
-    pub predecessors: Vec<String>,
-}
-
-impl BasicBlock {
-    pub fn new(label: &str) -> Self {
-        Self {
-            label: label.to_string(),
-            instructions: Vec::new(),
-            successors: Vec::new(),
-            predecessors: Vec::new(),
-        }
-    }
-}
-
-/// Complete IR program
-#[derive(Debug, Clone)]
-pub struct IrProgram {
-    /// All instructions in linear order
-    pub instructions: Vec<IrInstruction>,
-    /// Basic blocks for CFG analysis
-    pub blocks: HashMap<String, BasicBlock>,
-    /// String table for string literals
-    pub string_table: Vec<String>,
-    /// Entry point label
-    pub entry_label: String,
-    /// Variable to register mapping
-    pub var_registers: HashMap<String, IrReg>,
-}
-
-impl IrProgram {
-    pub fn new() -> Self {
-        Self {
-            instructions: Vec::new(),
-            blocks: HashMap::new(),
-            string_table: Vec::new(),
-            entry_label: "entry".to_string(),
-            var_registers: HashMap::new(),
-        }
-    }
-}
-
-impl Default for IrProgram {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+use super::types::{PrimitiveType, FieldType, StructField, StructDef};
+use super::instruction::{IrReg, IrInstruction};
+use super::program::{BasicBlock, IrProgram};
 
 /// IR Generator - transforms typed AST to IR
 pub struct IrGenerator {
@@ -6077,25 +5793,5 @@ impl IrGenerator {
 impl Default for IrGenerator {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ir_reg() {
-        let r1 = IrReg::new(0);
-        let r2 = IrReg::new(1);
-        assert_ne!(r1, r2);
-    }
-
-    #[test]
-    fn test_basic_block() {
-        let mut block = BasicBlock::new("test");
-        block.instructions.push(IrInstruction::ConstI64(IrReg(0), 42));
-        assert_eq!(block.label, "test");
-        assert_eq!(block.instructions.len(), 1);
     }
 }
