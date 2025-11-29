@@ -3379,6 +3379,423 @@ impl IrGenerator {
                 }
 
                 // =================================================================
+                // ROUND 4 MACROS: SPL Close Account, System Allocate, Anchor Error
+                // =================================================================
+
+                // =================================================================
+                // SPL-CLOSE-ACCOUNT: Close a token account and reclaim lamports
+                // =================================================================
+                // (spl-close-account token-prog-idx account-idx destination-idx authority-idx)
+                //
+                // Instruction data: [9] = 1 byte (discriminator 9 = CloseAccount)
+                //
+                // Accounts:
+                //   - Account to close (writable)
+                //   - Destination for lamports (writable)
+                //   - Authority (signer)
+                // =================================================================
+                if name == "spl-close-account" && args.len() == 4 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000E00_i64));
+
+                    let token_prog_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account token-prog-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account account-idx has no result"))?;
+                    let destination_idx = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account destination-idx has no result"))?;
+                    let authority_idx = self.generate_expr(&args[3].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account authority-idx has no result"))?;
+
+                    // Build instruction data: discriminator 9 (CloseAccount)
+                    let data_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(data_ptr, 0x300000E80_i64));
+                    let nine = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(nine, 9));
+                    self.emit(IrInstruction::Store1(data_ptr, nine, 0));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Get token program pubkey pointer
+                    let token_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(token_offset, token_prog_idx, account_size));
+                    let temp0 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp0, token_offset, eight));
+                    self.emit(IrInstruction::Add(temp0, temp0, eight));
+                    let token_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, temp0));
+
+                    // Account 0: Account to close (writable)
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    let temp1 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp1, acct_offset, eight));
+                    self.emit(IrInstruction::Add(temp1, temp1, eight));
+                    let acct_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp1));
+                    self.emit(IrInstruction::Store(heap_base, acct_pk_ptr, 0));
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(heap_base, one, 8)); // writable
+
+                    // Account 1: Destination (writable)
+                    let dest_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(dest_offset, destination_idx, account_size));
+                    let temp2 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp2, dest_offset, eight));
+                    self.emit(IrInstruction::Add(temp2, temp2, eight));
+                    let dest_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dest_pk_ptr, input_ptr, temp2));
+                    self.emit(IrInstruction::Store(heap_base, dest_pk_ptr, 16));
+                    self.emit(IrInstruction::Store(heap_base, one, 24)); // writable
+
+                    // Account 2: Authority (signer)
+                    let auth_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
+                    let temp3 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
+                    self.emit(IrInstruction::Add(temp3, temp3, eight));
+                    let auth_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
+                    self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
+                    let signer_flag = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(signer_flag, 256)); // signer
+                    self.emit(IrInstruction::Store(heap_base, signer_flag, 40));
+
+                    // Build instruction
+                    let instr_ptr = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_256));
+
+                    self.emit(IrInstruction::Store(instr_ptr, token_pk_ptr, 0));
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 8));
+                    let three = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(three, 3));
+                    self.emit(IrInstruction::Store(instr_ptr, three, 16));
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24));
+                    self.emit(IrInstruction::Store(instr_ptr, one, 32)); // data_len = 1
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // SYSTEM-ALLOCATE: Allocate space in an account via System Program
+                // =================================================================
+                // (system-allocate account-idx space)
+                //
+                // Instruction data: [8, space (8 bytes)] = 9 bytes (discriminator 8 = Allocate)
+                //
+                // Accounts:
+                //   - Account to allocate (writable, signer)
+                // =================================================================
+                if name == "system-allocate" && args.len() == 2 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000F00_i64));
+
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("system-allocate account-idx has no result"))?;
+                    let space = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("system-allocate space has no result"))?;
+
+                    // Build System Program ID (all zeros)
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 8));
+                    self.emit(IrInstruction::Store(heap_base, zero, 16));
+                    self.emit(IrInstruction::Store(heap_base, zero, 24));
+
+                    // Build instruction data: [discriminator (4 bytes), space (8 bytes)]
+                    let data_ptr = self.alloc_reg();
+                    let const_32 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_32, 32));
+                    self.emit(IrInstruction::Add(data_ptr, heap_base, const_32));
+
+                    let eight_disc = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_disc, 8)); // Allocate = 8
+                    self.emit(IrInstruction::Store4(data_ptr, eight_disc, 0));
+                    self.emit(IrInstruction::Store(data_ptr, space, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Build SolAccountMeta at heap_base + 64
+                    let meta_base = self.alloc_reg();
+                    let const_64 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_64, 64));
+                    self.emit(IrInstruction::Add(meta_base, heap_base, const_64));
+
+                    // Account 0: Account to allocate (writable, signer)
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    let temp = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
+                    self.emit(IrInstruction::Add(temp, temp, eight));
+                    let acct_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
+                    let writable_signer = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(writable_signer, 257)); // writable + signer
+                    self.emit(IrInstruction::Store(meta_base, writable_signer, 8));
+
+                    // Build instruction
+                    let instr_ptr = self.alloc_reg();
+                    let const_128 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_128, 128));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_128));
+
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 0)); // program_id
+                    self.emit(IrInstruction::Store(instr_ptr, meta_base, 8)); // accounts
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(instr_ptr, one, 16)); // accounts_len
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24)); // data
+                    let twelve = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(twelve, 12));
+                    self.emit(IrInstruction::Store(instr_ptr, twelve, 32)); // data_len
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // SYSTEM-ASSIGN: Assign account to a program
+                // =================================================================
+                // (system-assign account-idx owner-pubkey-ptr)
+                //
+                // Instruction data: [1, owner (32 bytes)] = 33 bytes (discriminator 1 = Assign)
+                //
+                // Accounts:
+                //   - Account to assign (writable, signer)
+                // =================================================================
+                if name == "system-assign" && args.len() == 2 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300001000_i64));
+
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("system-assign account-idx has no result"))?;
+                    let owner_ptr = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("system-assign owner-pubkey-ptr has no result"))?;
+
+                    // Build System Program ID (all zeros)
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 8));
+                    self.emit(IrInstruction::Store(heap_base, zero, 16));
+                    self.emit(IrInstruction::Store(heap_base, zero, 24));
+
+                    // Build instruction data at heap_base + 32
+                    let data_ptr = self.alloc_reg();
+                    let const_32 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_32, 32));
+                    self.emit(IrInstruction::Add(data_ptr, heap_base, const_32));
+
+                    // Discriminator 1 = Assign
+                    let one_disc = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one_disc, 1));
+                    self.emit(IrInstruction::Store4(data_ptr, one_disc, 0));
+
+                    // Copy owner pubkey (32 bytes)
+                    let owner_chunk0 = self.alloc_reg();
+                    let owner_chunk1 = self.alloc_reg();
+                    let owner_chunk2 = self.alloc_reg();
+                    let owner_chunk3 = self.alloc_reg();
+                    self.emit(IrInstruction::Load(owner_chunk0, owner_ptr, 0));
+                    self.emit(IrInstruction::Load(owner_chunk1, owner_ptr, 8));
+                    self.emit(IrInstruction::Load(owner_chunk2, owner_ptr, 16));
+                    self.emit(IrInstruction::Load(owner_chunk3, owner_ptr, 24));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk0, 4));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk1, 12));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk2, 20));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk3, 28));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Build SolAccountMeta at heap_base + 80
+                    let meta_base = self.alloc_reg();
+                    let const_80 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_80, 80));
+                    self.emit(IrInstruction::Add(meta_base, heap_base, const_80));
+
+                    // Account to assign (writable, signer)
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    let temp = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
+                    self.emit(IrInstruction::Add(temp, temp, eight));
+                    let acct_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
+                    let writable_signer = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(writable_signer, 257));
+                    self.emit(IrInstruction::Store(meta_base, writable_signer, 8));
+
+                    // Build instruction
+                    let instr_ptr = self.alloc_reg();
+                    let const_128 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_128, 128));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_128));
+
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 0)); // program_id
+                    self.emit(IrInstruction::Store(instr_ptr, meta_base, 8)); // accounts
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(instr_ptr, one, 16)); // accounts_len
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24)); // data
+                    let thirty_six = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(thirty_six, 36));
+                    self.emit(IrInstruction::Store(instr_ptr, thirty_six, 32)); // data_len
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // ANCHOR-ERROR: Return an Anchor-compatible error code
+                // =================================================================
+                // (anchor-error error-code)
+                //
+                // Converts to Anchor error format: 6000 + custom_code
+                // Logs the error and returns the value (caller should abort)
+                // =================================================================
+                if name == "anchor-error" && args.len() == 1 {
+                    let error_code = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("anchor-error error-code has no result"))?;
+
+                    // Anchor errors start at 6000
+                    let base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(base, 6000));
+                    let result = self.alloc_reg();
+                    self.emit(IrInstruction::Add(result, base, error_code));
+
+                    // Log the error
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Syscall(
+                        None,
+                        "sol_log_64_".to_string(),
+                        vec![result, zero, zero, zero, zero],
+                    ));
+
+                    return Ok(Some(result));
+                }
+
+                // =================================================================
+                // REQUIRE: Assert condition or return Anchor error
+                // =================================================================
+                // (require condition error-code)
+                //
+                // If condition is false, logs error and aborts with error code
+                // =================================================================
+                if name == "require" && args.len() == 2 {
+                    let condition = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("require condition has no result"))?;
+                    let error_code = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("require error-code has no result"))?;
+
+                    // If condition is true (non-zero), skip the abort
+                    let ok_label = self.new_label("require_ok");
+
+                    self.emit(IrInstruction::JumpIf(condition, ok_label.clone()));
+
+                    // Condition is false - compute anchor error and abort
+                    let base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(base, 6000));
+                    let anchor_error = self.alloc_reg();
+                    self.emit(IrInstruction::Add(anchor_error, base, error_code));
+
+                    // Log the error before aborting
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Syscall(
+                        None,
+                        "sol_log_64_".to_string(),
+                        vec![anchor_error, zero, zero, zero, zero],
+                    ));
+
+                    // Return with error code (abort)
+                    self.emit(IrInstruction::Return(Some(anchor_error)));
+
+                    self.emit(IrInstruction::Label(ok_label));
+
+                    // Return success (0)
+                    let success = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(success, 0));
+                    return Ok(Some(success));
+                }
+
+                // =================================================================
+                // MSG: Log a formatted message (Anchor-style)
+                // =================================================================
+                // (msg "format string")
+                //
+                // Logs a message using sol_log_
+                // =================================================================
+                if name == "msg" && args.len() == 1 {
+                    let msg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("msg argument has no result"))?;
+
+                    self.emit(IrInstruction::Syscall(
+                        None,
+                        "sol_log_".to_string(),
+                        vec![msg],
+                    ));
+
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    return Ok(Some(zero));
+                }
+
+                // =================================================================
                 // DERIVE-PDA: Compute Program Derived Address
                 // =================================================================
                 // (derive-pda program-pubkey-ptr seeds-ptr bump-ptr) -> 0 on success, 1 on failure
