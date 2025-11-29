@@ -335,6 +335,33 @@ impl BidirectionalChecker {
                     ret: Box::new(body_ty),
                 }
             }
+
+            // === Refinement Type Expressions ===
+            Expression::RefinedTypeExpr { var, base_type, predicate } => {
+                // Parse the base type
+                let base = self.parse_type_expr(base_type);
+
+                // Validate predicate has boolean type
+                self.ctx.push_scope();
+                self.ctx.define_var(var, base.clone());
+
+                let pred_ty = self.synth(predicate);
+                if !matches!(pred_ty, Type::Bool | Type::Any) {
+                    self.ctx.record_error(TypeError::new(format!(
+                        "refinement predicate must be boolean, found {}",
+                        pred_ty
+                    )));
+                }
+
+                self.ctx.pop_scope();
+
+                // Create the refined type
+                Type::Refined(Box::new(crate::types::RefinementType::from_expr(
+                    var.clone(),
+                    base,
+                    predicate,
+                )))
+            }
         }
     }
 

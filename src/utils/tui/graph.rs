@@ -233,6 +233,114 @@ impl IncrementalRiskStats {
     }
 }
 
+/// Graph layout algorithm mode
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum LayoutMode {
+    /// Force-directed physics simulation (default - better for seeing clusters)
+    #[default]
+    ForceDirected,
+    /// Hierarchical BFS layers (inflows left, outflows right - better for tracing flows)
+    Hierarchical,
+}
+
+impl LayoutMode {
+    /// Toggle to the next layout mode
+    pub fn toggle(&mut self) {
+        *self = match self {
+            LayoutMode::ForceDirected => LayoutMode::Hierarchical,
+            LayoutMode::Hierarchical => LayoutMode::ForceDirected,
+        };
+    }
+
+    /// Human-readable name
+    pub fn name(&self) -> &'static str {
+        match self {
+            LayoutMode::ForceDirected => "Force",
+            LayoutMode::Hierarchical => "Hier",
+        }
+    }
+}
+
+/// Force-directed graph layout physics simulation parameters
+/// Based on Fruchterman-Reingold algorithm with enhancements for money flow visualization
+#[derive(Debug, Clone)]
+pub struct ForceDirectedPhysics {
+    /// Current simulation temperature (decreases over iterations for cooling)
+    pub temperature: f64,
+    /// Initial temperature (reset on new layout)
+    pub initial_temp: f64,
+    /// Cooling rate per iteration (0.95 = slow cooling, 0.8 = fast)
+    pub cooling_rate: f64,
+    /// Ideal edge length (k = sqrt(area/|V|))
+    pub ideal_length: f64,
+    /// Repulsion strength multiplier (higher = more spacing)
+    pub repulsion_strength: f64,
+    /// Attraction strength multiplier for connected nodes
+    pub attraction_strength: f64,
+    /// Gravity toward center (prevents graph flying apart)
+    pub gravity: f64,
+    /// Damping factor for velocity (0.0-1.0, prevents oscillation)
+    pub damping: f64,
+    /// Number of iterations completed
+    pub iteration: usize,
+    /// Max iterations before stopping simulation
+    pub max_iterations: usize,
+    /// Whether simulation is actively running
+    pub running: bool,
+    /// Whether to pin the target wallet at center
+    pub pin_target: bool,
+    /// Minimum movement threshold to consider converged
+    pub convergence_threshold: f64,
+}
+
+impl Default for ForceDirectedPhysics {
+    fn default() -> Self {
+        Self {
+            temperature: 100.0,
+            initial_temp: 100.0,
+            cooling_rate: 0.95,
+            ideal_length: 50.0,  // Will be recalculated based on node count
+            repulsion_strength: 1.0,
+            attraction_strength: 0.5,
+            gravity: 0.1,
+            damping: 0.85,
+            iteration: 0,
+            max_iterations: 500,
+            running: true,
+            pin_target: true,
+            convergence_threshold: 0.1,
+        }
+    }
+}
+
+impl ForceDirectedPhysics {
+    /// Reset simulation for a new layout
+    pub fn reset(&mut self, node_count: usize, area_width: f64, area_height: f64) {
+        // Calculate ideal edge length: k = C * sqrt(area / |V|)
+        let area = area_width * area_height;
+        self.ideal_length = 2.0 * (area / node_count.max(1) as f64).sqrt();
+        self.temperature = self.initial_temp;
+        self.iteration = 0;
+        self.running = true;
+    }
+
+    /// Cool down temperature for next iteration
+    pub fn cool(&mut self) {
+        self.temperature *= self.cooling_rate;
+        self.iteration += 1;
+
+        // Stop if temperature is too low or max iterations reached
+        if self.temperature < self.convergence_threshold || self.iteration >= self.max_iterations {
+            self.running = false;
+        }
+    }
+
+    /// Check if simulation should continue
+    pub fn should_continue(&self) -> bool {
+        self.running && self.temperature > self.convergence_threshold
+    }
+}
+
 /// Investigation trail - breadcrumb navigation through the graph
 #[derive(Debug, Clone)]
 pub struct InvestigationTrail {
@@ -378,6 +486,13 @@ pub struct WalletGraph {
     risk_cache_dirty: bool,
     /// Flag indicating if layout needs recalculation (set when nodes/edges change)
     layout_dirty: bool,
+    /// Counter for incremental updates since last full relayout
+    /// Full relayout only happens when this exceeds threshold (batch mode)
+    incremental_updates_pending: usize,
+    /// Threshold for triggering full relayout (default 50)
+    incremental_relayout_threshold: usize,
+    /// Whether we're in streaming mode (suppresses full relayout)
+    streaming_mode: bool,
     /// Incremental risk tracking - updated O(1) on each edge/node add
     incremental_risk: IncrementalRiskStats,
     /// Cached BFS distances from target node for proper layer calculation
@@ -396,6 +511,8 @@ pub struct WalletGraph {
     node_velocities: Vec<(f64, f64)>,
     /// Force-directed layout: physics simulation state
     physics: ForceDirectedPhysics,
+    /// Current layout algorithm mode (toggle with 'L' key)
+    pub layout_mode: LayoutMode,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -605,6 +722,8 @@ pub enum GraphInput {
     FilterToggleItem,
     FilterSelectAll,
     FilterDeselectAll,
+    // Layout controls
+    ToggleLayout,  // 'L' key - switch between force-directed and hierarchical
 }
 
 impl WalletGraph {
@@ -658,13 +777,43 @@ impl WalletGraph {
             cached_risk_explanation: None,
             risk_cache_dirty: true,
             layout_dirty: true,  // Need initial layout calculation
+            incremental_updates_pending: 0,
+            incremental_relayout_threshold: 50, // Only relayout after 50 streaming updates
+            streaming_mode: false,
             incremental_risk: IncrementalRiskStats::default(),
             bfs_distances: HashMap::new(),
             forensics: GraphForensics::with_defaults(),
             cached_wallet_behaviors: HashMap::new(),
             cached_mixer_nodes: HashSet::new(),
             entity_clusters_dirty: true, // Need computation on first access
+            node_velocities: vec![(0.0, 0.0)],  // Target wallet starts at rest
+            physics: ForceDirectedPhysics::default(),
+            layout_mode: LayoutMode::default(),  // Force-directed by default
         }
+    }
+
+    /// Enable/disable streaming mode (suppresses full relayout until batch threshold)
+    /// Call this before starting streaming updates to avoid jarring layout changes
+    pub fn set_streaming_mode(&mut self, enabled: bool) {
+        self.streaming_mode = enabled;
+        if !enabled {
+            // When disabling streaming, trigger full relayout if updates are pending
+            if self.incremental_updates_pending > 0 {
+                self.layout_dirty = true;
+                self.incremental_updates_pending = 0;
+            }
+        }
+    }
+
+    /// Force a full relayout (useful after batch of streaming updates)
+    pub fn force_relayout(&mut self) {
+        self.layout_dirty = true;
+        self.incremental_updates_pending = 0;
+    }
+
+    /// Check if in streaming mode
+    pub fn is_streaming_mode(&self) -> bool {
+        self.streaming_mode
     }
 
     /// Get selected node index (for backward compatibility)
@@ -734,6 +883,14 @@ impl WalletGraph {
                 }
             })
             .collect()
+    }
+
+    /// Toggle layout mode between force-directed and hierarchical
+    /// Triggers layout recalculation
+    pub fn toggle_layout_mode(&mut self) {
+        self.layout_mode.toggle();
+        self.layout_dirty = true;  // Trigger recalculation
+        self.show_toast(format!("Layout: {} (L to toggle)", self.layout_mode.name()));
     }
 
     /// Handle keyboard input for graph navigation
@@ -1031,6 +1188,10 @@ impl WalletGraph {
             }
             GraphInput::FilterDeselectAll => {
                 self.filter_modal.deselect_all();
+                None
+            }
+            GraphInput::ToggleLayout => {
+                self.toggle_layout_mode();
                 None
             }
         }
@@ -1367,7 +1528,18 @@ impl WalletGraph {
 
         // Invalidate caches since graph structure changed
         self.risk_cache_dirty = true;
-        self.layout_dirty = true;  // New node requires layout recomputation
+
+        // In streaming mode, use incremental updates instead of full relayout
+        if self.streaming_mode {
+            self.incremental_updates_pending += 1;
+            // Only trigger full relayout after threshold is reached
+            if self.incremental_updates_pending >= self.incremental_relayout_threshold {
+                self.layout_dirty = true;
+                self.incremental_updates_pending = 0;
+            }
+        } else {
+            self.layout_dirty = true;  // New node requires layout recomputation
+        }
 
         idx
     }
@@ -1389,6 +1561,8 @@ impl WalletGraph {
             radius * angle.cos(),
             radius * angle.sin(),
         ));
+        // Also add velocity for force-directed physics
+        self.node_velocities.push((0.0, 0.0));
     }
 
     /// Calculate node layer using cached BFS distances
@@ -1474,7 +1648,19 @@ impl WalletGraph {
             self.connections.push((from, to, edge_label));
             // Invalidate caches since graph structure changed
             self.risk_cache_dirty = true;
-            self.layout_dirty = true;
+
+            // In streaming mode, use incremental updates instead of full relayout
+            if self.streaming_mode {
+                self.incremental_updates_pending += 1;
+                // Only trigger full relayout after threshold is reached
+                if self.incremental_updates_pending >= self.incremental_relayout_threshold {
+                    self.layout_dirty = true;
+                    self.incremental_updates_pending = 0;
+                }
+            } else {
+                self.layout_dirty = true;
+            }
+
             // Invalidate behavior cache for affected wallets (from and to)
             // since their transaction patterns have changed
             self.cached_wallet_behaviors.remove(&from);
@@ -1611,6 +1797,163 @@ impl WalletGraph {
                 self.node_positions[i] = (x, y);
                 edge_count += 1;
             }
+        }
+    }
+
+    /// Initialize force-directed layout with random positions around center
+    /// This sets up initial positions for the physics simulation to start from
+    pub fn init_force_directed_layout(&mut self, area_width: f64, area_height: f64) {
+        use std::f64::consts::PI;
+
+        let n = self.nodes.len();
+        if n == 0 { return; }
+
+        // Ensure vectors are sized correctly
+        self.node_positions.resize(n, (0.0, 0.0));
+        self.node_velocities.resize(n, (0.0, 0.0));
+
+        // Reset physics simulation
+        self.physics.reset(n, area_width, area_height);
+
+        // Place target wallet at center
+        self.node_positions[0] = (0.0, 0.0);
+        self.node_velocities[0] = (0.0, 0.0);
+
+        // Place other nodes in a circle around center with some random jitter
+        let radius = self.physics.ideal_length * (n as f64).sqrt() / 2.0;
+        for i in 1..n {
+            let angle = 2.0 * PI * (i as f64) / ((n - 1).max(1) as f64);
+            let jitter_r = radius * 0.2 * (i as f64 % 7.0 - 3.0) / 3.0;
+            let jitter_a = 0.1 * (i as f64 % 11.0 - 5.0) / 5.0;
+            let r = radius + jitter_r;
+            let a = angle + jitter_a;
+
+            self.node_positions[i] = (r * a.cos(), r * a.sin());
+            self.node_velocities[i] = (0.0, 0.0);
+        }
+    }
+
+    /// Run one iteration of Fruchterman-Reingold force-directed layout
+    /// Call this each frame while physics.should_continue() is true
+    pub fn step_force_directed_layout(&mut self) {
+        if !self.physics.should_continue() {
+            return;
+        }
+
+        let n = self.nodes.len();
+        if n < 2 {
+            self.physics.running = false;
+            return;
+        }
+
+        let k = self.physics.ideal_length;
+        let k2 = k * k;
+        let temp = self.physics.temperature;
+        let repulsion = self.physics.repulsion_strength;
+        let attraction = self.physics.attraction_strength;
+        let gravity = self.physics.gravity;
+        let damping = self.physics.damping;
+
+        // Calculate forces for each node
+        let mut forces: Vec<(f64, f64)> = vec![(0.0, 0.0); n];
+
+        // 1. Repulsive forces: all nodes repel each other (O(n²))
+        for i in 0..n {
+            let (xi, yi) = self.node_positions[i];
+
+            for j in (i + 1)..n {
+                let (xj, yj) = self.node_positions[j];
+
+                let dx = xi - xj;
+                let dy = yi - yj;
+                let dist_sq = dx * dx + dy * dy;
+                let dist = dist_sq.sqrt().max(0.1);  // Avoid division by zero
+
+                // Repulsion: k² / d
+                let force = repulsion * k2 / dist;
+                let fx = (dx / dist) * force;
+                let fy = (dy / dist) * force;
+
+                forces[i].0 += fx;
+                forces[i].1 += fy;
+                forces[j].0 -= fx;
+                forces[j].1 -= fy;
+            }
+        }
+
+        // 2. Attractive forces: connected nodes attract (O(e))
+        // Edge weight is based on transfer amount (log scale to handle large differences)
+        for (from, to, edge_data) in &self.connections {
+            let from = *from;
+            let to = *to;
+            if from >= n || to >= n { continue; }
+
+            let (x1, y1) = self.node_positions[from];
+            let (x2, y2) = self.node_positions[to];
+
+            let dx = x2 - x1;
+            let dy = y2 - y1;
+            let dist = (dx * dx + dy * dy).sqrt().max(0.1);
+
+            // Weight by transfer amount (log scale: 1 + log10(amount + 1))
+            // This makes $1000 about 4x stronger than $1, but not 1000x
+            let amount_weight = 1.0 + (edge_data.amount + 1.0).log10();
+
+            // Attraction: (d² / k) * weight
+            let force = attraction * dist * dist / k * amount_weight;
+            let fx = (dx / dist) * force;
+            let fy = (dy / dist) * force;
+
+            forces[from].0 += fx;
+            forces[from].1 += fy;
+            forces[to].0 -= fx;
+            forces[to].1 -= fy;
+        }
+
+        // 3. Gravity toward center (prevents graph flying apart)
+        for i in 0..n {
+            let (x, y) = self.node_positions[i];
+            let dist = (x * x + y * y).sqrt().max(0.1);
+            forces[i].0 -= gravity * x;
+            forces[i].1 -= gravity * y;
+        }
+
+        // 4. Apply forces with temperature limiting and damping
+        for i in 0..n {
+            // Skip pinned target wallet
+            if self.physics.pin_target && i == 0 {
+                continue;
+            }
+
+            let (fx, fy) = forces[i];
+            let force_mag = (fx * fx + fy * fy).sqrt().max(0.01);
+
+            // Limit displacement by temperature
+            let scale = temp.min(force_mag) / force_mag;
+            let dx = fx * scale;
+            let dy = fy * scale;
+
+            // Update velocity with damping
+            self.node_velocities[i].0 = self.node_velocities[i].0 * damping + dx;
+            self.node_velocities[i].1 = self.node_velocities[i].1 * damping + dy;
+
+            // Update position
+            self.node_positions[i].0 += self.node_velocities[i].0;
+            self.node_positions[i].1 += self.node_velocities[i].1;
+        }
+
+        // 5. Cool down
+        self.physics.cool();
+    }
+
+    /// Run force-directed layout until convergence or max iterations
+    /// Use this for batch computation, or use step_force_directed_layout() for animation
+    pub fn compute_force_directed_layout(&mut self, area_width: f64, area_height: f64) {
+        self.init_force_directed_layout(area_width, area_height);
+
+        // Run until convergence
+        while self.physics.should_continue() {
+            self.step_force_directed_layout();
         }
     }
 
@@ -1930,12 +2273,34 @@ impl WalletGraph {
         // This is O(n²) and should NOT run every frame
         if self.layout_dirty && !self.nodes.is_empty() && !self.connections.is_empty() {
             self.compute_bfs_distances();  // Compute proper BFS distances
-            self.compute_hierarchical_layout();
             self.update_node_filtering();
             // Update cached mixer nodes (converts Vec to HashSet for O(1) lookup)
             let mixer_vec = self.forensics.detect_mixer_nodes(self);
             self.cached_mixer_nodes = mixer_vec.into_iter().collect();
+
+            // Initialize layout based on current mode
+            match self.layout_mode {
+                LayoutMode::ForceDirected => {
+                    // 400x400 is a reasonable default working area for the physics simulation
+                    self.init_force_directed_layout(400.0, 400.0);
+                }
+                LayoutMode::Hierarchical => {
+                    // Use BFS-based hierarchical layout (inflows/outflows)
+                    self.compute_hierarchical_layout();
+                    self.physics.running = false;  // Disable physics simulation
+                }
+            }
             self.layout_dirty = false;
+        }
+
+        // Run force-directed physics simulation (incremental per frame)
+        // Only active in ForceDirected mode
+        // This is O(n² + e) but only runs while simulation is active
+        if self.physics.should_continue() && !self.nodes.is_empty() {
+            // Run a few iterations per frame for smoother animation
+            for _ in 0..3 {
+                self.step_force_directed_layout();
+            }
         }
 
         if self.nodes.is_empty() {
@@ -1968,11 +2333,24 @@ impl WalletGraph {
             String::new()
         };
 
+        // Build improved title with layout mode and physics status
+        let layout_indicator = match self.layout_mode {
+            LayoutMode::ForceDirected => {
+                if self.physics.running {
+                    format!("⚡{} ({})", self.layout_mode.name(), self.physics.iteration)
+                } else {
+                    format!("📍{}", self.layout_mode.name())
+                }
+            }
+            LayoutMode::Hierarchical => format!("📊{}", self.layout_mode.name()),
+        };
+
         let canvas = Canvas::default()
             .block(Block::default()
-                .title(format!(" Network Graph │ {}w {}tx │ depth:{}/{} │ zoom:{:.1}x │{}←↑↓→ pan, +/- zoom, [/] depth, T=trail ",
+                .title(format!(" 🔗 Graph │ {}w {}tx │ d:{}/{} │ z:{:.1}x │ {} │{}?=help L=layout ",
                     self.nodes.len(), self.connections.len(),
-                    self.current_depth, self.max_depth, zoom, trail_indicator))
+                    self.current_depth, self.max_depth, zoom,
+                    layout_indicator, trail_indicator))
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(Style::default().fg(Color::Green)))

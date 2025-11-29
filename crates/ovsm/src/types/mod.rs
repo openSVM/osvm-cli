@@ -43,11 +43,13 @@
 pub mod checker;
 pub mod bidirectional;
 pub mod bridge;
+pub mod refinement;
 
 // Re-export TypeChecker for convenience
 pub use checker::TypeChecker;
 pub use bidirectional::BidirectionalChecker;
 pub use bridge::{TypeBridge, TypeEnvSourceExt};
+pub use refinement::{RefinementType, RefinementChecker, Predicate, PredicateExpr, CompareOp};
 
 use std::collections::HashMap;
 use std::fmt;
@@ -106,6 +108,11 @@ pub enum Type {
     Var(u32),
     /// Unknown type (placeholder during inference)
     Unknown,
+
+    // === Refinement Types ===
+    /// Refined type with predicate: {x : T | P(x)}
+    /// Example: {x : u64 | x < 10} for array index bounds
+    Refined(Box<RefinementType>),
 }
 
 impl Type {
@@ -235,6 +242,7 @@ impl fmt::Display for Type {
             Type::Never => write!(f, "!"),
             Type::Var(n) => write!(f, "?{}", n),
             Type::Unknown => write!(f, "?"),
+            Type::Refined(refined) => write!(f, "{}", refined),
         }
     }
 }

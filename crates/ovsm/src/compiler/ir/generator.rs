@@ -42,6 +42,7 @@ use super::types::{PrimitiveType, FieldType, StructField, StructDef};
 use super::instruction::{IrReg, IrInstruction};
 use super::program::{BasicBlock, IrProgram};
 use super::memory_model::{TypeEnv, RegType, PointerType, TypedReg, MemoryRegion, Alignment, MemoryError, account_layout};
+use crate::types::{Type, TypeContext, TypeBridge};
 
 /// IR Generator - transforms typed AST to IR
 ///
@@ -64,8 +65,12 @@ pub struct IrGenerator {
     instructions: Vec<IrInstruction>,
     /// Struct definitions (compile-time metadata for field layout)
     struct_defs: HashMap<String, StructDef>,
-    /// Type environment for pointer provenance tracking (NEW)
+    /// Type environment for pointer provenance tracking
     type_env: TypeEnv,
+    /// Bridge between source-level types and IR-level types
+    type_bridge: TypeBridge,
+    /// Source-level type context for bidirectional type checking
+    source_type_ctx: TypeContext,
 }
 
 impl IrGenerator {
@@ -96,6 +101,8 @@ impl IrGenerator {
             instructions: Vec::new(),
             struct_defs: HashMap::new(),
             type_env,
+            type_bridge: TypeBridge::new(),
+            source_type_ctx: TypeContext::new(),
         };
 
         gen.var_map.insert("accounts".to_string(), accounts_reg);
@@ -5446,7 +5453,128 @@ impl IrGenerator {
                 Ok(Some(result_reg))
             }
 
+            // =========================================================================
+            // TYPE ANNOTATION EXPRESSIONS
+            // =========================================================================
+
+            // Handle (: expr type) - type annotation expression
+            // Generate code for the inner expression and record the type from annotation
+            Expression::TypeAnnotation { expr, type_expr } => {
+                // First, generate the inner expression
+                let result = self.generate_expr(expr)?;
+
+                // Parse the type annotation to get a source-level Type
+                if let Some(reg) = result {
+                    let source_type = self.parse_type_expression(type_expr);
+                    if let Some(ty) = source_type {
+                        // Set the register's type from the source annotation
+                        self.set_reg_from_source(reg, &ty);
+                    }
+                }
+
+                Ok(result)
+            }
+
+            // Handle {x : T | predicate} - refinement type expression
+            // These are type-level expressions, not value-level, so return the base type
+            Expression::RefinedTypeExpr { var: _, base_type, predicate: _ } => {
+                // In an expression context, a refinement type is treated as its base type.
+                // The predicate is for verification purposes only.
+                // Generate a type reference to the base type (this is unusual - typically
+                // refinement types appear in type annotations, not as standalone expressions)
+                self.generate_expr(base_type)
+            }
+
+            // Handle typed lambda: (lambda ((x : T) (y : U)) -> R body)
+            // For now, lambdas/closures are not fully supported in sBPF codegen.
+            // We parse and record the type annotations but can't return a first-class function.
+            Expression::TypedLambda { typed_params, return_type: _, body: _ } => {
+                // Just record the parameter types in the source type context for future use
+                for (param_name, type_annotation) in typed_params.iter() {
+                    if let Some(type_expr) = type_annotation {
+                        if let Some(source_ty) = self.parse_type_expression(type_expr) {
+                            // Record in source context for bidirectional typing
+                            self.source_type_ctx.define_var(param_name, source_ty);
+                        }
+                    }
+                }
+                // Lambdas in expression context return null for now
+                // Full first-class functions require heap allocation in sBPF
+                let reg = self.alloc_reg();
+                self.emit(IrInstruction::ConstNull(reg));
+                Ok(Some(reg))
+            }
+
             _ => Ok(None),
+        }
+    }
+
+    /// Parse a type expression (AST) into a source-level Type.
+    ///
+    /// This converts parsed type annotations like `u64`, `{x : u64 | x < 10}`,
+    /// or `(-> i64 bool)` into our Type enum for use with the TypeBridge.
+    fn parse_type_expression(&self, type_expr: &Expression) -> Option<Type> {
+        match type_expr {
+            // Simple type names
+            Expression::Variable(name) => Type::from_name(name),
+
+            // Array type: (Array T) or (Array T N)
+            Expression::ToolCall { name, args } if name == "Array" => {
+                if args.is_empty() {
+                    return None;
+                }
+                let elem_type = self.parse_type_expression(&args[0].value)?;
+                let size = if args.len() > 1 {
+                    if let Expression::IntLiteral(n) = &args[1].value {
+                        *n as usize
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+                Some(Type::Array { element: Box::new(elem_type), size })
+            }
+
+            // Pointer type: (Ptr T)
+            Expression::ToolCall { name, args } if name == "Ptr" && args.len() == 1 => {
+                let inner = self.parse_type_expression(&args[0].value)?;
+                Some(Type::Ptr(Box::new(inner)))
+            }
+
+            // Reference type: (Ref T)
+            Expression::ToolCall { name, args } if name == "Ref" && args.len() == 1 => {
+                let inner = self.parse_type_expression(&args[0].value)?;
+                Some(Type::Ref(Box::new(inner)))
+            }
+
+            // Function type: (-> T1 T2 ... R)
+            Expression::ToolCall { name, args } if name == "->" && !args.is_empty() => {
+                let mut param_types = Vec::new();
+                for arg in args.iter().take(args.len() - 1) {
+                    if let Some(ty) = self.parse_type_expression(&arg.value) {
+                        param_types.push(ty);
+                    }
+                }
+                let ret_type = self.parse_type_expression(&args.last().unwrap().value)?;
+                Some(Type::Fn {
+                    params: param_types,
+                    ret: Box::new(ret_type),
+                })
+            }
+
+            // Refinement type: {x : T | predicate}
+            Expression::RefinedTypeExpr { var, base_type, predicate } => {
+                let base = self.parse_type_expression(base_type)?;
+                let refined = crate::types::RefinementType::from_expr(
+                    var.clone(),
+                    base,
+                    predicate,
+                );
+                Some(Type::Refined(Box::new(refined)))
+            }
+
+            _ => None,
         }
     }
 
@@ -5498,6 +5626,57 @@ impl IrGenerator {
     /// Record that a register holds an unknown type (from external sources)
     fn set_reg_unknown(&mut self, reg: IrReg) {
         self.type_env.set_type(reg, RegType::Unknown);
+    }
+
+    // =========================================================================
+    // SOURCE TYPE BRIDGE METHODS
+    // =========================================================================
+
+    /// Allocate a register and set its type from a source-level Type annotation.
+    ///
+    /// This bridges the type system gap: source types (u64, {x : u64 | x < 10})
+    /// are converted to IR types (Value { size: 8, signed: false }) via the
+    /// TypeBridge, enabling full provenance tracking.
+    ///
+    /// For refinement types, the base type is used for code generation while
+    /// the predicate is tracked for verification.
+    fn alloc_typed_reg(&mut self, source_type: &Type) -> TypedReg {
+        let reg = self.alloc_reg();
+        let ir_type = self.type_bridge.source_to_ir(source_type, &self.source_type_ctx);
+        self.type_env.set_type(reg, ir_type.clone());
+        TypedReg { reg, ty: ir_type }
+    }
+
+    /// Set a register's type from a source-level Type annotation.
+    ///
+    /// Use this when the register is already allocated but you want to
+    /// record its type based on source annotations.
+    fn set_reg_from_source(&mut self, reg: IrReg, source_type: &Type) {
+        let ir_type = self.type_bridge.source_to_ir(source_type, &self.source_type_ctx);
+        self.type_env.set_type(reg, ir_type);
+    }
+
+    /// Convert a source-level Type to an IR-level RegType.
+    ///
+    /// This is a convenience wrapper around the TypeBridge.
+    fn source_to_ir_type(&self, source_type: &Type) -> RegType {
+        self.type_bridge.source_to_ir(source_type, &self.source_type_ctx)
+    }
+
+    /// Allocate a pointer register with account data provenance from source type.
+    ///
+    /// This combines source type information with account data region tracking
+    /// for full memory safety verification.
+    fn alloc_account_typed_ptr(&mut self, source_type: &Type, account_idx: u8) -> TypedReg {
+        let reg = self.alloc_reg();
+        let ir_type = self.type_bridge.source_to_account_ptr(
+            source_type,
+            &self.source_type_ctx,
+            account_idx,
+            None, // Data length unknown at compile time
+        );
+        self.type_env.set_type(reg, ir_type.clone());
+        TypedReg { reg, ty: ir_type }
     }
 
     /// Get type environment errors accumulated during codegen

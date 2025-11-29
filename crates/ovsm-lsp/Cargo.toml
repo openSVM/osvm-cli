@@ -1,6 +1,6 @@
 [package]
 name = "ovsm-lsp"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["OSVM Team <rin@opensvm.com>"]
 description = "Language Server Protocol implementation for OVSM LISP"

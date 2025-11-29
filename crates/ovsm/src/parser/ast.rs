@@ -294,6 +294,23 @@ pub enum Expression {
         /// Body expression of the lambda
         body: Box<Expression>,
     },
+
+    // ============================================================================
+    // Refinement Types
+    // ============================================================================
+
+    /// Refinement type expression: {x : T | predicate}
+    /// Constrains a type with a predicate that must hold for all values.
+    /// Example: {i : u64 | i < 10} - unsigned int less than 10
+    /// Example: {arr : [u64; n] | len(arr) > 0} - non-empty array
+    RefinedTypeExpr {
+        /// Bound variable name (e.g., "x" in {x : u64 | x < 10})
+        var: String,
+        /// Base type expression (e.g., "u64")
+        base_type: Box<Expression>,
+        /// Predicate expression that must hold (e.g., "x < 10")
+        predicate: Box<Expression>,
+    },
 }
 
 /// Binary operators

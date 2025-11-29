@@ -2650,8 +2650,13 @@ impl OsvmApp {
                 match update {
                     StreamingUpdate::Transfer { from, to, amount, token, timestamp, signature } => {
                         // Add transfer to graph using add_connection
-                        // (add_connection handles creating wallets if needed)
+                        // Enable streaming mode to prevent full relayout on each update
                         if let Ok(mut graph) = self.wallet_graph.lock() {
+                            // Enable streaming mode if not already enabled
+                            if !graph.is_streaming_mode() {
+                                graph.set_streaming_mode(true);
+                            }
+
                             // add_connection needs addresses to already exist in nodes
                             // Use add_wallet with proper signature
                             let from_label = if from.len() > 12 {
@@ -2699,6 +2704,11 @@ impl OsvmApp {
                     StreamingUpdate::NewWallet { address, discovered_via } => {
                         // Add new wallet to graph with proper signature
                         if let Ok(mut graph) = self.wallet_graph.lock() {
+                            // Enable streaming mode if not already enabled
+                            if !graph.is_streaming_mode() {
+                                graph.set_streaming_mode(true);
+                            }
+
                             let label = if address.len() > 12 {
                                 format!("{}...{}", &address[..6], &address[address.len()-4..])
                             } else {
@@ -3108,6 +3118,12 @@ impl OsvmApp {
             KeyCode::Char('`') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::OpenFilterModal);
+                }
+            }
+            // Layout toggle (L key) - switch between force-directed and hierarchical
+            KeyCode::Char('l') | KeyCode::Char('L') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ToggleLayout);
                 }
             }
             // Number keys 1-5 to select tabs
@@ -4323,55 +4339,111 @@ impl OsvmApp {
     }
 
     fn render_btop_statusbar(&self, f: &mut Frame, area: Rect) {
-        let (nodes, edges) = self.wallet_graph.lock()
-            .map(|g| (g.node_count(), g.edge_count()))
-            .unwrap_or((0, 0));
+        let (nodes, edges, current_depth, max_depth, layout_mode) = self.wallet_graph.lock()
+            .map(|g| (g.node_count(), g.edge_count(), g.current_depth, g.max_depth, g.layout_mode.name()))
+            .unwrap_or((0, 0, 0, 0, "Force"));
 
         let logs_len = self.logs.lock().map(|l| l.len()).unwrap_or(0);
 
+        // Tab pills with improved visual design
         let line1 = Line::from(vec![
-            Span::styled(" [", Style::default().fg(Color::DarkGray)),
-            Span::styled("1", Style::default().fg(if self.active_tab == TabIndex::Dashboard { Color::Cyan } else { Color::DarkGray }).add_modifier(Modifier::BOLD)),
-            Span::styled("]", Style::default().fg(Color::DarkGray)),
-            Span::styled("Dashboard ", Style::default().fg(Color::White)),
-            Span::styled("[", Style::default().fg(Color::DarkGray)),
-            Span::styled("2", Style::default().fg(if self.active_tab == TabIndex::Graph { Color::Cyan } else { Color::DarkGray }).add_modifier(Modifier::BOLD)),
-            Span::styled("]", Style::default().fg(Color::DarkGray)),
-            Span::styled("Graph ", Style::default().fg(Color::White)),
-            Span::styled("[", Style::default().fg(Color::DarkGray)),
-            Span::styled("3", Style::default().fg(if self.active_tab == TabIndex::Logs { Color::Cyan } else { Color::DarkGray }).add_modifier(Modifier::BOLD)),
-            Span::styled("]", Style::default().fg(Color::DarkGray)),
-            Span::styled("Logs ", Style::default().fg(Color::White)),
-            Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-            Span::styled("", Style::default().fg(Color::Green)),
-            Span::styled(format!("{} ", nodes), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled("wallets ", Style::default().fg(Color::DarkGray)),
-            Span::styled("", Style::default().fg(Color::Yellow)),
-            Span::styled(format!("{} ", edges), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled("transfers ", Style::default().fg(Color::DarkGray)),
-            Span::styled("", Style::default().fg(Color::Blue)),
-            Span::styled(format!("{} ", logs_len), Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
-            Span::styled("logs", Style::default().fg(Color::DarkGray)),
+            Span::styled(" ", Style::default()),
+            // Tab indicators with active highlighting
+            Span::styled(if self.active_tab == TabIndex::Chat { "▐Chat▌" } else { " Chat " },
+                Style::default().fg(if self.active_tab == TabIndex::Chat { Color::Cyan } else { Color::DarkGray })),
+            Span::styled(if self.active_tab == TabIndex::Dashboard { "▐Dash▌" } else { " Dash " },
+                Style::default().fg(if self.active_tab == TabIndex::Dashboard { Color::Cyan } else { Color::DarkGray })),
+            Span::styled(if self.active_tab == TabIndex::Graph { "▐Graph▌" } else { " Graph " },
+                Style::default().fg(if self.active_tab == TabIndex::Graph { Color::Green } else { Color::DarkGray })),
+            Span::styled(if self.active_tab == TabIndex::Logs { "▐Logs▌" } else { " Logs " },
+                Style::default().fg(if self.active_tab == TabIndex::Logs { Color::Cyan } else { Color::DarkGray })),
+            Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+            // Network stats
+            Span::styled(format!("{}w ", nodes), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{}tx ", edges), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{}log ", logs_len), Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
+            // Depth indicator with visual bar
+            Span::styled("│ d:", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{}/{} ", current_depth, max_depth), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("[{}] ", layout_mode), Style::default().fg(Color::Yellow)),
         ]);
 
-        let line2 = Line::from(vec![
-            Span::styled(" [", Style::default().fg(Color::DarkGray)),
-            Span::styled("?/F1", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled("]", Style::default().fg(Color::DarkGray)),
-            Span::styled("Help ", Style::default().fg(Color::DarkGray)),
+        // Context-sensitive hints based on active tab
+        let context_hints: Vec<Span> = match self.active_tab {
+            TabIndex::Chat => vec![
+                Span::styled(" [", Style::default().fg(Color::DarkGray)),
+                Span::styled("i", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("type ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[", Style::default().fg(Color::DarkGray)),
+                Span::styled("Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("send ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[", Style::default().fg(Color::DarkGray)),
+                Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("scroll ", Style::default().fg(Color::DarkGray)),
+            ],
+            TabIndex::Graph => vec![
+                Span::styled(" [", Style::default().fg(Color::DarkGray)),
+                Span::styled("j/k", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("select ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[", Style::default().fg(Color::DarkGray)),
+                Span::styled("WASD", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("pan ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[", Style::default().fg(Color::DarkGray)),
+                Span::styled("+/-", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("zoom ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[", Style::default().fg(Color::DarkGray)),
+                Span::styled("L", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("layout ", Style::default().fg(Color::DarkGray)),
+            ],
+            TabIndex::Dashboard => vec![
+                Span::styled(" [", Style::default().fg(Color::DarkGray)),
+                Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("scroll insights ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[", Style::default().fg(Color::DarkGray)),
+                Span::styled("3", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("→ full graph ", Style::default().fg(Color::DarkGray)),
+            ],
+            TabIndex::Logs => vec![
+                Span::styled(" [", Style::default().fg(Color::DarkGray)),
+                Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("scroll ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[", Style::default().fg(Color::DarkGray)),
+                Span::styled("Home/End", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("top/bottom ", Style::default().fg(Color::DarkGray)),
+            ],
+            _ => vec![
+                Span::styled(" [", Style::default().fg(Color::DarkGray)),
+                Span::styled("Tab", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("]", Style::default().fg(Color::DarkGray)),
+                Span::styled("switch views ", Style::default().fg(Color::DarkGray)),
+            ],
+        };
+
+        let mut line2_spans = context_hints;
+        line2_spans.extend(vec![
+            Span::styled("│ ", Style::default().fg(Color::DarkGray)),
             Span::styled("[", Style::default().fg(Color::DarkGray)),
-            Span::styled("Tab", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled("?", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled("]", Style::default().fg(Color::DarkGray)),
-            Span::styled("Switch ", Style::default().fg(Color::DarkGray)),
+            Span::styled("help ", Style::default().fg(Color::DarkGray)),
             Span::styled("[", Style::default().fg(Color::DarkGray)),
-            Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled("q", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
             Span::styled("]", Style::default().fg(Color::DarkGray)),
-            Span::styled("Nav ", Style::default().fg(Color::DarkGray)),
-            Span::styled("[", Style::default().fg(Color::DarkGray)),
-            Span::styled("q/Esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::styled("]", Style::default().fg(Color::DarkGray)),
-            Span::styled("Quit", Style::default().fg(Color::DarkGray)),
+            Span::styled("quit", Style::default().fg(Color::DarkGray)),
         ]);
+
+        let line2 = Line::from(line2_spans);
 
         let status = Paragraph::new(vec![line1, line2]);
         f.render_widget(status, area);
@@ -5295,14 +5367,16 @@ impl OsvmApp {
             Line::from(""),
             Line::from(Span::styled(" ─── Graph View ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   j/k/↑/↓      Select node up/down"),
-            Line::from("   h/l/←/→      Navigate left/right"),
+            Line::from("   h/l/←/→      Navigate left/right (h/l also pan when no selection)"),
             Line::from("   W/A/S/D      Pan viewport up/left/down/right"),
             Line::from("   +/-          Zoom in/out"),
             Line::from("   [/]          Decrease/increase BFS exploration depth"),
+            Line::from("   L            Toggle layout (Force-directed ↔ Hierarchical)"),
             Line::from("   T            Toggle investigation trail breadcrumb"),
             Line::from("   /            Start search (ESC to cancel)"),
             Line::from("   n/N          Next/previous search result"),
             Line::from("   y            Copy to clipboard (wallet/search results)"),
+            Line::from("   r            Reset view (center on graph)"),
             Line::from("   Enter        Center graph on selected wallet (hop)"),
             Line::from("   Space        Expand or collapse node"),
             Line::from(""),

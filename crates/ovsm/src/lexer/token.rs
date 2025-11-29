@@ -217,6 +217,8 @@ pub enum TokenKind {
     At,
     /// Comma-At for LISP unquote-splice (,@)
     CommaAt,
+    /// Pipe operator (|) - used for refinement types
+    Pipe,
     /// Indent token (for Python-style syntax)
     Indent,
     /// Dedent token (for Python-style syntax)

@@ -152,6 +152,9 @@ impl SExprScanner {
             // Colon (for keywords)
             ':' => self.add_token(TokenKind::Colon),
 
+            // Pipe (for refinement types: {x : T | predicate})
+            '|' => self.add_token(TokenKind::Pipe),
+
             // Strings
             '"' => self.scan_string()?,
 

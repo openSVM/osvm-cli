@@ -381,6 +381,35 @@ impl TypeChecker {
                     ret: Box::new(ret_ty),
                 }
             }
+
+            // === Refinement Type Expressions ===
+            Expression::RefinedTypeExpr { var, base_type, predicate } => {
+                // Convert the AST to our type system's RefinementType
+                // First, infer the base type from the type expression
+                let base = self.infer_type(base_type);
+
+                // For now, we just validate the predicate is well-typed
+                // (should be boolean). We bind the variable with the base type.
+                self.ctx.push_scope();
+                self.ctx.define_var(var, base.clone());
+
+                let pred_type = self.infer_type(predicate);
+                if !matches!(pred_type, Type::Bool | Type::Any) {
+                    self.ctx.record_error(TypeError::new(format!(
+                        "refinement predicate must be boolean, found {}",
+                        pred_type
+                    )));
+                }
+
+                self.ctx.pop_scope();
+
+                // Return the refined type
+                Type::Refined(Box::new(crate::types::RefinementType::from_expr(
+                    var.clone(),
+                    base,
+                    predicate,
+                )))
+            }
         }
     }
 

@@ -119,6 +119,7 @@ impl SExprParser {
             TokenKind::Identifier(name) if name == "for" => self.parse_for(),
             TokenKind::Identifier(name) if name == "loop" => self.parse_loop_expr(),
             TokenKind::Identifier(name) if name == "lambda" => self.parse_lambda(),
+            TokenKind::Identifier(name) if name == "defn" => self.parse_defn(),
             TokenKind::Identifier(name) if name == "do" => self.parse_do(),
             TokenKind::Identifier(name) if name == "when" => self.parse_when(),
             TokenKind::Identifier(name) if name == "cond" => self.parse_cond(),
@@ -913,6 +914,44 @@ impl SExprParser {
     fn parse_object_literal(&mut self) -> Result<Expression> {
         self.consume(TokenKind::LeftBrace)?;
 
+        // Check for refinement type syntax: {var : Type | predicate}
+        // This is differentiated from object literal by: identifier COLON type PIPE predicate
+        if let TokenKind::Identifier(var_name) = &self.peek().kind {
+            let var_name = var_name.clone();
+
+            // Save position for backtracking
+            let saved_pos = self.current;
+
+            self.advance(); // consume identifier
+
+            // Check if followed by colon (might be refinement type)
+            if self.check(&TokenKind::Colon) {
+                self.advance(); // consume colon
+
+                // Parse the base type expression
+                let base_type = self.parse_expression()?;
+
+                // If followed by pipe, it's a refinement type
+                if self.check(&TokenKind::Pipe) {
+                    self.advance(); // consume pipe
+
+                    // Parse the predicate expression
+                    let predicate = self.parse_expression()?;
+
+                    self.consume(TokenKind::RightBrace)?;
+
+                    return Ok(Expression::RefinedTypeExpr {
+                        var: var_name,
+                        base_type: Box::new(base_type),
+                        predicate: Box::new(predicate),
+                    });
+                }
+            }
+
+            // Not a refinement type, backtrack and parse as object literal
+            self.current = saved_pos;
+        }
+
         let mut pairs = Vec::new();
         while !self.check(&TokenKind::RightBrace) {
             // Check for two syntaxes:
@@ -1093,6 +1132,123 @@ impl SExprParser {
             name: "->".to_string(),
             args,
         })
+    }
+
+    /// Parse (defn name (params...) -> ReturnType body)
+    /// or (defn name ((x : T) (y : U)) body) - typed function definition
+    ///
+    /// Syntax options:
+    ///   (defn add (x y) (+ x y))                           - untyped
+    ///   (defn add ((x : i64) (y : i64)) -> i64 (+ x y))    - fully typed
+    ///   (defn add ((x : i64) y) (+ x y))                   - partially typed
+    ///
+    /// This is syntactic sugar for: (define name (lambda ...))
+    fn parse_defn(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'defn'
+
+        // Parse function name
+        let name = if let TokenKind::Identifier(n) = &self.peek().kind {
+            n.clone()
+        } else {
+            return Err(self.expected_error(
+                "function name",
+                Some("Syntax: (defn name (params) body)\nExample: (defn add (x y) (+ x y))"),
+            ));
+        };
+        self.advance();
+
+        // Parse parameter list
+        self.consume(TokenKind::LeftParen)?;
+
+        let mut typed_params: Vec<(String, Option<Box<Expression>>)> = Vec::new();
+        let mut has_typed_params = false;
+
+        while !self.check(&TokenKind::RightParen) {
+            if self.check(&TokenKind::LeftParen) {
+                // Typed parameter: (name : Type) or (name Type)
+                self.advance(); // consume '('
+
+                let param_name = if let TokenKind::Identifier(n) = &self.peek().kind {
+                    n.clone()
+                } else {
+                    return Err(self.expected_error("parameter name", None));
+                };
+                self.advance();
+
+                // Check for colon (type annotation separator)
+                let type_expr = if self.check(&TokenKind::Colon) {
+                    self.advance(); // consume ':'
+                    has_typed_params = true;
+                    Some(Box::new(self.parse_expression()?))
+                } else if !self.check(&TokenKind::RightParen) {
+                    // No colon but there's something - treat it as type
+                    has_typed_params = true;
+                    Some(Box::new(self.parse_expression()?))
+                } else {
+                    None
+                };
+
+                self.consume(TokenKind::RightParen)?;
+                typed_params.push((param_name, type_expr));
+            } else if let TokenKind::Identifier(n) = &self.peek().kind {
+                // Simple untyped parameter
+                let param_name = n.clone();
+                self.advance();
+                typed_params.push((param_name, None));
+            } else {
+                return Err(self.expected_error(
+                    "parameter name or `(name : Type)`",
+                    Some("Parameters can be:\n  - Simple: x y z\n  - Typed: (x : i64) (y : u64)"),
+                ));
+            }
+        }
+        self.consume(TokenKind::RightParen)?; // close params list
+
+        // Check for optional return type annotation: -> ReturnType
+        let return_type = if self.check(&TokenKind::Arrow) {
+            self.advance(); // consume '->'
+            has_typed_params = true;
+            Some(Box::new(self.parse_expression()?))
+        } else {
+            None
+        };
+
+        // Parse body
+        let body = Box::new(self.parse_expression()?);
+
+        self.consume(TokenKind::RightParen)?;
+
+        // Generate the appropriate expression based on whether we have type annotations
+        if has_typed_params {
+            // Create a typed lambda for the body
+            let typed_lambda = Expression::TypedLambda {
+                typed_params,
+                return_type,
+                body,
+            };
+
+            // Wrap in define
+            Ok(Expression::ToolCall {
+                name: "define".to_string(),
+                args: vec![
+                    Argument::positional(Expression::Variable(name)),
+                    Argument::positional(typed_lambda),
+                ],
+            })
+        } else {
+            // Create untyped lambda
+            let params: Vec<String> = typed_params.into_iter().map(|(n, _)| n).collect();
+            let lambda = Expression::Lambda { params, body };
+
+            // Wrap in define
+            Ok(Expression::ToolCall {
+                name: "define".to_string(),
+                args: vec![
+                    Argument::positional(Expression::Variable(name)),
+                    Argument::positional(lambda),
+                ],
+            })
+        }
     }
 
     // Helper methods
@@ -1647,5 +1803,162 @@ mod tests {
 "#;
         let program = parse_str(source).unwrap();
         assert_eq!(program.statements.len(), 1);
+    }
+
+    #[test]
+    fn test_type_annotation_syntax() {
+        // Test (: expr type) type annotation
+        let program = parse_str("(: 42 i64)").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        // Verify it creates a TypeAnnotation AST node
+        if let Statement::Expression(Expression::TypeAnnotation { expr, type_expr }) =
+            &program.statements[0]
+        {
+            assert!(matches!(**expr, Expression::IntLiteral(42)));
+            assert!(matches!(**type_expr, Expression::Variable(ref name) if name == "i64"));
+        } else {
+            panic!("Expected TypeAnnotation expression");
+        }
+    }
+
+    #[test]
+    fn test_type_annotation_with_complex_expr() {
+        // Test annotation on complex expression
+        let program = parse_str("(: (+ x y) i64)").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        if let Statement::Expression(Expression::TypeAnnotation { expr, .. }) =
+            &program.statements[0]
+        {
+            assert!(matches!(**expr, Expression::Binary { .. }));
+        } else {
+            panic!("Expected TypeAnnotation expression");
+        }
+    }
+
+    #[test]
+    fn test_function_type_syntax() {
+        // Test (-> i64 i64) function type
+        let program = parse_str("(-> i64 i64)").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        // Function types are parsed as ToolCall with name "->"
+        if let Statement::Expression(Expression::ToolCall { name, args }) = &program.statements[0] {
+            assert_eq!(name, "->");
+            assert_eq!(args.len(), 2);
+        } else {
+            panic!("Expected ToolCall for function type");
+        }
+    }
+
+    #[test]
+    fn test_type_annotation_with_function_type() {
+        // Test combining annotation with function type: (: (lambda (x) x) (-> i64 i64))
+        let program = parse_str("(: (lambda (x) x) (-> i64 i64))").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        if let Statement::Expression(Expression::TypeAnnotation { expr, type_expr }) =
+            &program.statements[0]
+        {
+            // expr should be lambda
+            assert!(matches!(**expr, Expression::Lambda { .. }));
+            // type_expr should be function type (ToolCall with name "->")
+            if let Expression::ToolCall { name, args } = &**type_expr {
+                assert_eq!(name, "->");
+                assert_eq!(args.len(), 2);
+            } else {
+                panic!("Expected function type expression");
+            }
+        } else {
+            panic!("Expected TypeAnnotation expression");
+        }
+    }
+
+    #[test]
+    fn test_defn_untyped() {
+        // Simple untyped function definition
+        let program = parse_str("(defn add (x y) (+ x y))").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        // Should desugar to (define add (lambda (x y) (+ x y)))
+        if let Statement::Expression(Expression::ToolCall { name, args }) = &program.statements[0] {
+            assert_eq!(name, "define");
+            assert_eq!(args.len(), 2);
+            // Second arg should be a Lambda
+            assert!(matches!(args[1].value, Expression::Lambda { .. }));
+        } else {
+            panic!("Expected ToolCall define");
+        }
+    }
+
+    #[test]
+    fn test_defn_typed_params() {
+        // Typed parameters with colons
+        let program = parse_str("(defn add ((x : i64) (y : i64)) (+ x y))").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        // Should desugar to (define add (TypedLambda ...))
+        if let Statement::Expression(Expression::ToolCall { name, args }) = &program.statements[0] {
+            assert_eq!(name, "define");
+            assert_eq!(args.len(), 2);
+            // Second arg should be a TypedLambda
+            if let Expression::TypedLambda { typed_params, return_type, .. } = &args[1].value {
+                assert_eq!(typed_params.len(), 2);
+                assert_eq!(typed_params[0].0, "x");
+                assert!(typed_params[0].1.is_some());
+                assert_eq!(typed_params[1].0, "y");
+                assert!(typed_params[1].1.is_some());
+                assert!(return_type.is_none()); // No return type
+            } else {
+                panic!("Expected TypedLambda");
+            }
+        } else {
+            panic!("Expected ToolCall define");
+        }
+    }
+
+    #[test]
+    fn test_defn_with_return_type() {
+        // Full typed signature with return type
+        let program = parse_str("(defn add ((x : i64) (y : i64)) -> i64 (+ x y))").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        if let Statement::Expression(Expression::ToolCall { name, args }) = &program.statements[0] {
+            assert_eq!(name, "define");
+            if let Expression::TypedLambda { typed_params, return_type, .. } = &args[1].value {
+                assert_eq!(typed_params.len(), 2);
+                assert!(return_type.is_some());
+                // Check return type is i64
+                if let Some(ret) = return_type {
+                    assert!(matches!(**ret, Expression::Variable(ref n) if n == "i64"));
+                }
+            } else {
+                panic!("Expected TypedLambda");
+            }
+        } else {
+            panic!("Expected ToolCall define");
+        }
+    }
+
+    #[test]
+    fn test_defn_mixed_params() {
+        // Mixed typed and untyped params
+        let program = parse_str("(defn foo ((x : i64) y (z : bool)) (+ x y))").unwrap();
+        assert_eq!(program.statements.len(), 1);
+
+        if let Statement::Expression(Expression::ToolCall { name, args }) = &program.statements[0] {
+            assert_eq!(name, "define");
+            if let Expression::TypedLambda { typed_params, .. } = &args[1].value {
+                assert_eq!(typed_params.len(), 3);
+                assert!(typed_params[0].1.is_some()); // x has type
+                assert!(typed_params[1].1.is_none()); // y has no type
+                assert!(typed_params[2].1.is_some()); // z has type
+            } else {
+                panic!("Expected TypedLambda");
+            }
+        } else {
+            panic!("Expected ToolCall define");
+        }
     }
 }

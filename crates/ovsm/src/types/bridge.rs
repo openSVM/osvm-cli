@@ -194,6 +194,11 @@ impl TypeBridge {
             Type::Never => RegType::Unknown,
             Type::Var(_) => RegType::Unknown,
             Type::Unknown => RegType::Unknown,
+
+            // === Refinement Types ===
+            // For IR purposes, refinement types are treated as their base type
+            // The predicate information is used for verification, not code generation
+            Type::Refined(refined) => self.source_to_ir(&refined.base, ctx),
         }
     }
 
@@ -622,5 +627,55 @@ mod tests {
         // Unknown is always compatible (gradual typing)
         let ir = RegType::Unknown;
         assert!(bridge.types_compatible(&Type::U64, &ir, &ctx));
+    }
+
+    #[test]
+    fn test_refinement_type_conversion() {
+        use super::super::RefinementType;
+
+        let bridge = TypeBridge::new();
+        let ctx = TypeContext::new();
+
+        // Create a refinement type: {x : u64 | x < 10}
+        let refined = RefinementType::bounded_above(Type::U64, 10);
+        let refined_type = Type::Refined(Box::new(refined));
+
+        // Should convert to same IR type as the base type
+        let ir_ty = bridge.source_to_ir(&refined_type, &ctx);
+
+        assert!(matches!(
+            ir_ty,
+            RegType::Value { size: 8, signed: false }
+        ));
+
+        // Create a refinement type on i32: {x : i32 | x >= 0}
+        let refined_i32 = RefinementType::non_negative(Type::I32);
+        let refined_type_i32 = Type::Refined(Box::new(refined_i32));
+
+        let ir_ty_i32 = bridge.source_to_ir(&refined_type_i32, &ctx);
+        assert!(matches!(
+            ir_ty_i32,
+            RegType::Value { size: 4, signed: true }
+        ));
+    }
+
+    #[test]
+    fn test_refinement_type_compatibility() {
+        use super::super::RefinementType;
+
+        let bridge = TypeBridge::new();
+        let ctx = TypeContext::new();
+
+        // Refinement type should be compatible with its base type's IR form
+        let refined = RefinementType::range(Type::U64, 0, 100);
+        let refined_type = Type::Refined(Box::new(refined));
+
+        // Should match u64's IR type
+        let ir = RegType::Value { size: 8, signed: false };
+        assert!(bridge.types_compatible(&refined_type, &ir, &ctx));
+
+        // Should not match i32's IR type (wrong size)
+        let ir_wrong = RegType::Value { size: 4, signed: true };
+        assert!(!bridge.types_compatible(&refined_type, &ir_wrong, &ctx));
     }
 }
