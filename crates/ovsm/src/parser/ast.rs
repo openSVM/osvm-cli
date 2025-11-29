@@ -268,6 +268,32 @@ pub enum Expression {
         /// Body expressions evaluated with pattern bindings in scope
         body: Vec<Expression>,
     },
+
+    // ============================================================================
+    // Type System Expressions
+    // ============================================================================
+
+    /// Type annotation expression (: expr type)
+    /// Explicitly annotates an expression with a type for bidirectional type checking
+    /// Example: (: 42 u64) or (: (lambda (x) x) (-> i64 i64))
+    TypeAnnotation {
+        /// The expression being annotated
+        expr: Box<Expression>,
+        /// The type annotation (parsed as an expression for flexibility)
+        /// Simple: Variable("u64"), Complex: ToolCall for generic types
+        type_expr: Box<Expression>,
+    },
+
+    /// Typed lambda expression (lambda ((x : T) (y : U)) -> R body)
+    /// Lambda with explicit parameter types and optional return type
+    TypedLambda {
+        /// Parameters with optional type annotations: (name, Option<type_expr>)
+        typed_params: Vec<(String, Option<Box<Expression>>)>,
+        /// Optional return type annotation
+        return_type: Option<Box<Expression>>,
+        /// Body expression of the lambda
+        body: Box<Expression>,
+    },
 }
 
 /// Binary operators

@@ -41,9 +41,13 @@
 //! ```
 
 pub mod checker;
+pub mod bidirectional;
+pub mod bridge;
 
 // Re-export TypeChecker for convenience
 pub use checker::TypeChecker;
+pub use bidirectional::BidirectionalChecker;
+pub use bridge::{TypeBridge, TypeEnvSourceExt};
 
 use std::collections::HashMap;
 use std::fmt;

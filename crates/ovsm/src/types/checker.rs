@@ -321,6 +321,66 @@ impl TypeChecker {
                     self.infer_type(body.last().unwrap())
                 }
             }
+
+            // === Type Annotations ===
+            Expression::TypeAnnotation { expr, type_expr } => {
+                // Infer the expression type
+                let expr_ty = self.infer_type(expr);
+
+                // Parse the type annotation
+                let annotated_ty = self.parse_type_expr(type_expr);
+
+                // Check compatibility
+                if !matches!(annotated_ty, Type::Any) && !matches!(expr_ty, Type::Any) {
+                    if let Err(e) = self.ctx.unify(&expr_ty, &annotated_ty) {
+                        self.ctx.record_error(e);
+                    }
+                }
+
+                // Return the annotated type (user's intent)
+                annotated_ty
+            }
+
+            // === Typed Lambdas ===
+            Expression::TypedLambda { typed_params, return_type, body } => {
+                self.ctx.push_scope();
+
+                // Extract parameter types
+                let param_types: Vec<Type> = typed_params.iter()
+                    .map(|(name, maybe_type)| {
+                        let ty = match maybe_type {
+                            Some(type_expr) => self.parse_type_expr(type_expr),
+                            None => self.ctx.fresh_var(),
+                        };
+                        self.ctx.define_var(name, ty.clone());
+                        ty
+                    })
+                    .collect();
+
+                // Infer body type
+                let body_ty = self.infer_type(body);
+
+                // Check against return type annotation if present
+                let ret_ty = match return_type {
+                    Some(ret_expr) => {
+                        let annotated_ret = self.parse_type_expr(ret_expr);
+                        if !matches!(annotated_ret, Type::Any) && !matches!(body_ty, Type::Any) {
+                            if let Err(e) = self.ctx.unify(&body_ty, &annotated_ret) {
+                                self.ctx.record_error(e);
+                            }
+                        }
+                        annotated_ret
+                    }
+                    None => body_ty,
+                };
+
+                self.ctx.pop_scope();
+
+                Type::Fn {
+                    params: param_types,
+                    ret: Box::new(ret_ty),
+                }
+            }
         }
     }
 
@@ -658,6 +718,85 @@ impl TypeChecker {
     /// Check if there are any errors
     pub fn has_errors(&self) -> bool {
         self.ctx.has_errors()
+    }
+
+    /// Parse a type expression into a Type
+    fn parse_type_expr(&mut self, type_expr: &Expression) -> Type {
+        match type_expr {
+            // Simple type names: u64, i32, bool, etc.
+            Expression::Variable(name) => {
+                Type::from_name(name).unwrap_or_else(|| {
+                    // Check if it's a known struct type
+                    if self.ctx.lookup_struct(name).is_some() {
+                        Type::Struct(name.clone())
+                    } else {
+                        Type::Any // Gradual typing fallback
+                    }
+                })
+            }
+
+            // Function type: (-> ParamTypes... ReturnType)
+            Expression::ToolCall { name, args } if name == "->" => {
+                if args.is_empty() {
+                    return Type::Fn {
+                        params: vec![],
+                        ret: Box::new(Type::Unit),
+                    };
+                }
+
+                let param_types: Vec<Type> = args.iter()
+                    .take(args.len() - 1)
+                    .map(|arg| self.parse_type_expr(&arg.value))
+                    .collect();
+
+                let ret_type = self.parse_type_expr(&args.last().unwrap().value);
+
+                Type::Fn {
+                    params: param_types,
+                    ret: Box::new(ret_type),
+                }
+            }
+
+            // Generic types: (Array T), (Ptr T), etc.
+            Expression::ToolCall { name, args } => {
+                match name.as_str() {
+                    "Array" | "array" if !args.is_empty() => {
+                        let elem_ty = self.parse_type_expr(&args[0].value);
+                        Type::Array { element: Box::new(elem_ty), size: 0 }
+                    }
+                    "Ptr" | "ptr" if !args.is_empty() => {
+                        let inner = self.parse_type_expr(&args[0].value);
+                        Type::Ptr(Box::new(inner))
+                    }
+                    "Ref" | "ref" if !args.is_empty() => {
+                        let inner = self.parse_type_expr(&args[0].value);
+                        Type::Ref(Box::new(inner))
+                    }
+                    "RefMut" | "ref-mut" if !args.is_empty() => {
+                        let inner = self.parse_type_expr(&args[0].value);
+                        Type::RefMut(Box::new(inner))
+                    }
+                    "Tuple" | "tuple" => {
+                        let types: Vec<Type> = args.iter()
+                            .map(|arg| self.parse_type_expr(&arg.value))
+                            .collect();
+                        Type::Tuple(types)
+                    }
+                    _ => Type::Any,
+                }
+            }
+
+            Expression::NullLiteral => Type::Unit,
+
+            Expression::ArrayLiteral(elements) => {
+                let types: Vec<Type> = elements.iter()
+                    .map(|e| self.parse_type_expr(e))
+                    .collect();
+                Type::Tuple(types)
+            }
+
+            _ => Type::Any,
+        }
     }
 }
 

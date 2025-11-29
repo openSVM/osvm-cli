@@ -130,6 +130,12 @@ impl SExprParser {
             TokenKind::Dot => self.parse_field_access(),
             TokenKind::LeftBracket => self.parse_index_access(),
 
+            // Type annotation form (: expr type)
+            TokenKind::Colon => self.parse_type_annotation(),
+
+            // Function type form (-> param-types return-type)
+            TokenKind::Arrow => self.parse_function_type(),
+
             // Operators
             TokenKind::Plus
             | TokenKind::Minus
@@ -1027,6 +1033,66 @@ impl SExprParser {
         self.consume(TokenKind::RightParen)?;
 
         Ok(Expression::IndexAccess { array, index })
+    }
+
+    /// Parse (: expr type) - type annotation expression
+    /// Syntax: (: expression type-expression)
+    /// Examples:
+    ///   (: 42 u64)                      - annotate integer as u64
+    ///   (: (+ a b) i64)                 - annotate arithmetic result
+    ///   (: (lambda (x) x) (-> i64 i64)) - annotate lambda with function type
+    fn parse_type_annotation(&mut self) -> Result<Expression> {
+        self.advance(); // consume ':'
+
+        // Parse the expression being annotated
+        let expr = Box::new(self.parse_expression()?);
+
+        // Parse the type expression
+        // Type expressions can be:
+        // - Simple types: u64, i32, bool, string, etc.
+        // - Generic types: (Array u64), (Option i32)
+        // - Function types: (-> i64 i64) or (-> (i64 i64) i64) for multi-param
+        // - Pointer types: (Ptr u64), (Ref MyStruct)
+        let type_expr = Box::new(self.parse_expression()?);
+
+        self.consume(TokenKind::RightParen)?;
+
+        Ok(Expression::TypeAnnotation { expr, type_expr })
+    }
+
+    /// Parse (-> param-types return-type) - function type expression
+    /// Syntax:
+    ///   (-> ReturnType)                - Unit/void function
+    ///   (-> ParamType ReturnType)      - Single-param function
+    ///   (-> Param1 Param2 ReturnType)  - Multi-param function (last is return)
+    /// Examples:
+    ///   (-> i64)                       - () -> i64
+    ///   (-> i64 i64)                   - i64 -> i64
+    ///   (-> i64 i64 bool)              - (i64, i64) -> bool
+    fn parse_function_type(&mut self) -> Result<Expression> {
+        self.advance(); // consume '->'
+
+        // Collect all type expressions
+        let mut types = Vec::new();
+        while !self.check(&TokenKind::RightParen) {
+            types.push(self.parse_expression()?);
+        }
+        self.consume(TokenKind::RightParen)?;
+
+        if types.is_empty() {
+            return Err(Error::ParseError(
+                "Function type `(-> ...)` requires at least a return type".to_string(),
+            ));
+        }
+
+        // Last type is return type, rest are parameters
+        // Represented as ToolCall for consistency with other type expressions
+        let args: Vec<Argument> = types.into_iter().map(Argument::positional).collect();
+
+        Ok(Expression::ToolCall {
+            name: "->".to_string(),
+            args,
+        })
     }
 
     // Helper methods

@@ -7,9 +7,10 @@ use ratatui::{
 use std::collections::{HashMap, HashSet, VecDeque};
 use arboard::Clipboard;
 
-// Re-export forensics types for backward compatibility (only types not defined locally)
+// Re-export forensics types for backward compatibility
 pub use super::graph_forensics::{
-    GraphData, GraphForensics, MixerStats,
+    AlertSeverity, CircularFlow, GraphData, GraphForensics, MixerStats,
+    RapidFlowAlert, RiskExplanation, RiskLevel, WalletBehaviorType,
 };
 
 #[derive(Debug, Clone)]
@@ -82,62 +83,8 @@ pub enum SelectionMode {
     Edge { edge_idx: usize, from_node: usize, to_node: usize },  // Selected edge with endpoints
 }
 
-/// Wallet behavior classification based on transaction patterns
-#[derive(Debug, Clone, PartialEq)]
-pub enum WalletBehaviorType {
-    Bot,           // Regular intervals, high frequency, programmatic patterns
-    Exchange,      // Very high volume, many counterparties, round amounts
-    Trader,        // DEX interactions, moderate volume, varied timing
-    Mixer,         // Many small inputs/outputs, obfuscation patterns
-    EOA,           // Externally Owned Account - human-like patterns
-    Contract,      // Program account with deposits/withdrawals
-    Dormant,       // Very low activity
-}
-
-/// Rapid transfer detection alert
-#[derive(Debug, Clone)]
-pub struct RapidFlowAlert {
-    pub transfer_count: usize,
-    pub time_window_secs: u64,
-    pub total_volume: f64,
-    pub token: String,
-    pub severity: AlertSeverity,
-}
-
-/// Alert severity levels
-#[derive(Debug, Clone, PartialEq)]
-pub enum AlertSeverity {
-    Critical,  // >20 txns/min or >1000 SOL/min
-    High,      // >10 txns/min or >500 SOL/min
-    Medium,    // >5 txns/min or >100 SOL/min
-    Low,       // Informational
-}
-
-/// Circular flow pattern detection
-#[derive(Debug, Clone)]
-pub struct CircularFlow {
-    pub path: Vec<String>,      // Wallet addresses in the cycle
-    pub total_amount: f64,
-    pub token: String,
-    pub cycle_length: usize,
-}
-
-/// Explainable risk assessment
-#[derive(Debug, Clone)]
-pub struct RiskExplanation {
-    pub score: f64,              // 0-100
-    pub level: RiskLevel,
-    pub reasons: Vec<String>,    // Human-readable explanations
-    pub alerts: Vec<String>,     // Critical findings
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum RiskLevel {
-    Critical,  // 75-100
-    High,      // 50-75
-    Medium,    // 25-50
-    Low,       // 0-25
-}
+// NOTE: WalletBehaviorType, RapidFlowAlert, AlertSeverity, CircularFlow,
+// RiskExplanation, RiskLevel are re-exported from graph_forensics module above
 
 /// Incremental risk statistics - updated O(1) on each edge/node add
 /// Avoids full graph traversal for most risk factors
@@ -437,6 +384,18 @@ pub struct WalletGraph {
     bfs_distances: HashMap<usize, usize>,
     /// Forensics engine instance for reuse
     forensics: GraphForensics,
+    /// Cached wallet behavior classifications (wallet_idx -> behavior)
+    /// Invalidated when edges involving the wallet change
+    cached_wallet_behaviors: HashMap<usize, WalletBehaviorType>,
+    /// Cached mixer node indices (HashSet for O(1) lookup)
+    /// Recomputed when layout_dirty is true
+    cached_mixer_nodes: HashSet<usize>,
+    /// Flag indicating if entity clusters need recalculation
+    entity_clusters_dirty: bool,
+    /// Force-directed layout: node velocities (vx, vy)
+    node_velocities: Vec<(f64, f64)>,
+    /// Force-directed layout: physics simulation state
+    physics: ForceDirectedPhysics,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -702,6 +661,9 @@ impl WalletGraph {
             incremental_risk: IncrementalRiskStats::default(),
             bfs_distances: HashMap::new(),
             forensics: GraphForensics::with_defaults(),
+            cached_wallet_behaviors: HashMap::new(),
+            cached_mixer_nodes: HashSet::new(),
+            entity_clusters_dirty: true, // Need computation on first access
         }
     }
 
@@ -1403,8 +1365,9 @@ impl WalletGraph {
             self.connected_nodes.insert(idx);
         }
 
-        // Invalidate risk cache since graph structure changed
+        // Invalidate caches since graph structure changed
         self.risk_cache_dirty = true;
+        self.layout_dirty = true;  // New node requires layout recomputation
 
         idx
     }
@@ -1512,6 +1475,12 @@ impl WalletGraph {
             // Invalidate caches since graph structure changed
             self.risk_cache_dirty = true;
             self.layout_dirty = true;
+            // Invalidate behavior cache for affected wallets (from and to)
+            // since their transaction patterns have changed
+            self.cached_wallet_behaviors.remove(&from);
+            self.cached_wallet_behaviors.remove(&to);
+            // Invalidate entity clusters (graph structure changed)
+            self.entity_clusters_dirty = true;
         }
     }
 
@@ -1934,54 +1903,9 @@ impl WalletGraph {
     }
 
     /// Detect mixing/laundering patterns and return list of mixer node indices
-    /// Pattern: high in-degree + high out-degree + rapid turnover
+    /// Delegates to forensics engine for pattern detection
     fn detect_mixer_nodes(&self) -> Vec<usize> {
-        let mut mixers = Vec::new();
-
-        for (idx, _) in self.nodes.iter().enumerate() {
-            let in_count = self.incoming_edges(idx).len();
-            let out_count = self.outgoing_edges(idx).len();
-
-            // Heuristic: Mixer if receives from 3+ sources AND sends to 3+ destinations
-            // This catches split→shuffle→consolidate patterns
-            if in_count >= 3 && out_count >= 3 {
-                mixers.push(idx);
-            }
-        }
-
-        mixers
-    }
-
-    /// Calculate mixer statistics (for collapsed visualization)
-    fn get_mixer_stats(&self, node_idx: usize) -> MixerStats {
-        let incoming = self.incoming_edges(node_idx);
-        let outgoing = self.outgoing_edges(node_idx);
-
-        let mut total_in = 0.0;
-        let mut total_out = 0.0;
-        let mut unique_tokens = std::collections::HashSet::new();
-
-        for edge_idx in &incoming {
-            if let Some((_, _, label)) = self.connections.get(*edge_idx) {
-                total_in += label.amount;
-                unique_tokens.insert(label.token.clone());
-            }
-        }
-
-        for edge_idx in &outgoing {
-            if let Some((_, _, label)) = self.connections.get(*edge_idx) {
-                total_out += label.amount;
-                unique_tokens.insert(label.token.clone());
-            }
-        }
-
-        MixerStats {
-            sources: incoming.len(),
-            destinations: outgoing.len(),
-            total_in,
-            total_out,
-            unique_tokens: unique_tokens.len(),
-        }
+        self.forensics.detect_mixer_nodes(self)
     }
 
     pub fn render(&mut self, f: &mut Frame, area: Rect) {
@@ -2002,15 +1926,15 @@ impl WalletGraph {
             (area, None)
         };
 
-        // Detect mixer nodes for visualization (uses forensics engine)
-        let mixer_nodes = self.forensics.detect_mixer_nodes(self);
-
-        // Only recompute layout when graph structure changes (layout_dirty flag)
+        // Only recompute layout and cached data when graph structure changes
         // This is O(n²) and should NOT run every frame
         if self.layout_dirty && !self.nodes.is_empty() && !self.connections.is_empty() {
             self.compute_bfs_distances();  // Compute proper BFS distances
             self.compute_hierarchical_layout();
             self.update_node_filtering();
+            // Update cached mixer nodes (converts Vec to HashSet for O(1) lookup)
+            let mixer_vec = self.forensics.detect_mixer_nodes(self);
+            self.cached_mixer_nodes = mixer_vec.into_iter().collect();
             self.layout_dirty = false;
         }
 
@@ -2176,8 +2100,8 @@ impl WalletGraph {
                     if idx < self.node_positions.len() {
                         let (x, y) = self.node_positions[idx];
 
-                        // Check if this is a mixer node
-                        let is_mixer = mixer_nodes.contains(&idx);
+                        // Check if this is a mixer node (using cached HashSet for O(1) lookup)
+                        let is_mixer = self.cached_mixer_nodes.contains(&idx);
                         let is_selected = Some(idx) == self.selected_node();
                         let is_search_match = self.search_results.contains(&idx);
 
@@ -2523,172 +2447,39 @@ impl WalletGraph {
     }
 
     /// Detect rapid transfer patterns (velocity analysis)
+    /// Delegates to the forensics engine for burst detection
     pub fn detect_rapid_transfers(&self) -> Vec<RapidFlowAlert> {
-        self.detect_rapid_transfers_with_config(&crate::utils::forensics_config::ForensicsConfig::load().unwrap_or_default())
-    }
-
-    /// Detect rapid transfer patterns with custom configuration
-    pub fn detect_rapid_transfers_with_config(&self, config: &crate::utils::forensics_config::ForensicsConfig) -> Vec<RapidFlowAlert> {
-        use std::collections::HashMap;
-
-        let mut alerts = Vec::new();
-
-        // Parse timestamps and group by time windows
-        let mut time_buckets: HashMap<String, Vec<(u64, &EdgeLabel)>> = HashMap::new();
-
-        for (_, _, label) in &self.connections {
-            if let Some(timestamp_str) = &label.timestamp {
-                // Try to parse ISO 8601 or Unix timestamp
-                if let Ok(unix_time) = timestamp_str.parse::<u64>() {
-                    let bucket_key = format!("{}_{}", label.token, unix_time / 3600); // Hour buckets
-                    time_buckets.entry(bucket_key).or_insert_with(Vec::new).push((unix_time, label));
-                }
-            }
-        }
-
-        // Analyze each bucket for rapid activity
-        for (_, transfers) in time_buckets {
-            if transfers.len() < 2 {
-                continue;
-            }
-
-            let mut sorted_transfers = transfers;
-            sorted_transfers.sort_by_key(|(time, _)| *time);
-
-            // Sliding window: check for bursts
-            for window_size in &config.thresholds.time_windows {
-                let mut i = 0;
-                while i < sorted_transfers.len() {
-                    let start_time = sorted_transfers[i].0;
-                    let mut j = i;
-                    let mut count = 0;
-                    let mut total_volume = 0.0;
-
-                    while j < sorted_transfers.len() && sorted_transfers[j].0 - start_time <= *window_size {
-                        count += 1;
-                        total_volume += sorted_transfers[j].1.amount;
-                        j += 1;
-                    }
-
-                    // Determine severity using configured thresholds
-                    let txns_per_min = count as f64 / (*window_size as f64 / 60.0);
-                    let vol_per_min = total_volume / (*window_size as f64 / 60.0);
-
-                    let severity = if txns_per_min > config.thresholds.rapid_txns_critical || vol_per_min > config.thresholds.rapid_volume_critical {
-                        AlertSeverity::Critical
-                    } else if txns_per_min > config.thresholds.rapid_txns_critical / 2.0 || vol_per_min > config.thresholds.rapid_volume_critical / 2.0 {
-                        AlertSeverity::High
-                    } else if txns_per_min > config.thresholds.rapid_txns_critical / 4.0 || vol_per_min > config.thresholds.rapid_volume_critical / 4.0 {
-                        AlertSeverity::Medium
-                    } else if count >= 5 {
-                        AlertSeverity::Low
-                    } else {
-                        i += 1;
-                        continue;
-                    };
-
-                    if count >= 5 {
-                        alerts.push(RapidFlowAlert {
-                            transfer_count: count,
-                            time_window_secs: *window_size,
-                            total_volume,
-                            token: sorted_transfers[i].1.token.clone(),
-                            severity,
-                        });
-                    }
-
-                    i += 1;
-                }
-            }
-        }
-
-        alerts
+        self.forensics.detect_rapid_transfers(self)
     }
 
     /// Detect circular flow patterns (A→B→C→A)
+    /// Delegates to the forensics engine for proper cycle detection
     pub fn detect_circular_flows(&self) -> Vec<CircularFlow> {
-        use std::collections::{HashMap, HashSet};
-
-        let mut cycles = Vec::new();
-
-        // Build adjacency list
-        let mut adj: HashMap<usize, Vec<(usize, &EdgeLabel)>> = HashMap::new();
-        for (from, to, label) in &self.connections {
-            adj.entry(*from).or_insert_with(Vec::new).push((*to, label));
-        }
-
-        // DFS to find cycles (limit depth to 5 for performance)
-        let mut visited = HashSet::new();
-        let mut path = Vec::new();
-
-        for start_idx in 0..self.nodes.len() {
-            self.dfs_find_cycles(start_idx, start_idx, &adj, &mut visited, &mut path, &mut cycles, 0, 5);
-        }
-
-        cycles
+        self.forensics.detect_circular_flows(self)
     }
 
-    fn dfs_find_cycles(
-        &self,
-        start: usize,
-        current: usize,
-        adj: &std::collections::HashMap<usize, Vec<(usize, &EdgeLabel)>>,
-        visited: &mut std::collections::HashSet<usize>,
-        path: &mut Vec<(usize, String, f64)>,
-        cycles: &mut Vec<CircularFlow>,
-        depth: usize,
-        max_depth: usize,
-    ) {
-        if depth > max_depth {
-            return;
+    /// Classify wallet behavior based on transaction patterns (cached)
+    /// Uses memoization to avoid recomputing for the same wallet on every frame
+    pub fn classify_wallet_behavior(&mut self, wallet_idx: usize) -> WalletBehaviorType {
+        // Check cache first - O(1) lookup
+        if let Some(cached) = self.cached_wallet_behaviors.get(&wallet_idx) {
+            return cached.clone();
         }
 
-        if visited.contains(&current) {
-            // Check if we've returned to start
-            if current == start && path.len() >= 3 {
-                let mut cycle_path = Vec::new();
-                let mut total_amount = 0.0;
-                let token = path[0].1.clone();
-                let cycle_length = path.len();
-
-                for (idx, _token, amount) in path.iter() {
-                    cycle_path.push(self.nodes[*idx].0.clone());
-                    total_amount += *amount;
-                }
-
-                cycles.push(CircularFlow {
-                    path: cycle_path,
-                    total_amount,
-                    token,
-                    cycle_length,
-                });
-            }
-            return;
-        }
-
-        visited.insert(current);
-
-        if let Some(neighbors) = adj.get(&current) {
-            for (next, label) in neighbors {
-                path.push((current, label.token.clone(), label.amount));
-                self.dfs_find_cycles(start, *next, adj, visited, path, cycles, depth + 1, max_depth);
-                path.pop();
-            }
-        }
-
-        visited.remove(&current);
+        // Compute and cache (use local implementation)
+        let behavior = self.classify_wallet_behavior_impl(wallet_idx);
+        self.cached_wallet_behaviors.insert(wallet_idx, behavior.clone());
+        behavior
     }
 
-    /// Classify wallet behavior based on transaction patterns
-    pub fn classify_wallet_behavior(&self, wallet_idx: usize) -> WalletBehaviorType {
-        use std::collections::HashMap;
-
+    /// Internal implementation of wallet behavior classification
+    fn classify_wallet_behavior_impl(&self, wallet_idx: usize) -> WalletBehaviorType {
         // Count incoming and outgoing edges
         let mut incoming = 0;
         let mut outgoing = 0;
         let mut total_in = 0.0;
         let mut total_out = 0.0;
-        let mut counterparties: HashMap<usize, usize> = HashMap::new();
+        let mut counterparties: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
         let mut timestamps = Vec::new();
 
         for (from, to, label) in &self.connections {
@@ -2886,115 +2677,23 @@ impl WalletGraph {
     }
 
     /// Calculate explainable risk score with detailed reasoning (internal implementation)
+    /// Delegates to forensics engine for comprehensive analysis
     fn calculate_explainable_risk_impl(&self) -> RiskExplanation {
-        let mut score: f64 = 0.0;
-        let mut reasons = Vec::new();
-        let mut alerts = Vec::new();
-
-        // 1. Network complexity analysis
-        let complexity_ratio = self.connections.len() as f64 / self.nodes.len().max(1) as f64;
-        if complexity_ratio > 5.0 {
-            score += 30.0;
-            alerts.push(format!("🚨 CRITICAL: Very high network complexity ({:.1} edges/node)", complexity_ratio));
-            reasons.push(format!("Network complexity ratio of {:.1} indicates potential mixing/obfuscation", complexity_ratio));
-        } else if complexity_ratio > 3.0 {
-            score += 15.0;
-            reasons.push(format!("Elevated network complexity ({:.1} edges/node)", complexity_ratio));
-        }
-
-        // 2. Rapid transfer detection
-        let rapid_flows = self.detect_rapid_transfers();
-        for alert in rapid_flows.iter().filter(|a| matches!(a.severity, AlertSeverity::Critical | AlertSeverity::High)) {
-            score += 15.0;
-            alerts.push(format!(
-                "⚡ RAPID ACTIVITY: {} transfers in {}s ({:.2} {})",
-                alert.transfer_count,
-                alert.time_window_secs,
-                alert.total_volume,
-                alert.token
-            ));
-        }
-        if !rapid_flows.is_empty() {
-            reasons.push(format!("Detected {} rapid transfer burst(s)", rapid_flows.len()));
-        }
-
-        // 3. Circular flow detection
-        let circular_flows = self.detect_circular_flows();
-        for cycle in circular_flows.iter().take(3) {
-            score += 20.0;
-            alerts.push(format!(
-                "🔄 CIRCULAR FLOW: {} wallets, {:.2} {} total",
-                cycle.cycle_length,
-                cycle.total_amount,
-                cycle.token
-            ));
-        }
-        if !circular_flows.is_empty() {
-            reasons.push(format!("Detected {} circular flow pattern(s) - potential wash trading", circular_flows.len()));
-        }
-
-        // 4. Whale activity
-        let whale_flows = self.get_whale_flows(100.0);
-        if whale_flows.len() > 5 {
-            score += 15.0;
-            let total_whale: f64 = whale_flows.iter().map(|e| e.amount).sum();
-            reasons.push(format!("High whale activity: {} large transfers totaling {:.2} SOL", whale_flows.len(), total_whale));
-        }
-
-        // 5. Wallet behavior analysis
-        let target_behavior = self.classify_wallet_behavior(0);
-        match target_behavior {
-            WalletBehaviorType::Mixer => {
-                score += 25.0;
-                alerts.push("🔴 MIXER DETECTED: Wallet exhibits mixing/tumbling behavior".to_string());
-            }
-            WalletBehaviorType::Bot => {
-                score += 10.0;
-                reasons.push("Programmatic bot activity detected (regular intervals)".to_string());
-            }
-            WalletBehaviorType::Exchange => {
-                score -= 5.0; // Exchanges are high-volume but legitimate
-                reasons.push("Exchange-like behavior (high volume, many counterparties)".to_string());
-            }
-            _ => {}
-        }
-
-        // 6. Token diversity
-        let tokens = self.get_unique_tokens();
-        if tokens.len() > 20 {
-            score += 10.0;
-            reasons.push(format!("Very high token diversity ({} tokens) may indicate portfolio mixing", tokens.len()));
-        }
-
-        // 7. Hub wallet detection
-        let (sources, sinks, hubs) = self.analyze_wallet_patterns();
-        if hubs > 3 {
-            score += 10.0;
-            reasons.push(format!("{} hub wallets detected - potential coordination point", hubs));
-        }
-
-        // Cap score and determine level
-        score = score.min(100.0_f64).max(0.0_f64);
-        let level = if score >= 75.0 {
-            RiskLevel::Critical
-        } else if score >= 50.0 {
-            RiskLevel::High
-        } else if score >= 25.0 {
-            RiskLevel::Medium
-        } else {
-            RiskLevel::Low
-        };
-
-        RiskExplanation {
-            score,
-            level,
-            reasons,
-            alerts,
-        }
+        self.forensics.calculate_explainable_risk(self)
     }
 
-    /// Detect entity clusters in the wallet graph
-    pub fn detect_entity_clusters(&mut self) {
+    /// Get entity clusters with lazy computation (cached)
+    /// Recomputes only when graph structure has changed
+    pub fn get_entity_clusters(&mut self) -> &Vec<crate::utils::entity_clustering::EntityCluster> {
+        if self.entity_clusters_dirty {
+            self.detect_entity_clusters_impl();
+            self.entity_clusters_dirty = false;
+        }
+        &self.entity_clusters
+    }
+
+    /// Detect entity clusters in the wallet graph (internal implementation)
+    fn detect_entity_clusters_impl(&mut self) {
         use crate::utils::entity_clustering::{EntityClusterer, WalletMetadata, TransferMetadata};
 
         // Build metadata from graph

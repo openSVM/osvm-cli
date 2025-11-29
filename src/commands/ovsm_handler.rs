@@ -230,6 +230,7 @@ pub async fn handle_ovsm_command(
                 source_map: false,
                 sbpf_version: ovsm::compiler::SbpfVersion::V1,  // V1 with relocations for comparison
                 enable_solana_abi: false,  // Disabled until opcode issues are fixed
+                type_check_mode: ovsm::compiler::TypeCheckMode::Legacy,  // Use existing IR-level checker
             };
 
             let compiler = Compiler::new(options);

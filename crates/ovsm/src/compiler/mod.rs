@@ -55,6 +55,18 @@ pub enum SbpfVersion {
     V2,
 }
 
+/// Type checking mode for compilation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TypeCheckMode {
+    /// No additional type checking (use existing IR-level checker only)
+    #[default]
+    Legacy,
+    /// Gradual typing - untyped code gets Type::Any, no errors for missing annotations
+    Gradual,
+    /// Strict typing - all type mismatches are errors
+    Strict,
+}
+
 /// Compilation options
 #[derive(Debug, Clone)]
 pub struct CompileOptions {
@@ -70,6 +82,8 @@ pub struct CompileOptions {
     pub sbpf_version: SbpfVersion,
     /// Enable Solana ABI compliant entrypoint with deserialization
     pub enable_solana_abi: bool,
+    /// Enable bidirectional type inference (gradual = false for strict checking)
+    pub type_check_mode: TypeCheckMode,
 }
 
 impl Default for CompileOptions {
@@ -81,6 +95,7 @@ impl Default for CompileOptions {
             source_map: false,
             sbpf_version: SbpfVersion::V1, // V1 with relocations for comparison
             enable_solana_abi: false,  // Temporarily disabled while fixing opcode issues
+            type_check_mode: TypeCheckMode::Legacy, // Use existing checker by default
         }
     }
 }
@@ -100,6 +115,8 @@ pub struct CompileResult {
     pub warnings: Vec<String>,
     /// Verification result
     pub verification: Option<VerifyResult>,
+    /// Type errors from bidirectional checker (if enabled)
+    pub type_errors: Vec<String>,
 }
 
 /// OVSM to sBPF Compiler
@@ -121,7 +138,38 @@ impl Compiler {
         let mut parser = Parser::new(tokens);
         let program = parser.parse()?;
 
-        // Phase 2: Type check
+        // Phase 1.5: Bidirectional type checking (if enabled)
+        let mut type_errors = Vec::new();
+        if self.options.type_check_mode != TypeCheckMode::Legacy {
+            use crate::types::BidirectionalChecker;
+
+            let mut bidir_checker = match self.options.type_check_mode {
+                TypeCheckMode::Strict => BidirectionalChecker::strict(),
+                _ => BidirectionalChecker::new(), // Gradual mode
+            };
+
+            // Run bidirectional type inference
+            for stmt in &program.statements {
+                if let crate::parser::Statement::Expression(expr) = stmt {
+                    bidir_checker.synth(expr);
+                }
+            }
+
+            // Collect any errors
+            for err in bidir_checker.errors() {
+                type_errors.push(err.to_string());
+            }
+
+            // In strict mode, fail on type errors
+            if self.options.type_check_mode == TypeCheckMode::Strict && !type_errors.is_empty() {
+                return Err(Error::compiler(format!(
+                    "Type errors: {}",
+                    type_errors.join("; ")
+                )));
+            }
+        }
+
+        // Phase 2: Type check (legacy IR-level checker)
         let mut type_checker = TypeChecker::new();
         let typed_program = type_checker.check(&program)?;
 
@@ -201,11 +249,40 @@ impl Compiler {
             sbpf_instruction_count: sbpf_program.len(),
             warnings,
             verification: Some(verification),
+            type_errors,
         })
     }
 
     /// Compile from already-parsed AST
     pub fn compile_ast(&self, program: &Program) -> Result<CompileResult> {
+        // Bidirectional type checking (if enabled)
+        let mut type_errors = Vec::new();
+        if self.options.type_check_mode != TypeCheckMode::Legacy {
+            use crate::types::BidirectionalChecker;
+
+            let mut bidir_checker = match self.options.type_check_mode {
+                TypeCheckMode::Strict => BidirectionalChecker::strict(),
+                _ => BidirectionalChecker::new(),
+            };
+
+            for stmt in &program.statements {
+                if let crate::parser::Statement::Expression(expr) = stmt {
+                    bidir_checker.synth(expr);
+                }
+            }
+
+            for err in bidir_checker.errors() {
+                type_errors.push(err.to_string());
+            }
+
+            if self.options.type_check_mode == TypeCheckMode::Strict && !type_errors.is_empty() {
+                return Err(Error::compiler(format!(
+                    "Type errors: {}",
+                    type_errors.join("; ")
+                )));
+            }
+        }
+
         let mut type_checker = TypeChecker::new();
         let typed_program = type_checker.check(program)?;
 
@@ -279,6 +356,7 @@ impl Compiler {
             sbpf_instruction_count: sbpf_program.len(),
             warnings,
             verification: Some(verification),
+            type_errors,
         })
     }
 }

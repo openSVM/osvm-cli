@@ -54,6 +54,64 @@ pub struct TransferData {
     pub timestamp: Option<String>,
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Real-Time Streaming Graph Updates
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Message types for streaming graph updates from background fetcher
+#[derive(Clone, Debug)]
+pub enum StreamingUpdate {
+    /// New transfer discovered
+    Transfer {
+        from: String,
+        to: String,
+        amount: f64,
+        token: String,
+        timestamp: Option<String>,
+        signature: Option<String>,
+    },
+    /// New wallet discovered (not yet connected)
+    NewWallet {
+        address: String,
+        discovered_via: String,  // which wallet led to this one
+    },
+    /// Status update from fetcher
+    Status {
+        message: String,
+        is_error: bool,
+    },
+    /// Streaming paused/resumed
+    StreamingStateChange {
+        is_active: bool,
+    },
+}
+
+/// Streaming state for real-time updates
+#[derive(Clone, Debug)]
+pub struct StreamingState {
+    pub is_enabled: bool,           // User toggle for streaming
+    pub is_active: bool,            // Currently fetching
+    pub last_fetch: Option<std::time::Instant>,
+    pub fetch_interval_secs: u64,   // How often to poll (default 30s)
+    pub transfers_received: usize,  // Count since start
+    pub last_signature: Option<String>,  // For pagination
+    pub error_count: usize,         // Consecutive errors
+}
+
+impl Default for StreamingState {
+    fn default() -> Self {
+        Self {
+            is_enabled: false,
+            is_active: false,
+            last_fetch: None,
+            fetch_interval_secs: 30,
+            transfers_received: 0,
+            last_signature: None,
+            error_count: 0,
+        }
+    }
+}
+
 /// Conversation turn for memory - stores Q&A pairs
 #[derive(Clone, Debug)]
 pub struct ConversationTurn {
@@ -298,6 +356,10 @@ pub struct OsvmApp {
     pub federation_delete_pending: Option<String>,
     pub federation_selected_session: Option<usize>,
     pub federation_show_annotations: bool,
+    // Real-time streaming graph updates
+    pub streaming_update_rx: Option<Receiver<StreamingUpdate>>,
+    pub streaming_update_tx: Option<Sender<StreamingUpdate>>,
+    pub streaming_state: StreamingState,
 }
 
 /// Real-time network statistics
@@ -1655,6 +1717,10 @@ impl OsvmApp {
             federation_delete_pending: None,
             federation_selected_session: None,
             federation_show_annotations: false,
+            // Streaming graph updates - channels created lazily
+            streaming_update_rx: None,
+            streaming_update_tx: None,
+            streaming_state: StreamingState::default(),
         }
     }
 
@@ -1665,6 +1731,28 @@ impl OsvmApp {
         self.runtime_handle = Some(handle);
         self.chat_response_tx = Some(tx);
         self.chat_response_rx = Some(rx);
+
+        // Also initialize streaming channel
+        let (streaming_tx, streaming_rx) = mpsc::channel::<StreamingUpdate>();
+        self.streaming_update_tx = Some(streaming_tx);
+        self.streaming_update_rx = Some(streaming_rx);
+    }
+
+    /// Get a clone of the streaming update sender for background tasks
+    pub fn get_streaming_tx(&self) -> Option<Sender<StreamingUpdate>> {
+        self.streaming_update_tx.clone()
+    }
+
+    /// Toggle streaming updates on/off
+    pub fn toggle_streaming(&mut self) {
+        self.streaming_state.is_enabled = !self.streaming_state.is_enabled;
+        if let Ok(mut logs) = self.logs.lock() {
+            if self.streaming_state.is_enabled {
+                logs.push("🔴 LIVE: Real-time streaming enabled".to_string());
+            } else {
+                logs.push("⏸ Streaming paused".to_string());
+            }
+        }
     }
 
     /// Get a clone of the chat response sender for background tasks
@@ -2552,12 +2640,116 @@ impl OsvmApp {
         }
     }
 
+    /// Poll for streaming graph updates from background fetcher
+    fn poll_streaming_updates(&mut self) {
+        if let Some(rx) = &self.streaming_update_rx {
+            // Non-blocking check for updates (process multiple per tick)
+            let mut updates_processed = 0;
+            while let Ok(update) = rx.try_recv() {
+                updates_processed += 1;
+                match update {
+                    StreamingUpdate::Transfer { from, to, amount, token, timestamp, signature } => {
+                        // Add transfer to graph using add_connection
+                        // (add_connection handles creating wallets if needed)
+                        if let Ok(mut graph) = self.wallet_graph.lock() {
+                            // add_connection needs addresses to already exist in nodes
+                            // Use add_wallet with proper signature
+                            let from_label = if from.len() > 12 {
+                                format!("{}...{}", &from[..6], &from[from.len()-4..])
+                            } else {
+                                from.clone()
+                            };
+                            let to_label = if to.len() > 12 {
+                                format!("{}...{}", &to[..6], &to[to.len()-4..])
+                            } else {
+                                to.clone()
+                            };
+                            graph.add_wallet(
+                                from.clone(),
+                                crate::utils::tui::graph::WalletNodeType::Funding,
+                                from_label,
+                                None,
+                                None,
+                            );
+                            graph.add_wallet(
+                                to.clone(),
+                                crate::utils::tui::graph::WalletNodeType::Recipient,
+                                to_label,
+                                None,
+                                None,
+                            );
+                            graph.add_connection(&from, &to, amount, token.clone(), timestamp, signature);
+                        }
+                        self.streaming_state.transfers_received += 1;
+
+                        // Log the transfer
+                        if let Ok(mut logs) = self.logs.lock() {
+                            let short_from = if from.len() > 8 { &from[..8] } else { &from };
+                            let short_to = if to.len() > 8 { &to[..8] } else { &to };
+                            logs.push(format!(
+                                "🔴 LIVE: {}...→{}... {:.4} {}",
+                                short_from, short_to, amount, token
+                            ));
+                            // Keep logs bounded
+                            while logs.len() > 100 {
+                                logs.remove(0);
+                            }
+                        }
+                    }
+                    StreamingUpdate::NewWallet { address, discovered_via } => {
+                        // Add new wallet to graph with proper signature
+                        if let Ok(mut graph) = self.wallet_graph.lock() {
+                            let label = if address.len() > 12 {
+                                format!("{}...{}", &address[..6], &address[address.len()-4..])
+                            } else {
+                                address.clone()
+                            };
+                            graph.add_wallet(
+                                address.clone(),
+                                crate::utils::tui::graph::WalletNodeType::Funding,
+                                label,
+                                None,
+                                None,
+                            );
+                        }
+                        if let Ok(mut logs) = self.logs.lock() {
+                            let short = if address.len() > 8 { &address[..8] } else { &address };
+                            logs.push(format!("🔴 New wallet: {}... (via {})", short, discovered_via));
+                        }
+                    }
+                    StreamingUpdate::Status { message, is_error } => {
+                        if let Ok(mut logs) = self.logs.lock() {
+                            let prefix = if is_error { "❌" } else { "ℹ️" };
+                            logs.push(format!("{} {}", prefix, message));
+                        }
+                        if is_error {
+                            self.streaming_state.error_count += 1;
+                        }
+                    }
+                    StreamingUpdate::StreamingStateChange { is_active } => {
+                        self.streaming_state.is_active = is_active;
+                        if is_active {
+                            self.streaming_state.last_fetch = Some(std::time::Instant::now());
+                        }
+                    }
+                }
+                // Limit processing per tick to avoid blocking render
+                if updates_processed >= 50 {
+                    break;
+                }
+            }
+        }
+    }
+
     /// Update activity sparkline - called on each tick
     pub fn tick(&mut self) {
         self.iteration += 1;
 
         // Poll for chat AI responses (non-blocking)
         self.poll_chat_responses();
+
+        // Poll for streaming graph updates (non-blocking)
+        self.poll_streaming_updates();
 
         // Handle federation refresh (synchronous load from file)
         if self.federation_refresh_pending {
@@ -5304,9 +5496,10 @@ impl OsvmApp {
                 ),
             ]));
 
-            // Entity clustering info
-            if !graph.entity_clusters.is_empty() {
-                let total_clustered: usize = graph.entity_clusters.iter()
+            // Entity clustering info (lazily computed and cached)
+            let entity_clusters = graph.get_entity_clusters();
+            if !entity_clusters.is_empty() {
+                let total_clustered: usize = entity_clusters.iter()
                     .map(|c| c.wallet_addresses.len())
                     .sum();
 
@@ -5314,13 +5507,13 @@ impl OsvmApp {
                     Span::styled(" ", Style::default()),
                     Span::styled(
                         format!("🔗 {} entity clusters ({} wallets coordinated)",
-                            graph.entity_clusters.len(), total_clustered),
+                            entity_clusters.len(), total_clustered),
                         Style::default().fg(Color::LightMagenta).add_modifier(Modifier::BOLD)
                     ),
                 ]));
 
                 // Show top cluster if significant
-                if let Some(largest) = graph.entity_clusters.iter().max_by_key(|c| c.wallet_addresses.len()) {
+                if let Some(largest) = entity_clusters.iter().max_by_key(|c| c.wallet_addresses.len()) {
                     if largest.wallet_addresses.len() >= 3 {
                         lines.push(Line::from(vec![
                             Span::styled("   ", Style::default()),
