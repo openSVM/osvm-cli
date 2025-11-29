@@ -1063,6 +1063,79 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
         println!();
     }
 
+    // Entity clusters (related wallets likely controlled by same entity)
+    let entity_clusters = detect_wallet_entities(&all_transfers);
+    if !entity_clusters.is_empty() {
+        println!();
+        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!("🔗 {} {}", "ENTITY CLUSTERS".bold().cyan(),
+            format!("({} groups of related wallets)", entity_clusters.len()).dimmed());
+        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!();
+
+        for cluster in entity_clusters.iter().take(5) {
+            let confidence_bar = "█".repeat((cluster.confidence * 10.0) as usize);
+            let confidence_empty = "░".repeat(10 - (cluster.confidence * 10.0) as usize);
+            let conf_color = if cluster.confidence > 0.7 {
+                format!("{}{}", confidence_bar.green(), confidence_empty.dimmed())
+            } else if cluster.confidence > 0.4 {
+                format!("{}{}", confidence_bar.yellow(), confidence_empty.dimmed())
+            } else {
+                format!("{}{}", confidence_bar.red(), confidence_empty.dimmed())
+            };
+
+            let type_icon = match cluster.entity_type.as_str() {
+                "Bot Swarm" => "🤖",
+                "Same Owner" => "👤",
+                "Coordinated" => "🎯",
+                "Layered Transfer" => "🧅",
+                _ => "🔗",
+            };
+
+            println!("  {} {} {} [{}] {:.0}%",
+                type_icon,
+                cluster.entity_type.bold().cyan(),
+                format!("(Entity #{})", cluster.id).dimmed(),
+                conf_color,
+                cluster.confidence * 100.0
+            );
+
+            // Show member wallets
+            println!("    {} {}", "Wallets:".dimmed(),
+                format!("{} linked", cluster.wallets.len()).white());
+            for (i, wallet) in cluster.wallets.iter().take(4).enumerate() {
+                let wallet_label = classify_wallet(wallet)
+                    .map(|t| format!(" ({})", t).bright_blue().to_string())
+                    .unwrap_or_default();
+                let prefix = if i == cluster.wallets.len().min(4) - 1 { "└─" } else { "├─" };
+                println!("      {} {}{}",
+                    prefix.dimmed(),
+                    truncate_address(wallet).white(),
+                    wallet_label
+                );
+            }
+            if cluster.wallets.len() > 4 {
+                println!("      {} {} more", "...".dimmed(),
+                    cluster.wallets.len() - 4);
+            }
+
+            // Show evidence
+            if !cluster.evidence.is_empty() {
+                println!("    {} {}", "Evidence:".dimmed(),
+                    cluster.evidence.first().unwrap_or(&String::new()).dimmed());
+                for ev in cluster.evidence.iter().skip(1).take(2) {
+                    println!("              {}", ev.dimmed());
+                }
+            }
+            println!();
+        }
+
+        if entity_clusters.len() > 5 {
+            println!("  {} {} more clusters...", "...".dimmed(), entity_clusters.len() - 5);
+            println!();
+        }
+    }
+
     // Query/hypothesis evaluation
     if let Some(q) = query {
         println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
@@ -1206,9 +1279,37 @@ async fn fetch_wallet_via_pool(
                         .and_then(|v| v.as_str())
                         .unwrap_or("OUT")
                         .to_string(),
-                    timestamp: tx.get("timestamp")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string()),
+                    timestamp: {
+                        // Try multiple possible timestamp field names
+                        let ts_value = tx.get("timestamp")
+                            .or_else(|| tx.get("blockTime"))
+                            .or_else(|| tx.get("date"));
+
+                        ts_value.and_then(|v| {
+                            // Handle multiple timestamp formats
+                            if let Some(s) = v.as_str() {
+                                // Try parsing as ISO 8601 date string (e.g., "2025-11-22T17:47:50.000Z")
+                                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+                                    return Some(dt.timestamp().to_string());
+                                }
+                                // Try parsing as Unix timestamp string
+                                if s.parse::<i64>().is_ok() {
+                                    return Some(s.to_string());
+                                }
+                                // Try other common date formats
+                                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+                                    return Some(dt.and_utc().timestamp().to_string());
+                                }
+                                None
+                            } else if let Some(n) = v.as_i64() {
+                                Some(n.to_string())
+                            } else if let Some(n) = v.as_f64() {
+                                Some((n as i64).to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    },
                 })
             })
             .collect();
@@ -1933,7 +2034,7 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
         println!();
     }
 
-    // Detect patterns
+    // Detect flow patterns
     let patterns = detect_flow_patterns(transfers);
     if !patterns.is_empty() {
         println!("  🔍 {} {}", "FLOW PATTERNS".bold().yellow(),
@@ -1943,11 +2044,109 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
                 "Peel Chain" => "🔗",
                 "Scatter-Gather" => "🌐",
                 "Round-Trip" => "↔️",
+                "Structuring" => "📦",
+                "Concentration" => "🎯",
+                "Pass-Through" => "⏭️",
                 _ => "📊",
             };
             println!("     {} {} - {}", icon, pattern_name.yellow(), description.dimmed());
         }
         println!();
+    }
+
+    // Detect temporal patterns (bot detection, bursts, timing)
+    let temporal_patterns = detect_temporal_patterns(transfers);
+    if !temporal_patterns.is_empty() {
+        println!("  ⏱️  {} {}", "TEMPORAL PATTERNS".bold().magenta(),
+            format!("({} timing anomalies)", temporal_patterns.len()).dimmed());
+        for (pattern_type, description, _, severity) in temporal_patterns.iter().take(5) {
+            let icon = match pattern_type.as_str() {
+                "Rapid Burst" => "⚡",
+                "Regular Intervals" => "🤖",
+                "Time Clustering" => "🕐",
+                "Dormancy Burst" => "💤",
+                "Weekday Only" => "📅",
+                "Weekend Only" => "🌙",
+                _ => "⏱️",
+            };
+            let sev_color = match severity.as_str() {
+                "HIGH" => format!("[{}]", severity).red().bold().to_string(),
+                "MEDIUM" => format!("[{}]", severity).yellow().to_string(),
+                _ => format!("[{}]", severity).dimmed().to_string(),
+            };
+            println!("     {} {} {} - {}", icon, sev_color, pattern_type.magenta(), description.dimmed());
+        }
+        println!();
+    }
+
+    // Detect entity clusters (wallets likely controlled by same entity)
+    let entity_clusters = detect_wallet_entities(transfers);
+    if !entity_clusters.is_empty() {
+        println!("  🔗 {} {}", "ENTITY CLUSTERS".bold().cyan(),
+            format!("({} groups of related wallets)", entity_clusters.len()).dimmed());
+        println!();
+
+        for cluster in entity_clusters.iter().take(5) {
+            let confidence_bar = "█".repeat((cluster.confidence * 10.0) as usize);
+            let confidence_empty = "░".repeat(10 - (cluster.confidence * 10.0) as usize);
+            let conf_color = if cluster.confidence > 0.7 {
+                format!("{}{}", confidence_bar.green(), confidence_empty.dimmed())
+            } else if cluster.confidence > 0.4 {
+                format!("{}{}", confidence_bar.yellow(), confidence_empty.dimmed())
+            } else {
+                format!("{}{}", confidence_bar.red(), confidence_empty.dimmed())
+            };
+
+            let type_icon = match cluster.entity_type.as_str() {
+                "Bot Swarm" => "🤖",
+                "Same Owner" => "👤",
+                "Coordinated" => "🎯",
+                "Layered Transfer" => "🧅",
+                _ => "🔗",
+            };
+
+            println!("     {} {} {} [{}] {:.0}%",
+                type_icon,
+                cluster.entity_type.bold().cyan(),
+                format!("(Entity #{})", cluster.id).dimmed(),
+                conf_color,
+                cluster.confidence * 100.0
+            );
+
+            // Show member wallets
+            println!("       {} {}", "Wallets:".dimmed(),
+                format!("{} linked", cluster.wallets.len()).white());
+            for (i, wallet) in cluster.wallets.iter().take(4).enumerate() {
+                let wallet_label = classify_wallet(wallet)
+                    .map(|t| format!(" ({})", t).bright_blue().to_string())
+                    .unwrap_or_default();
+                let prefix = if i == cluster.wallets.len().min(4) - 1 { "└─" } else { "├─" };
+                println!("         {} {}{}",
+                    prefix.dimmed(),
+                    truncate_address(wallet).white(),
+                    wallet_label
+                );
+            }
+            if cluster.wallets.len() > 4 {
+                println!("         {} {} more", "...".dimmed(),
+                    cluster.wallets.len() - 4);
+            }
+
+            // Show evidence
+            if !cluster.evidence.is_empty() {
+                println!("       {} {}", "Evidence:".dimmed(),
+                    cluster.evidence.first().unwrap_or(&String::new()).dimmed());
+                for ev in cluster.evidence.iter().skip(1).take(2) {
+                    println!("                 {}", ev.dimmed());
+                }
+            }
+            println!();
+        }
+
+        if entity_clusters.len() > 5 {
+            println!("     {} {} more clusters...", "...".dimmed(), entity_clusters.len() - 5);
+            println!();
+        }
     }
 }
 
@@ -2301,6 +2500,808 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
     patterns
 }
 
+/// Temporal pattern analysis for detecting bot behavior, bursts, and scheduling
+/// Returns: (pattern_type, description, wallets_involved, severity)
+fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Vec<String>, String)> {
+    use std::collections::HashMap;
+
+    let mut patterns: Vec<(String, String, Vec<String>, String)> = Vec::new();
+
+    if transfers.is_empty() {
+        return patterns;
+    }
+
+    // Parse timestamps and group by wallet
+    let mut wallet_timestamps: HashMap<&str, Vec<i64>> = HashMap::new();
+
+    for tx in transfers {
+        if let Some(ts_str) = &tx.timestamp {
+            if let Ok(ts) = ts_str.parse::<i64>() {
+                wallet_timestamps.entry(&tx.from).or_default().push(ts);
+            }
+        }
+    }
+
+    // Sort timestamps for each wallet
+    for (_, timestamps) in wallet_timestamps.iter_mut() {
+        timestamps.sort();
+    }
+
+    // Check if we have any timestamps at all
+    let total_timestamps: usize = wallet_timestamps.values().map(|v| v.len()).sum();
+    if total_timestamps == 0 {
+        // No timestamps available, skip temporal analysis
+        return patterns;
+    }
+
+    // === Pattern 1: RAPID BURSTS ===
+    // Many transactions in a short time window indicates automation or panic selling
+    for (wallet, timestamps) in &wallet_timestamps {
+        if timestamps.len() < 3 { continue; } // Lowered threshold
+
+        // Sliding window: count txs within 60-second windows
+        let mut max_burst = 0;
+        let mut burst_start = 0;
+        for i in 0..timestamps.len() {
+            let window_end = timestamps[i] + 60; // 60-second window
+            let count = timestamps.iter().skip(i).take_while(|&&t| t <= window_end).count();
+            if count > max_burst {
+                max_burst = count;
+                burst_start = timestamps[i];
+            }
+        }
+
+        if max_burst >= 3 {
+            let severity = if max_burst >= 8 { "HIGH" } else if max_burst >= 5 { "MEDIUM" } else { "LOW" };
+            let time_str = chrono::DateTime::from_timestamp(burst_start, 0)
+                .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                .unwrap_or_else(|| burst_start.to_string());
+
+            patterns.push((
+                "Rapid Burst".to_string(),
+                format!("{}: {} txs within 60s at {} - likely bot/script",
+                    truncate_address(wallet), max_burst, time_str),
+                vec![wallet.to_string()],
+                severity.to_string(),
+            ));
+        }
+    }
+
+    // === Pattern 2: REGULAR INTERVALS (Bot Behavior) ===
+    // Consistent timing between transactions suggests automated scheduling
+    for (wallet, timestamps) in &wallet_timestamps {
+        if timestamps.len() < 4 { continue; }
+
+        // Calculate intervals between consecutive transactions
+        let intervals: Vec<i64> = timestamps.windows(2)
+            .map(|w| w[1] - w[0])
+            .filter(|&i| i > 0 && i < 86400) // Filter out outliers (>1 day)
+            .collect();
+
+        if intervals.len() < 3 { continue; }
+
+        // Calculate mean and standard deviation
+        let mean: f64 = intervals.iter().sum::<i64>() as f64 / intervals.len() as f64;
+        let variance: f64 = intervals.iter()
+            .map(|&i| (i as f64 - mean).powi(2))
+            .sum::<f64>() / intervals.len() as f64;
+        let std_dev = variance.sqrt();
+
+        // Low coefficient of variation (std/mean < 0.3) suggests regularity
+        let cv = std_dev / mean.max(1.0);
+
+        if cv < 0.3 && mean > 10.0 {
+            let avg_interval_str = if mean < 60.0 {
+                format!("{:.0}s", mean)
+            } else if mean < 3600.0 {
+                format!("{:.1}m", mean / 60.0)
+            } else {
+                format!("{:.1}h", mean / 3600.0)
+            };
+
+            let severity = if cv < 0.1 { "HIGH" } else if cv < 0.2 { "MEDIUM" } else { "LOW" };
+
+            patterns.push((
+                "Regular Intervals".to_string(),
+                format!("{}: avg {}, CV={:.2} ({}x) - 🤖 BOT DETECTED",
+                    truncate_address(wallet), avg_interval_str, cv, intervals.len()),
+                vec![wallet.to_string()],
+                severity.to_string(),
+            ));
+        }
+    }
+
+    // === Pattern 3: TIME-OF-DAY CLUSTERING ===
+    // Transactions clustered at specific hours (e.g., always at midnight UTC)
+    for (wallet, timestamps) in &wallet_timestamps {
+        if timestamps.len() < 5 { continue; }
+
+        // Extract hours (0-23) from each timestamp
+        let hours: Vec<u32> = timestamps.iter()
+            .filter_map(|&ts| chrono::DateTime::from_timestamp(ts, 0))
+            .map(|dt| dt.format("%H").to_string().parse::<u32>().unwrap_or(0))
+            .collect();
+
+        if hours.is_empty() { continue; }
+
+        // Count occurrences per hour
+        let mut hour_counts: HashMap<u32, usize> = HashMap::new();
+        for h in &hours {
+            *hour_counts.entry(*h).or_insert(0) += 1;
+        }
+
+        // Find the most popular hour
+        if let Some((&peak_hour, &peak_count)) = hour_counts.iter().max_by_key(|(_, &c)| c) {
+            let pct = peak_count as f64 / hours.len() as f64 * 100.0;
+
+            // If >40% of transactions are in a single hour, flag it
+            if pct > 40.0 && peak_count >= 3 {
+                patterns.push((
+                    "Time Clustering".to_string(),
+                    format!("{}: {:.0}% of txs at {:02}:00 UTC ({}/{}) - scheduled activity",
+                        truncate_address(wallet), pct, peak_hour, peak_count, hours.len()),
+                    vec![wallet.to_string()],
+                    if pct > 70.0 { "HIGH".to_string() } else { "MEDIUM".to_string() },
+                ));
+            }
+        }
+    }
+
+    // === Pattern 4: DORMANCY FOLLOWED BY BURST ===
+    // Long period of inactivity then sudden activity
+    for (wallet, timestamps) in &wallet_timestamps {
+        if timestamps.len() < 3 { continue; }
+
+        // Find the longest gap between transactions
+        let gaps: Vec<i64> = timestamps.windows(2)
+            .map(|w| w[1] - w[0])
+            .collect();
+
+        if let Some(&max_gap) = gaps.iter().max() {
+            let max_gap_days = max_gap as f64 / 86400.0;
+
+            // If there's a gap > 7 days, check activity before and after
+            if max_gap_days > 7.0 {
+                // Find where the gap occurred
+                if let Some(gap_idx) = gaps.iter().position(|&g| g == max_gap) {
+                    let txs_after_gap = timestamps.len() - gap_idx - 1;
+
+                    if txs_after_gap >= 3 {
+                        // Calculate burst rate after dormancy
+                        let post_gap_timestamps = &timestamps[gap_idx + 1..];
+                        let post_duration = post_gap_timestamps.last().unwrap_or(&0) - post_gap_timestamps.first().unwrap_or(&0);
+                        let rate = if post_duration > 0 {
+                            post_gap_timestamps.len() as f64 / (post_duration as f64 / 3600.0)
+                        } else {
+                            0.0
+                        };
+
+                        patterns.push((
+                            "Dormancy Burst".to_string(),
+                            format!("{}: {:.0} days dormant → {} txs burst ({:.1}/hr) - reactivation",
+                                truncate_address(wallet), max_gap_days, txs_after_gap, rate),
+                            vec![wallet.to_string()],
+                            if max_gap_days > 30.0 { "HIGH".to_string() } else { "MEDIUM".to_string() },
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // === Pattern 5: WEEKEND/WEEKDAY CONCENTRATION ===
+    // Transactions only during business hours or only weekends
+    for (wallet, timestamps) in &wallet_timestamps {
+        if timestamps.len() < 5 { continue; }
+
+        // Extract day-of-week (0=Sunday, 6=Saturday)
+        let weekdays: Vec<u32> = timestamps.iter()
+            .filter_map(|&ts| chrono::DateTime::from_timestamp(ts, 0))
+            .map(|dt| dt.format("%w").to_string().parse::<u32>().unwrap_or(0))
+            .collect();
+
+        if weekdays.is_empty() { continue; }
+
+        let weekend_count = weekdays.iter().filter(|&&d| d == 0 || d == 6).count();
+        let weekday_count = weekdays.len() - weekend_count;
+
+        let weekend_pct = weekend_count as f64 / weekdays.len() as f64 * 100.0;
+
+        // Flag if >80% weekday-only or >80% weekend-only
+        if weekday_count >= 4 && weekend_pct < 10.0 {
+            patterns.push((
+                "Weekday Only".to_string(),
+                format!("{}: {:.0}% weekday txs - business hours activity",
+                    truncate_address(wallet), 100.0 - weekend_pct),
+                vec![wallet.to_string()],
+                "LOW".to_string(),
+            ));
+        } else if weekend_count >= 3 && weekend_pct > 80.0 {
+            patterns.push((
+                "Weekend Only".to_string(),
+                format!("{}: {:.0}% weekend txs - unusual timing",
+                    truncate_address(wallet), weekend_pct),
+                vec![wallet.to_string()],
+                "MEDIUM".to_string(),
+            ));
+        }
+    }
+
+    // Sort by severity (HIGH first)
+    patterns.sort_by(|(_, _, _, sev_a), (_, _, _, sev_b)| {
+        let priority = |s: &str| match s { "HIGH" => 0, "MEDIUM" => 1, "LOW" => 2, _ => 3 };
+        priority(sev_a).cmp(&priority(sev_b))
+    });
+
+    // Deduplicate
+    let mut seen = std::collections::HashSet::new();
+    patterns.retain(|(name, desc, _, _)| {
+        let key = format!("{}:{}", name, &desc[..desc.len().min(40)]);
+        if seen.contains(&key) { false } else { seen.insert(key); true }
+    });
+
+    patterns
+}
+
+/// Entity cluster representing a group of wallets likely controlled by same entity
+#[derive(Debug, Clone)]
+struct EntityCluster {
+    id: usize,
+    wallets: Vec<String>,
+    confidence: f64,  // 0.0 - 1.0
+    evidence: Vec<String>,
+    entity_type: String,  // "Bot Swarm", "Same Owner", "Coordinated", "Unknown"
+}
+
+/// Detect wallet entities - groups of wallets likely controlled by same entity
+/// Uses Union-Find with multiple linkage signals
+fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
+    use std::collections::{HashMap, HashSet};
+
+    // Collect all unique wallets
+    let mut all_wallets: HashSet<String> = HashSet::new();
+    for tx in transfers {
+        all_wallets.insert(tx.from.clone());
+        all_wallets.insert(tx.to.clone());
+    }
+
+    let wallets: Vec<String> = all_wallets.into_iter().collect();
+    if wallets.len() < 2 {
+        return Vec::new();
+    }
+
+    let wallet_idx: HashMap<&str, usize> = wallets.iter()
+        .enumerate()
+        .map(|(i, w)| (w.as_str(), i))
+        .collect();
+
+    // Union-Find data structure
+    let mut parent: Vec<usize> = (0..wallets.len()).collect();
+    let mut rank: Vec<usize> = vec![0; wallets.len()];
+
+    fn find(parent: &mut Vec<usize>, i: usize) -> usize {
+        if parent[i] != i {
+            parent[i] = find(parent, parent[i]);
+        }
+        parent[i]
+    }
+
+    fn union(parent: &mut Vec<usize>, rank: &mut Vec<usize>, x: usize, y: usize) {
+        let root_x = find(parent, x);
+        let root_y = find(parent, y);
+        if root_x != root_y {
+            if rank[root_x] < rank[root_y] {
+                parent[root_x] = root_y;
+            } else if rank[root_x] > rank[root_y] {
+                parent[root_y] = root_x;
+            } else {
+                parent[root_y] = root_x;
+                rank[root_x] += 1;
+            }
+        }
+    }
+
+    // Track linkage evidence
+    let mut linkage_evidence: HashMap<(usize, usize), Vec<String>> = HashMap::new();
+
+    // === Signal 1: Common Funding Source ===
+    // Wallets that received first inflow from same source are likely related
+    let mut first_funder: HashMap<&str, &str> = HashMap::new();
+    let mut funding_amounts: HashMap<(&str, &str), f64> = HashMap::new();
+
+    for tx in transfers {
+        if !first_funder.contains_key(tx.to.as_str()) {
+            first_funder.insert(&tx.to, &tx.from);
+            funding_amounts.insert((&tx.to, &tx.from), tx.amount);
+        }
+    }
+
+    // Group by common funder
+    let mut funder_groups: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (wallet, funder) in &first_funder {
+        funder_groups.entry(*funder).or_default().push(*wallet);
+    }
+
+    for (funder, funded_wallets) in &funder_groups {
+        if funded_wallets.len() >= 2 {
+            // Link all wallets funded by same source
+            for i in 0..funded_wallets.len() {
+                for j in (i+1)..funded_wallets.len() {
+                    if let (Some(&idx_i), Some(&idx_j)) = (
+                        wallet_idx.get(funded_wallets[i]),
+                        wallet_idx.get(funded_wallets[j])
+                    ) {
+                        union(&mut parent, &mut rank, idx_i, idx_j);
+                        let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
+                        linkage_evidence.entry(key).or_default().push(
+                            format!("Common funder: {}", truncate_address(funder))
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // === Signal 2: Synchronized Timing ===
+    // Wallets that transact within 60 seconds of each other repeatedly
+    let mut wallet_timestamps: HashMap<&str, Vec<i64>> = HashMap::new();
+    for tx in transfers {
+        if let Some(ts_str) = &tx.timestamp {
+            if let Ok(ts) = ts_str.parse::<i64>() {
+                wallet_timestamps.entry(&tx.from).or_default().push(ts);
+                wallet_timestamps.entry(&tx.to).or_default().push(ts);
+            }
+        }
+    }
+
+    // Sort timestamps for each wallet
+    for (_, timestamps) in wallet_timestamps.iter_mut() {
+        timestamps.sort();
+    }
+
+    // Find synchronized pairs (multiple txs within 60s window)
+    let wallet_keys: Vec<&str> = wallet_timestamps.keys().copied().collect();
+    for i in 0..wallet_keys.len() {
+        for j in (i+1)..wallet_keys.len() {
+            let w1 = wallet_keys[i];
+            let w2 = wallet_keys[j];
+
+            let ts1 = &wallet_timestamps[w1];
+            let ts2 = &wallet_timestamps[w2];
+
+            // Count synchronized timestamps (within 60s)
+            let mut sync_count = 0;
+            let mut idx1 = 0;
+            let mut idx2 = 0;
+
+            while idx1 < ts1.len() && idx2 < ts2.len() {
+                let diff = (ts1[idx1] - ts2[idx2]).abs();
+                if diff <= 60 {
+                    sync_count += 1;
+                    idx1 += 1;
+                    idx2 += 1;
+                } else if ts1[idx1] < ts2[idx2] {
+                    idx1 += 1;
+                } else {
+                    idx2 += 1;
+                }
+            }
+
+            // If >30% of transactions are synchronized, link them
+            let min_txs = ts1.len().min(ts2.len());
+            if min_txs >= 3 && sync_count as f64 / min_txs as f64 > 0.3 {
+                if let (Some(&idx_i), Some(&idx_j)) = (wallet_idx.get(w1), wallet_idx.get(w2)) {
+                    union(&mut parent, &mut rank, idx_i, idx_j);
+                    let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
+                    linkage_evidence.entry(key).or_default().push(
+                        format!("Sync timing: {}/{} txs within 60s", sync_count, min_txs)
+                    );
+                }
+            }
+        }
+    }
+
+    // === Signal 3: Same Counterparties ===
+    // Wallets that interact with the same set of counterparties
+    let mut wallet_counterparties: HashMap<&str, HashSet<&str>> = HashMap::new();
+    for tx in transfers {
+        wallet_counterparties.entry(&tx.from).or_default().insert(&tx.to);
+        wallet_counterparties.entry(&tx.to).or_default().insert(&tx.from);
+    }
+
+    for i in 0..wallet_keys.len() {
+        for j in (i+1)..wallet_keys.len() {
+            let w1 = wallet_keys[i];
+            let w2 = wallet_keys[j];
+
+            // Skip if w1 and w2 are counterparties of each other
+            if wallet_counterparties.get(w1).map(|s| s.contains(w2)).unwrap_or(false) {
+                continue;
+            }
+
+            let cp1 = wallet_counterparties.get(w1);
+            let cp2 = wallet_counterparties.get(w2);
+
+            if let (Some(cp1), Some(cp2)) = (cp1, cp2) {
+                // Jaccard similarity of counterparty sets
+                let intersection = cp1.intersection(cp2).count();
+                let union_size = cp1.union(cp2).count();
+
+                if union_size >= 3 && intersection as f64 / union_size as f64 > 0.5 {
+                    if let (Some(&idx_i), Some(&idx_j)) = (wallet_idx.get(w1), wallet_idx.get(w2)) {
+                        union(&mut parent, &mut rank, idx_i, idx_j);
+                        let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
+                        linkage_evidence.entry(key).or_default().push(
+                            format!("Shared counterparties: {}/{} overlap", intersection, union_size)
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // === Signal 4: Similar Transaction Amounts ===
+    // Wallets using identical/similar amounts repeatedly
+    let mut wallet_amounts: HashMap<&str, Vec<f64>> = HashMap::new();
+    for tx in transfers {
+        wallet_amounts.entry(&tx.from).or_default().push(tx.amount);
+    }
+
+    for i in 0..wallet_keys.len() {
+        for j in (i+1)..wallet_keys.len() {
+            let w1 = wallet_keys[i];
+            let w2 = wallet_keys[j];
+
+            let amounts1 = wallet_amounts.get(w1);
+            let amounts2 = wallet_amounts.get(w2);
+
+            if let (Some(a1), Some(a2)) = (amounts1, amounts2) {
+                if a1.len() >= 3 && a2.len() >= 3 {
+                    // Check for similar amount patterns (within 5%)
+                    let mut similar_count = 0;
+                    for amt1 in a1 {
+                        for amt2 in a2 {
+                            if *amt1 > 0.0 && *amt2 > 0.0 {
+                                let ratio = amt1 / amt2;
+                                if ratio > 0.95 && ratio < 1.05 {
+                                    similar_count += 1;
+                                }
+                            }
+                        }
+                    }
+
+                    let total_pairs = a1.len() * a2.len();
+                    if similar_count as f64 / total_pairs as f64 > 0.3 {
+                        if let (Some(&idx_i), Some(&idx_j)) = (wallet_idx.get(w1), wallet_idx.get(w2)) {
+                            union(&mut parent, &mut rank, idx_i, idx_j);
+                            let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
+                            linkage_evidence.entry(key).or_default().push(
+                                format!("Similar amounts: {}/{} matches", similar_count, total_pairs.min(20))
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // === Signal 5: Transfer Chains ===
+    // A→B→C pattern where B is just passing through
+    let mut passthrough: HashMap<&str, (f64, f64)> = HashMap::new(); // (inflow, outflow)
+    for tx in transfers {
+        passthrough.entry(&tx.to).or_insert((0.0, 0.0)).0 += tx.amount;
+        passthrough.entry(&tx.from).or_insert((0.0, 0.0)).1 += tx.amount;
+    }
+
+    // Find wallets that are >90% pass-through
+    let pass_wallets: Vec<&str> = passthrough.iter()
+        .filter(|(_, (in_amt, out_amt))| {
+            *in_amt > 0.0 && *out_amt > 0.0 && (*out_amt / *in_amt) > 0.9 && (*out_amt / *in_amt) < 1.1
+        })
+        .map(|(w, _)| *w)
+        .collect();
+
+    // Link pass-through wallets to their sources and destinations
+    for pass_wallet in &pass_wallets {
+        let sources: Vec<&str> = transfers.iter()
+            .filter(|tx| tx.to == *pass_wallet)
+            .map(|tx| tx.from.as_str())
+            .collect();
+        let dests: Vec<&str> = transfers.iter()
+            .filter(|tx| tx.from == *pass_wallet)
+            .map(|tx| tx.to.as_str())
+            .collect();
+
+        // Link sources and dests through the pass-through wallet
+        for src in &sources {
+            for dst in &dests {
+                if let (Some(&idx_s), Some(&idx_d)) = (wallet_idx.get(*src), wallet_idx.get(*dst)) {
+                    if idx_s != idx_d {
+                        union(&mut parent, &mut rank, idx_s, idx_d);
+                        let key = if idx_s < idx_d { (idx_s, idx_d) } else { (idx_d, idx_s) };
+                        linkage_evidence.entry(key).or_default().push(
+                            format!("Pass-through: {} via {}", truncate_address(pass_wallet), truncate_address(pass_wallet))
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // === Build clusters from Union-Find ===
+    let mut cluster_members: HashMap<usize, Vec<usize>> = HashMap::new();
+    for i in 0..wallets.len() {
+        let root = find(&mut parent, i);
+        cluster_members.entry(root).or_default().push(i);
+    }
+
+    // Filter to clusters with 2+ members and build EntityCluster structs
+    let mut clusters: Vec<EntityCluster> = Vec::new();
+    let mut cluster_id = 0;
+
+    for (_, members) in cluster_members {
+        if members.len() < 2 {
+            continue;
+        }
+
+        let cluster_wallets: Vec<String> = members.iter()
+            .map(|&idx| wallets[idx].clone())
+            .collect();
+
+        // Collect all evidence for this cluster
+        let mut evidence: HashSet<String> = HashSet::new();
+        for i in 0..members.len() {
+            for j in (i+1)..members.len() {
+                let key = if members[i] < members[j] {
+                    (members[i], members[j])
+                } else {
+                    (members[j], members[i])
+                };
+                if let Some(ev) = linkage_evidence.get(&key) {
+                    for e in ev {
+                        evidence.insert(e.clone());
+                    }
+                }
+            }
+        }
+
+        // Calculate confidence based on evidence count and types
+        let evidence_count = evidence.len();
+        let has_funding = evidence.iter().any(|e| e.contains("funder"));
+        let has_timing = evidence.iter().any(|e| e.contains("Sync"));
+        let has_counterparty = evidence.iter().any(|e| e.contains("counterpart"));
+        let has_amounts = evidence.iter().any(|e| e.contains("amount"));
+
+        let confidence = ((evidence_count as f64 * 0.1).min(0.4)
+            + if has_funding { 0.2 } else { 0.0 }
+            + if has_timing { 0.2 } else { 0.0 }
+            + if has_counterparty { 0.1 } else { 0.0 }
+            + if has_amounts { 0.1 } else { 0.0 }).min(1.0);
+
+        // Determine entity type
+        let entity_type = if has_timing && evidence.iter().any(|e| e.contains("60s")) {
+            "Bot Swarm"
+        } else if has_funding && has_counterparty {
+            "Same Owner"
+        } else if has_timing && has_counterparty {
+            "Coordinated"
+        } else if evidence.iter().any(|e| e.contains("Pass-through")) {
+            "Layered Transfer"
+        } else {
+            "Related"
+        };
+
+        clusters.push(EntityCluster {
+            id: cluster_id,
+            wallets: cluster_wallets,
+            confidence,
+            evidence: evidence.into_iter().take(5).collect(),
+            entity_type: entity_type.to_string(),
+        });
+
+        cluster_id += 1;
+    }
+
+    // Sort by confidence descending
+    clusters.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+
+    clusters
+}
+
+/// Generate token flow tree visualization as markdown-compatible text
+fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord], token_filter: &str) -> String {
+    use std::collections::{HashMap, HashSet};
+
+    let mut output = String::new();
+
+    // Filter transfers for the specific token
+    let token_lower = token_filter.to_lowercase();
+    let filtered: Vec<&TransferRecord> = transfers.iter()
+        .filter(|tx| {
+            let tx_token_lower = tx.token.to_lowercase();
+            tx_token_lower == token_lower ||
+            tx_token_lower.contains(&token_lower) ||
+            tx.token == token_filter
+        })
+        .collect();
+
+    if filtered.is_empty() {
+        output.push_str(&format!("No transfers found for token '{}'\n", token_filter));
+        return output;
+    }
+
+    // Build adjacency and stats
+    let mut adjacency: HashMap<&str, Vec<(&str, f64, Option<i64>)>> = HashMap::new();
+    let mut edge_totals: HashMap<(&str, &str), f64> = HashMap::new();
+    let mut edge_count: HashMap<(&str, &str), usize> = HashMap::new();
+
+    let token_name = filtered.first().map(|t| t.token.as_str()).unwrap_or(token_filter);
+
+    // First pass: aggregate edges
+    for tx in &filtered {
+        let key = (tx.from.as_str(), tx.to.as_str());
+        *edge_totals.entry(key).or_insert(0.0) += tx.amount;
+        *edge_count.entry(key).or_insert(0) += 1;
+    }
+
+    // Build adjacency with aggregated amounts
+    for ((from, to), total_amount) in &edge_totals {
+        let timestamp: Option<i64> = filtered.iter()
+            .filter(|tx| tx.from.as_str() == *from && tx.to.as_str() == *to)
+            .filter_map(|tx| tx.timestamp.as_ref())
+            .filter_map(|ts| ts.parse::<i64>().ok())
+            .min();
+        adjacency.entry(*from).or_default().push((*to, *total_amount, timestamp));
+    }
+
+    // Sort adjacency lists by amount descending
+    for (_, neighbors) in adjacency.iter_mut() {
+        neighbors.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    }
+
+    let total_flow: f64 = edge_totals.values().sum();
+    let total_transfers: usize = edge_count.values().sum();
+    let unique_pairs = edge_totals.len();
+
+    // Header
+    output.push_str(&format!("Token: {} | {} transfers | {} unique pairs | {} total\n\n",
+        token_name, total_transfers, unique_pairs, format_amount(total_flow)));
+
+    // Tree rendering helper
+    fn render_tree_node_md(
+        node: &str,
+        adjacency: &HashMap<&str, Vec<(&str, f64, Option<i64>)>>,
+        edge_count: &HashMap<(&str, &str), usize>,
+        target: &str,
+        token_name: &str,
+        prefix: &str,
+        visited: &mut HashSet<String>,
+        depth: usize,
+        max_depth: usize,
+        output: &mut String,
+    ) {
+        if depth > max_depth { return; }
+
+        // Get wallet type label
+        let wallet_label = classify_wallet(node)
+            .map(|t| format!(" ({})", t))
+            .unwrap_or_default();
+
+        // Render this node
+        let node_display = if node == target {
+            format!("`{}`{}", node, wallet_label)
+        } else if node.len() > 12 {
+            format!("`{}...{}`{}", &node[..4], &node[node.len()-4..], wallet_label)
+        } else {
+            format!("`{}`{}", node, wallet_label)
+        };
+
+        if depth == 0 {
+            output.push_str("🏦 **ORIGIN** (investigation target)\n");
+            output.push_str(&format!("   {}\n", node_display));
+        }
+
+        visited.insert(node.to_string());
+
+        // Get children (outflows from this node)
+        if let Some(children) = adjacency.get(node) {
+            let filtered_children: Vec<_> = children.iter()
+                .filter(|(dest, _, _)| !visited.contains(*dest))
+                .take(5)
+                .collect();
+
+            let child_count = filtered_children.len();
+            let omitted = children.len().saturating_sub(child_count);
+
+            for (i, (dest, amount, timestamp)) in filtered_children.iter().enumerate() {
+                let is_last_child = i == child_count - 1 && omitted == 0;
+                let connector = if is_last_child { "└─→" } else { "├─→" };
+
+                let amount_str = format_amount(*amount);
+                let tx_count = edge_count.get(&(node, *dest)).copied().unwrap_or(1);
+                let count_suffix = if tx_count > 1 { format!(" ({}x)", tx_count) } else { String::new() };
+
+                let time_str = timestamp.map(|ts| {
+                    chrono::DateTime::from_timestamp(ts, 0)
+                        .map(|d| format!(" @ {}", d.format("%Y-%m-%d %H:%M")))
+                        .unwrap_or_default()
+                }).unwrap_or_default();
+
+                let dest_label = classify_wallet(dest)
+                    .map(|t| format!(" ({})", t))
+                    .unwrap_or_default();
+                let dest_display = if dest.len() > 12 {
+                    format!("`{}...{}`{}", &dest[..4], &dest[dest.len()-4..], dest_label)
+                } else {
+                    format!("`{}`{}", dest, dest_label)
+                };
+
+                let edge_prefix = if depth == 0 { "   " } else { prefix };
+                output.push_str(&format!("{}│\n", edge_prefix));
+                output.push_str(&format!("{}{} [**{}** {}{}] ──→ {}{}\n",
+                    edge_prefix, connector, amount_str, token_name, count_suffix, dest_display, time_str));
+
+                let child_prefix = if is_last_child {
+                    format!("{}      ", edge_prefix)
+                } else {
+                    format!("{}│     ", edge_prefix)
+                };
+
+                render_tree_node_md(
+                    dest, adjacency, edge_count, target, token_name, &child_prefix,
+                    visited, depth + 1, max_depth, output,
+                );
+            }
+
+            if omitted > 0 {
+                let edge_prefix = if depth == 0 { "   " } else { prefix };
+                output.push_str(&format!("{}│\n", edge_prefix));
+                output.push_str(&format!("{}└── *...and {} more destinations*\n", edge_prefix, omitted));
+            }
+        }
+    }
+
+    let mut visited: HashSet<String> = HashSet::new();
+    render_tree_node_md(target, &adjacency, &edge_count, target, token_name, "", &mut visited, 0, 4, &mut output);
+
+    // Reverse tree (inflows)
+    let reverse_adj: HashMap<&str, Vec<(&str, f64)>> = {
+        let mut rev: HashMap<&str, Vec<(&str, f64)>> = HashMap::new();
+        for ((from, to), amount) in &edge_totals {
+            rev.entry(*to).or_default().push((*from, *amount));
+        }
+        for (_, v) in rev.iter_mut() {
+            v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        }
+        rev
+    };
+
+    if let Some(inflows) = reverse_adj.get(target) {
+        if !inflows.is_empty() {
+            output.push_str("\n📥 **INFLOWS TO ORIGIN** (who sent to target)\n\n");
+            for (i, (from, amount)) in inflows.iter().take(5).enumerate() {
+                let is_last = i == inflows.len().min(5) - 1;
+                let connector = if is_last { "└─→" } else { "├─→" };
+                let from_label = classify_wallet(from)
+                    .map(|t| format!(" ({})", t))
+                    .unwrap_or_default();
+                let from_display = if from.len() > 12 {
+                    format!("`{}...{}`{}", &from[..4], &from[from.len()-4..], from_label)
+                } else {
+                    format!("`{}`{}", from, from_label)
+                };
+                output.push_str(&format!("   {} [**{}** {}] {} TARGET\n",
+                    from_display, format_amount(*amount), token_name, connector));
+            }
+            if inflows.len() > 5 {
+                output.push_str(&format!("\n   *...and {} more sources*\n", inflows.len() - 5));
+            }
+        }
+    }
+
+    output
+}
+
 /// Generate markdown report for auto mode
 fn generate_auto_report(
     wallet: &str,
@@ -2341,7 +3342,7 @@ fn generate_auto_report(
         }
     }
 
-    report.push_str("## Token Flow\n\n");
+    report.push_str("## Token Flow Summary\n\n");
     report.push_str("| Token | Inflows | Outflows |\n");
     report.push_str("|-------|---------|----------|\n");
     for (token, (inflow, outflow)) in &token_volumes {
@@ -2349,6 +3350,17 @@ fn generate_auto_report(
         report.push_str(&format!("| {} | {:.4} | {:.4} |\n", token_display, inflow, outflow));
     }
     report.push_str("\n");
+
+    // Token flow tree visualizations for top 3 tokens
+    let mut sorted_tokens: Vec<_> = token_volumes.iter().collect();
+    sorted_tokens.sort_by(|a, b| (b.1.0 + b.1.1).partial_cmp(&(a.1.0 + a.1.1)).unwrap_or(std::cmp::Ordering::Equal));
+
+    for (i, (token, _)) in sorted_tokens.iter().take(3).enumerate() {
+        report.push_str(&format!("### {} Flow Tree (Token #{})\n\n", token, i + 1));
+        report.push_str("```\n");
+        report.push_str(&generate_token_flow_tree_markdown(wallet, transfers, token));
+        report.push_str("```\n\n");
+    }
 
     // ASCII Graph for report
     report.push_str("## Wallet Flow Graph\n\n");
@@ -2387,7 +3399,7 @@ fn generate_auto_report(
     // Flow patterns detection for report
     let patterns = detect_flow_patterns(transfers);
     if !patterns.is_empty() {
-        report.push_str("## Detected Patterns\n\n");
+        report.push_str("## Detected Flow Patterns\n\n");
         report.push_str("⚠️ These patterns may indicate suspicious activity but require further investigation.\n\n");
         for (pattern_name, description, wallets) in &patterns {
             report.push_str(&format!("### {}\n\n", pattern_name));
@@ -2397,6 +3409,96 @@ fn generate_auto_report(
                 report.push_str(&wallets.join(", "));
                 report.push_str("\n\n");
             }
+        }
+    }
+
+    // Temporal patterns detection for report
+    let temporal_patterns = detect_temporal_patterns(transfers);
+    if !temporal_patterns.is_empty() {
+        report.push_str("## Temporal Patterns (Timing Analysis)\n\n");
+        report.push_str("⏱️ Analysis of transaction timing reveals potential automated or coordinated activity.\n\n");
+        report.push_str("| Type | Severity | Description |\n");
+        report.push_str("|------|----------|-------------|\n");
+        for (pattern_type, description, wallets, severity) in temporal_patterns.iter().take(15) {
+            let icon = match pattern_type.as_str() {
+                "Rapid Burst" => "⚡",
+                "Regular Intervals" => "🤖",
+                "Time Clustering" => "🕐",
+                "Dormancy Burst" => "💤",
+                "Weekday Only" => "📅",
+                "Weekend Only" => "🌙",
+                _ => "⏱️",
+            };
+            let severity_badge = match severity.as_str() {
+                "HIGH" => "**HIGH**",
+                "MEDIUM" => "*MEDIUM*",
+                _ => "LOW",
+            };
+            report.push_str(&format!("| {} {} | {} | {} |\n",
+                icon, pattern_type, severity_badge, description));
+        }
+        if temporal_patterns.len() > 15 {
+            report.push_str(&format!("\n*...and {} more timing anomalies*\n", temporal_patterns.len() - 15));
+        }
+        report.push_str("\n");
+
+        // Add details for high severity patterns
+        let high_severity: Vec<_> = temporal_patterns.iter()
+            .filter(|(_, _, _, sev)| sev == "HIGH")
+            .take(5)
+            .collect();
+        if !high_severity.is_empty() {
+            report.push_str("### High-Severity Timing Alerts\n\n");
+            for (pattern_type, description, wallets, _) in high_severity {
+                report.push_str(&format!("**{}**: {}\n", pattern_type, description));
+                if !wallets.is_empty() {
+                    report.push_str(&format!("- Involved: `{}`\n", wallets.join("`, `")));
+                }
+                report.push_str("\n");
+            }
+        }
+    }
+
+    // Entity clusters for report
+    let entity_clusters = detect_wallet_entities(transfers);
+    if !entity_clusters.is_empty() {
+        report.push_str("## Entity Clusters (Related Wallets)\n\n");
+        report.push_str("🔗 Wallets grouped by behavioral and transactional similarity.\n\n");
+
+        for cluster in entity_clusters.iter().take(10) {
+            let type_icon = match cluster.entity_type.as_str() {
+                "Bot Swarm" => "🤖",
+                "Same Owner" => "👤",
+                "Coordinated" => "🎯",
+                "Layered Transfer" => "🧅",
+                _ => "🔗",
+            };
+
+            report.push_str(&format!("### {} {} (Confidence: {:.0}%)\n\n",
+                type_icon, cluster.entity_type, cluster.confidence * 100.0));
+
+            report.push_str("**Member Wallets:**\n");
+            for wallet in cluster.wallets.iter().take(10) {
+                let wallet_label = classify_wallet(wallet)
+                    .map(|t| format!(" *({})*", t))
+                    .unwrap_or_default();
+                report.push_str(&format!("- `{}`{}\n", wallet, wallet_label));
+            }
+            if cluster.wallets.len() > 10 {
+                report.push_str(&format!("- *...and {} more wallets*\n", cluster.wallets.len() - 10));
+            }
+
+            if !cluster.evidence.is_empty() {
+                report.push_str("\n**Linkage Evidence:**\n");
+                for evidence in &cluster.evidence {
+                    report.push_str(&format!("- {}\n", evidence));
+                }
+            }
+            report.push_str("\n");
+        }
+
+        if entity_clusters.len() > 10 {
+            report.push_str(&format!("*...and {} more entity clusters*\n\n", entity_clusters.len() - 10));
         }
     }
 

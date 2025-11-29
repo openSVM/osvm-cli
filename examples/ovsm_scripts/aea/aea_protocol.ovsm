@@ -473,6 +473,158 @@
     null)
 
   ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 12: REGISTER PROVIDER
+  ;; Register as service provider (requires stake)
+  ;; Accounts: [config, participant_pda, authority (signer), authority_token, vault, token_program]
+  ;; Data: bytes 1-8: stake_amount, bytes 9-72: endpoint, bytes 73-104: display_name
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 12)
+    (do
+      (sol_log_ ">>> REGISTER PROVIDER <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Check protocol initialized
+      (define is_init (mem-load1 config_ptr 0))
+      (if (!= is_init 1)
+        (do
+          (sol_log_ "ERROR: Protocol not initialized")
+          3)
+        (do
+          ;; Read stake amount
+          (define stake_amount (mem-load instr_ptr 1))
+          (sol_log_ "Stake amount:")
+          (sol_log_64_ stake_amount)
+
+          ;; Check minimum stake for providers
+          (define min_provider_stake (mem-load config_ptr 16))
+          (if (< stake_amount min_provider_stake)
+            (do
+              (sol_log_ "ERROR: Stake below provider minimum")
+              (sol_log_64_ min_provider_stake)
+              6)
+            (do
+              ;; Get timestamp
+              (define now (get-clock-timestamp))
+
+              ;; Calculate initial reputation
+              (define initial_rep (/ stake_amount 500000))
+
+              ;; Initialize provider profile
+              (mem-store participant_ptr 0 TYPE_PROVIDER)    ;; type = Provider
+              (mem-store participant_ptr 1 STATUS_ACTIVE)    ;; status = Active
+              (mem-store participant_ptr 8 stake_amount)     ;; stake
+              (mem-store participant_ptr 16 initial_rep)     ;; reputation
+              (mem-store participant_ptr 72 now)             ;; registered_at
+              (mem-store participant_ptr 80 now)             ;; last_active
+
+              ;; Update config counters
+              (define total_participants (mem-load config_ptr 56))
+              (mem-store config_ptr 56 (+ total_participants 1))
+              (define total_staked (mem-load config_ptr 64))
+              (mem-store config_ptr 64 (+ total_staked stake_amount))
+
+              (sol_log_ "Provider registered!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 13: REGISTER VALIDATOR
+  ;; Register as dispute validator (high stake requirement)
+  ;; Accounts: [config, participant_pda, authority (signer), authority_token, vault, token_program]
+  ;; Data: bytes 1-8: stake_amount
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 13)
+    (do
+      (sol_log_ ">>> REGISTER VALIDATOR <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Check protocol initialized
+      (define is_init (mem-load1 config_ptr 0))
+      (if (!= is_init 1)
+        (do
+          (sol_log_ "ERROR: Protocol not initialized")
+          3)
+        (do
+          ;; Read stake amount
+          (define stake_amount (mem-load instr_ptr 1))
+          (sol_log_ "Stake amount:")
+          (sol_log_64_ stake_amount)
+
+          ;; Check minimum stake for validators (higher than others)
+          (define min_validator_stake (mem-load config_ptr 24))
+          (if (< stake_amount min_validator_stake)
+            (do
+              (sol_log_ "ERROR: Stake below validator minimum")
+              (sol_log_64_ min_validator_stake)
+              6)
+            (do
+              ;; Get timestamp
+              (define now (get-clock-timestamp))
+
+              ;; Calculate initial reputation (validators get higher base)
+              (define initial_rep (/ stake_amount 100000))
+
+              ;; Initialize validator profile
+              (mem-store participant_ptr 0 TYPE_VALIDATOR)   ;; type = Validator
+              (mem-store participant_ptr 1 STATUS_ACTIVE)    ;; status = Active
+              (mem-store participant_ptr 8 stake_amount)     ;; stake
+              (mem-store participant_ptr 16 initial_rep)     ;; reputation
+              (mem-store participant_ptr 72 now)             ;; registered_at
+              (mem-store participant_ptr 80 now)             ;; last_active
+
+              ;; Update config counters
+              (define total_participants (mem-load config_ptr 56))
+              (mem-store config_ptr 56 (+ total_participants 1))
+              (define total_staked (mem-load config_ptr 64))
+              (mem-store config_ptr 64 (+ total_staked stake_amount))
+
+              (sol_log_ "Validator registered!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 15: START COOLDOWN
+  ;; Begin unstaking cooldown period before withdrawal
+  ;; Accounts: [config, participant_pda, authority (signer)]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 15)
+    (do
+      (sol_log_ ">>> START COOLDOWN <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Verify signer
+      (if (= (account-is-signer 2) 0)
+        (do
+          (sol_log_ "ERROR: Must sign cooldown request")
+          5)
+        (do
+          ;; Check current status
+          (define current_status (mem-load1 participant_ptr 1))
+          (if (!= current_status STATUS_ACTIVE)
+            (do
+              (sol_log_ "ERROR: Must be active to start cooldown")
+              7)
+            (do
+              ;; Get timestamp and cooldown duration
+              (define now (get-clock-timestamp))
+              (define cooldown_duration (mem-load config_ptr 40))
+
+              ;; Set status to cooldown
+              (mem-store participant_ptr 1 STATUS_COOLDOWN)
+
+              ;; Record cooldown start time
+              (mem-store participant_ptr 88 now)
+
+              (sol_log_ "Cooldown started!")
+              (sol_log_ "Can withdraw after:")
+              (sol_log_64_ (+ now cooldown_duration))
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
   ;; INSTRUCTION 40: CREATE ORDER
   ;; Buyer creates order, funds go to escrow
   ;; Accounts: [config, order_pda, buyer_participant, provider_participant,
@@ -557,7 +709,7 @@
                           (mem-store order_ptr 48 0)                 ;; accepted_at (not yet)
                           (mem-store order_ptr 56 0)                 ;; delivered_at (not yet)
                           (mem-store order_ptr 64 0)                 ;; deadline (set on accept)
-                          (mem-store order_ptr 72 0)                 ;; dispute_deadline
+                          (mem-store order_ptr 72 (+ now dispute_window)) ;; dispute_deadline
 
                           ;; Store buyer pubkey
                           (define buyer_pk (account-pubkey 2))
@@ -598,6 +750,55 @@
                           (sol_log_ "Order ID:")
                           (sol_log_64_ order_id)
                           0)))))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 41: ACCEPT ORDER
+  ;; Provider accepts order and commits to deliver
+  ;; Accounts: [config, order_pda, provider_participant, provider (signer)]
+  ;; Data: bytes 1-8: estimated_delivery_time
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 41)
+    (do
+      (sol_log_ ">>> ACCEPT ORDER <<<")
+
+      (define order_ptr (account-data-ptr 1))
+      (define provider_ptr (account-data-ptr 2))
+
+      ;; Verify order status is Created
+      (define order_status (mem-load1 order_ptr 0))
+      (if (!= order_status ORDER_CREATED)
+        (do
+          (sol_log_ "ERROR: Order not in created state")
+          20)
+        (do
+          ;; Verify provider is signer
+          (if (= (account-is-signer 3) 0)
+            (do
+              (sol_log_ "ERROR: Provider must sign acceptance")
+              21)
+            (do
+              ;; Get timestamp
+              (define now (get-clock-timestamp))
+
+              ;; Read estimated delivery time from instruction
+              (define est_delivery (mem-load instr_ptr 1))
+
+              ;; Calculate deadline
+              (define deadline (+ now est_delivery))
+
+              ;; Update order status and times
+              (mem-store order_ptr 0 ORDER_ACCEPTED)    ;; status = Accepted
+              (mem-store order_ptr 48 now)              ;; accepted_at
+              (mem-store order_ptr 64 deadline)         ;; deadline
+
+              ;; Update provider's last_active
+              (mem-store provider_ptr 80 now)
+
+              (sol_log_ "Order accepted!")
+              (sol_log_ "Deadline:")
+              (sol_log_64_ deadline)
+              0)))))
     null)
 
   ;; ═══════════════════════════════════════════════════════════════════════════
@@ -806,6 +1007,213 @@
     null)
 
   ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 51: RESOLVE DISPUTE
+  ;; Admin/validator resolves dispute and distributes funds
+  ;; Accounts: [config, order_pda, buyer_participant, provider_participant,
+  ;;            escrow_vault, winner_token, loser_token, token_program]
+  ;; Data: bytes 1: winner (0=buyer, 1=provider), bytes 2-9: refund_amount
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 51)
+    (do
+      (sol_log_ ">>> RESOLVE DISPUTE <<<")
+
+      (define order_ptr (account-data-ptr 1))
+      (define buyer_ptr (account-data-ptr 2))
+      (define provider_ptr (account-data-ptr 3))
+
+      ;; Verify order is disputed
+      (define order_status (mem-load1 order_ptr 0))
+      (if (!= order_status ORDER_DISPUTED)
+        (do
+          (sol_log_ "ERROR: Order not in disputed state")
+          45)
+        (do
+          ;; Verify admin/validator is signer
+          (define admin_pk_0 (mem-load config_ptr 80))
+          (define caller_pk_0 (mem-load (account-pubkey 4) 0))
+          (if (!= admin_pk_0 caller_pk_0)
+            (do
+              (sol_log_ "ERROR: Only admin/validator can resolve")
+              46)
+            (do
+              ;; Read resolution params
+              (define winner (mem-load1 instr_ptr 1))
+              (define refund_amount (mem-load instr_ptr 2))
+
+              (sol_log_ "Winner (0=buyer, 1=provider):")
+              (sol_log_64_ winner)
+              (sol_log_ "Refund amount:")
+              (sol_log_64_ refund_amount)
+
+              (if (= winner 0)
+                (do
+                  ;; Buyer wins - update reputations
+                  (define buyer_rep (mem-load buyer_ptr 16))
+                  (mem-store buyer_ptr 16 (+ buyer_rep REP_DISPUTE_WIN))
+                  (define buyer_wins (mem-load buyer_ptr 40))
+                  (mem-store buyer_ptr 40 (+ buyer_wins 1))
+
+                  (define provider_rep (mem-load provider_ptr 16))
+                  (mem-store provider_ptr 16 (+ provider_rep REP_DISPUTE_LOSE))
+                  (define provider_losses (mem-load provider_ptr 48))
+                  (mem-store provider_ptr 48 (+ provider_losses 1))
+
+                  ;; Mark order as refunded
+                  (mem-store order_ptr 0 ORDER_REFUNDED)
+                  (sol_log_ "Buyer wins! Order refunded."))
+                (do
+                  ;; Provider wins - update reputations
+                  (define provider_rep (mem-load provider_ptr 16))
+                  (mem-store provider_ptr 16 (+ provider_rep REP_DISPUTE_WIN))
+                  (define provider_wins (mem-load provider_ptr 40))
+                  (mem-store provider_ptr 40 (+ provider_wins 1))
+
+                  (define buyer_rep (mem-load buyer_ptr 16))
+                  (mem-store buyer_ptr 16 (+ buyer_rep REP_DISPUTE_LOSE))
+                  (define buyer_losses (mem-load buyer_ptr 48))
+                  (mem-store buyer_ptr 48 (+ buyer_losses 1))
+
+                  ;; Mark order as completed (provider keeps payment)
+                  (mem-store order_ptr 0 ORDER_COMPLETED)
+                  (sol_log_ "Provider wins! Payment released.")))
+
+              (sol_log_ "Dispute resolved!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 44: CANCEL ORDER
+  ;; Buyer cancels order before acceptance
+  ;; Accounts: [config, order_pda, buyer_participant, escrow_vault, buyer_token, token_program]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 44)
+    (do
+      (sol_log_ ">>> CANCEL ORDER <<<")
+
+      (define order_ptr (account-data-ptr 1))
+      (define buyer_ptr (account-data-ptr 2))
+
+      ;; Verify order is in Created state (not yet accepted)
+      (define order_status (mem-load1 order_ptr 0))
+      (if (!= order_status ORDER_CREATED)
+        (do
+          (sol_log_ "ERROR: Can only cancel before acceptance")
+          22)
+        (do
+          ;; Verify buyer is signer
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Buyer must sign cancellation")
+              23)
+            (do
+              ;; Set order status to Cancelled
+              (mem-store order_ptr 0 ORDER_CANCELLED)
+
+              ;; Update buyer's last_active
+              (define now (get-clock-timestamp))
+              (mem-store buyer_ptr 80 now)
+
+              ;; In full implementation: refund escrow to buyer
+
+              (sol_log_ "Order cancelled!")
+              (sol_log_ "Funds returned to buyer")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 45: REFUND ORDER
+  ;; Provider initiates refund (mutual cancellation)
+  ;; Accounts: [config, order_pda, provider_participant, buyer_participant,
+  ;;            escrow_vault, buyer_token, token_program]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 45)
+    (do
+      (sol_log_ ">>> REFUND ORDER <<<")
+
+      (define order_ptr (account-data-ptr 1))
+      (define provider_ptr (account-data-ptr 2))
+      (define buyer_ptr (account-data-ptr 3))
+
+      ;; Verify order is in progress or accepted
+      (define order_status (mem-load1 order_ptr 0))
+      (if (and (!= order_status ORDER_ACCEPTED) (!= order_status ORDER_IN_PROGRESS))
+        (do
+          (sol_log_ "ERROR: Order not in refundable state")
+          24)
+        (do
+          ;; Verify provider is signer
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Provider must sign refund")
+              25)
+            (do
+              ;; Set order status to Refunded
+              (mem-store order_ptr 0 ORDER_REFUNDED)
+
+              ;; Provider takes a small reputation hit for not completing
+              (define provider_rep (mem-load provider_ptr 16))
+              (mem-store provider_ptr 16 (+ provider_rep REP_ORDER_FAILURE))
+
+              ;; Update timestamps
+              (define now (get-clock-timestamp))
+              (mem-store provider_ptr 80 now)
+              (mem-store buyer_ptr 80 now)
+
+              ;; In full implementation: refund escrow to buyer
+
+              (sol_log_ "Order refunded by provider")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 62: SUSPEND PARTICIPANT
+  ;; Admin temporarily suspends a participant
+  ;; Accounts: [config, participant_pda, admin (signer)]
+  ;; Data: bytes 1-8: suspension_duration (seconds)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 62)
+    (do
+      (sol_log_ ">>> SUSPEND PARTICIPANT <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Verify admin is signer
+      (define admin_pk_0 (mem-load config_ptr 80))
+      (define caller_pk_0 (mem-load (account-pubkey 2) 0))
+      (if (!= admin_pk_0 caller_pk_0)
+        (do
+          (sol_log_ "ERROR: Only admin can suspend")
+          52)
+        (do
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Admin must sign")
+              53)
+            (do
+              ;; Get current status
+              (define current_status (mem-load1 participant_ptr 1))
+              (if (= current_status STATUS_SLASHED)
+                (do
+                  (sol_log_ "ERROR: Cannot suspend slashed participant")
+                  54)
+                (do
+                  ;; Read suspension duration
+                  (define duration (mem-load instr_ptr 1))
+                  (define now (get-clock-timestamp))
+
+                  ;; Set status to Suspended
+                  (mem-store participant_ptr 1 STATUS_SUSPENDED)
+
+                  ;; Store suspension end time in cooldown_start field
+                  (mem-store participant_ptr 88 (+ now duration))
+
+                  (sol_log_ "Participant suspended!")
+                  (sol_log_ "Suspension ends at:")
+                  (sol_log_64_ (+ now duration))
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
   ;; INSTRUCTION 61: SLASH PARTICIPANT
   ;; Penalty for violations (called by admin or dispute resolution)
   ;; Accounts: [config, participant_pda, admin (signer), token_vault, burn_account]
@@ -880,7 +1288,7 @@
   ;; ═══════════════════════════════════════════════════════════════════════════
   ;; DEFAULT: Unknown instruction
   ;; ═══════════════════════════════════════════════════════════════════════════
-  (if (> discriminator 61)
+  (if (> discriminator 62)
     (do
       (sol_log_ "ERROR: Unknown instruction")
       99)

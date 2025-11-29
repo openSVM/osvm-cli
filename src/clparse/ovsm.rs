@@ -219,6 +219,80 @@ pub fn build_ovsm_command() -> Command {
                 )
         )
         .subcommand(
+            Command::new("fmt")
+                .about("Format OVSM script with consistent indentation based on nesting depth")
+                .long_about("Auto-format OVSM scripts with proper indentation.\n\
+                           \n\
+                           Features:\n\
+                           • Indents based on parenthesis depth (2 spaces per level)\n\
+                           • Preserves comments and strings\n\
+                           • Normalizes whitespace\n\
+                           • Sorts instruction blocks by discriminator (optional)\n\
+                           \n\
+                           Example: osvm ovsm fmt script.ovsm")
+                .arg(
+                    Arg::new("script")
+                        .value_name("SCRIPT")
+                        .help("Path to OVSM script file")
+                        .required(true)
+                        .index(1)
+                )
+                .arg(
+                    Arg::new("write")
+                        .long("write")
+                        .short('w')
+                        .action(ArgAction::SetTrue)
+                        .help("Write formatted output back to file (default: print to stdout)")
+                )
+                .arg(
+                    Arg::new("check")
+                        .long("check")
+                        .action(ArgAction::SetTrue)
+                        .help("Check if file is formatted (exit 1 if not)")
+                )
+                .arg(
+                    Arg::new("indent")
+                        .long("indent")
+                        .value_name("SIZE")
+                        .default_value("2")
+                        .value_parser(clap::value_parser!(u8).range(1..=8))
+                        .help("Indentation size in spaces (1-8)")
+                )
+        )
+        .subcommand(
+            Command::new("lint")
+                .about("Analyze OVSM script for structural issues (paren balance, instruction boundaries)")
+                .long_about("Static analysis tool for OVSM scripts that detects:\n\
+                           • Parenthesis imbalances at instruction boundaries\n\
+                           • Structural issues in if/do blocks\n\
+                           • Improper nesting depth at discriminator checks\n\
+                           \n\
+                           This tool helps prevent subtle bugs where parentheses are\n\
+                           technically balanced but semantically incorrect.\n\
+                           \n\
+                           Example: osvm ovsm lint aea_protocol.ovsm")
+                .arg(
+                    Arg::new("script")
+                        .value_name("SCRIPT")
+                        .help("Path to OVSM script file")
+                        .required(true)
+                        .index(1)
+                )
+                .arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .short('v')
+                        .action(ArgAction::SetTrue)
+                        .help("Show detailed analysis at each instruction boundary")
+                )
+                .arg(
+                    Arg::new("fix")
+                        .long("fix")
+                        .action(ArgAction::SetTrue)
+                        .help("Attempt to auto-fix simple parenthesis imbalances")
+                )
+        )
+        .subcommand(
             Command::new("library")
                 .about("Manage OVSM script library")
                 .arg_required_else_help(true)

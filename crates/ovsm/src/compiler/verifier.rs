@@ -161,6 +161,16 @@ impl Verifier {
         let mut has_exit = false;
         let mut offset = 0;
 
+        // Build slot-to-instruction mapping for proper jump validation
+        // LDDW instructions take 2 slots, all others take 1 slot
+        let mut slot_positions: Vec<usize> = Vec::with_capacity(program.len());
+        let mut current_slot: usize = 0;
+        for instr in program.iter() {
+            slot_positions.push(current_slot);
+            current_slot += instr.size() / 8; // LDDW = 2, others = 1
+        }
+        let total_slots = current_slot;
+
         for (idx, instr) in program.iter().enumerate() {
             // Check for exit instruction
             if instr.opcode == 0x95 {
@@ -181,13 +191,16 @@ impl Verifier {
                 });
             }
 
-            // Check jump targets
+            // Check jump targets using slot-based coordinates
+            // sBPF jump semantics: PC = current_slot + 1 + offset
+            // LDDW advances PC by 2, others by 1
             if self.is_jump_opcode(instr.opcode) && instr.opcode != 0x95 {
-                let target = idx as i64 + 1 + instr.offset as i64;
-                if target < 0 || target as usize >= program.len() {
+                let current_slot_pos = slot_positions[idx];
+                let target_slot = current_slot_pos as i64 + 1 + instr.offset as i64;
+                if target_slot < 0 || target_slot as usize > total_slots {
                     errors.push(VerifyError::JumpOutOfBounds {
                         offset,
-                        target,
+                        target: target_slot,
                     });
                 }
             }

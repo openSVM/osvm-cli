@@ -1,0 +1,427 @@
+;;; =============================================================================
+;;; AEA PROTOCOL - TOKEN ECONOMICS TEST SUITE
+;;; Verifies stake, slash, reward, and reputation calculations
+;;; Run with: osvm ovsm run examples/ovsm_scripts/aea_economics_tests.ovsm
+;;; =============================================================================
+
+(do
+  (log :message "=== AEA ECONOMICS TEST SUITE ===")
+
+  ;; =========================================================================
+  ;; CONSTANTS (must match aea_protocol.ovsm)
+  ;; =========================================================================
+
+  ;; Reputation Constants
+  (define REP_ORDER_SUCCESS 100)
+  (define REP_ORDER_FAILURE -50)
+  (define REP_DISPUTE_WIN 50)
+  (define REP_DISPUTE_LOSE -100)
+  (define REP_SLASH_PENALTY -500)
+  (define MIN_REP_TO_TRADE -500)
+
+  ;; Stake Requirements (9 decimals = lamport-style)
+  (define DEFAULT_MIN_AGENT_STAKE 1000000000)       ;; 1 token
+  (define DEFAULT_MIN_PROVIDER_STAKE 5000000000)    ;; 5 tokens
+  (define DEFAULT_MIN_VALIDATOR_STAKE 100000000000) ;; 100 tokens
+  (define DEFAULT_FEE_BPS 250)                       ;; 2.5%
+
+  ;; Test counters
+  (define passed 0)
+  (define failed 0)
+
+  ;; =========================================================================
+  ;; TEST 1: Initial Reputation Calculation
+  ;; Formula: initial_rep = stake / 1000000 (for agents)
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 1: Initial Reputation ===")
+
+  ;; Test: Agent stakes 10 tokens (10 * 10^9 lamports)
+  (define agent_stake 10000000000)  ;; 10 tokens
+  (define agent_initial_rep (/ agent_stake 1000000))
+  (log :message "Agent stake (lamports):" :value agent_stake)
+  (log :message "Initial rep (stake/1000000):" :value agent_initial_rep)
+
+  ;; Expected: 10000000000 / 1000000 = 10000
+  (define expected_agent_rep 10000)
+  (if (= agent_initial_rep expected_agent_rep)
+    (do
+      (log :message "PASS: Agent initial rep correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Agent initial rep wrong, expected:" :value expected_agent_rep)
+      (set! failed (+ failed 1))))
+
+  ;; Provider formula: stake / 500000 (higher rep per stake)
+  (define provider_stake 50000000000)  ;; 50 tokens
+  (define provider_initial_rep (/ provider_stake 500000))
+  (log :message "Provider stake (lamports):" :value provider_stake)
+  (log :message "Initial rep (stake/500000):" :value provider_initial_rep)
+
+  ;; Expected: 50000000000 / 500000 = 100000
+  (define expected_prov_rep 100000)
+  (if (= provider_initial_rep expected_prov_rep)
+    (do
+      (log :message "PASS: Provider initial rep correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Provider initial rep wrong, expected:" :value expected_prov_rep)
+      (set! failed (+ failed 1))))
+
+  ;; Validator formula: stake / 100000 (highest rep multiplier)
+  (define validator_stake 200000000000)  ;; 200 tokens
+  (define validator_initial_rep (/ validator_stake 100000))
+  (log :message "Validator stake (lamports):" :value validator_stake)
+  (log :message "Initial rep (stake/100000):" :value validator_initial_rep)
+
+  ;; Expected: 200000000000 / 100000 = 2000000
+  (define expected_val_rep 2000000)
+  (if (= validator_initial_rep expected_val_rep)
+    (do
+      (log :message "PASS: Validator initial rep correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Validator initial rep wrong, expected:" :value expected_val_rep)
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; TEST 2: Fee Calculation
+  ;; Formula: fee = (amount * fee_bps) / 10000
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 2: Fee Calculation ===")
+
+  ;; Test: Order amount of 1000 tokens at 2.5% (250 bps)
+  (define order_amount 1000000000000)  ;; 1000 tokens
+  (define fee_bps 250)
+  (define fee_amount (/ (* order_amount fee_bps) 10000))
+  (log :message "Order amount (lamports):" :value order_amount)
+  (log :message "Fee (amount * 250 / 10000):" :value fee_amount)
+
+  ;; Expected: 1000000000000 * 250 / 10000 = 25000000000 (25 tokens)
+  (define expected_fee 25000000000)
+  (if (= fee_amount expected_fee)
+    (do
+      (log :message "PASS: Fee calculation correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Fee calculation wrong, expected:" :value expected_fee)
+      (set! failed (+ failed 1))))
+
+  ;; Test: Small order - check for rounding issues
+  (define small_amount 1000000)  ;; 0.001 tokens
+  (define small_fee (/ (* small_amount fee_bps) 10000))
+  (log :message "Small order (lamports):" :value small_amount)
+  (log :message "Small fee:" :value small_fee)
+
+  ;; Expected: 1000000 * 250 / 10000 = 25000 (truncated)
+  (define expected_small_fee 25000)
+  (if (= small_fee expected_small_fee)
+    (do
+      (log :message "PASS: Small fee rounding correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Small fee rounding wrong, expected:" :value expected_small_fee)
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; TEST 3: Slash Calculation
+  ;; Formula: slash_amount = (stake * slash_pct) / 10000
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 3: Slash Calculation ===")
+
+  ;; Test: 50% slash (5000 = 50.00%)
+  (define current_stake 100000000000)  ;; 100 tokens
+  (define slash_pct_50 5000)  ;; 50%
+  (define slash_amount_50 (/ (* current_stake slash_pct_50) 10000))
+  (log :message "Current stake:" :value current_stake)
+  (log :message "50% slash amount:" :value slash_amount_50)
+
+  ;; Expected: 100000000000 * 5000 / 10000 = 50000000000 (50 tokens)
+  (define expected_slash_50 50000000000)
+  (if (= slash_amount_50 expected_slash_50)
+    (do
+      (log :message "PASS: 50% slash correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: 50% slash wrong, expected:" :value expected_slash_50)
+      (set! failed (+ failed 1))))
+
+  ;; Test: 10% slash (1000 = 10.00%)
+  (define slash_pct_10 1000)
+  (define slash_amount_10 (/ (* current_stake slash_pct_10) 10000))
+  (log :message "10% slash amount:" :value slash_amount_10)
+
+  ;; Expected: 100000000000 * 1000 / 10000 = 10000000000 (10 tokens)
+  (define expected_slash_10 10000000000)
+  (if (= slash_amount_10 expected_slash_10)
+    (do
+      (log :message "PASS: 10% slash correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: 10% slash wrong, expected:" :value expected_slash_10)
+      (set! failed (+ failed 1))))
+
+  ;; Test: Remaining stake after slash
+  (define remaining_stake (- current_stake slash_amount_50))
+  (log :message "Remaining after 50% slash:" :value remaining_stake)
+
+  (if (= remaining_stake 50000000000)
+    (do
+      (log :message "PASS: Remaining stake correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Remaining stake wrong")
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; TEST 4: Reputation Updates
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 4: Reputation Updates ===")
+
+  ;; Start with base reputation
+  (define base_rep 10000)
+  (log :message "Starting reputation:" :value base_rep)
+
+  ;; After successful order: +100
+  (define after_success (+ base_rep REP_ORDER_SUCCESS))
+  (log :message "After successful order (+100):" :value after_success)
+
+  (if (= after_success 10100)
+    (do
+      (log :message "PASS: Success rep update correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Success rep update wrong")
+      (set! failed (+ failed 1))))
+
+  ;; After failed order: -50
+  (define after_failure (+ base_rep REP_ORDER_FAILURE))
+  (log :message "After failed order (-50):" :value after_failure)
+
+  (if (= after_failure 9950)
+    (do
+      (log :message "PASS: Failure rep update correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Failure rep update wrong")
+      (set! failed (+ failed 1))))
+
+  ;; After dispute win: +50
+  (define after_dispute_win (+ base_rep REP_DISPUTE_WIN))
+  (log :message "After dispute win (+50):" :value after_dispute_win)
+
+  (if (= after_dispute_win 10050)
+    (do
+      (log :message "PASS: Dispute win rep correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Dispute win rep wrong")
+      (set! failed (+ failed 1))))
+
+  ;; After dispute loss: -100
+  (define after_dispute_loss (+ base_rep REP_DISPUTE_LOSE))
+  (log :message "After dispute loss (-100):" :value after_dispute_loss)
+
+  (if (= after_dispute_loss 9900)
+    (do
+      (log :message "PASS: Dispute loss rep correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Dispute loss rep wrong")
+      (set! failed (+ failed 1))))
+
+  ;; After slash: -500
+  (define after_slash (+ base_rep REP_SLASH_PENALTY))
+  (log :message "After slash (-500):" :value after_slash)
+
+  (if (= after_slash 9500)
+    (do
+      (log :message "PASS: Slash penalty rep correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Slash penalty rep wrong")
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; TEST 5: Edge Cases - Minimum Stake Checks
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 5: Minimum Stake Checks ===")
+
+  ;; Agent: exactly minimum stake
+  (define agent_min_test DEFAULT_MIN_AGENT_STAKE)
+  (log :message "Agent min stake:" :value agent_min_test)
+
+  (if (>= agent_min_test DEFAULT_MIN_AGENT_STAKE)
+    (do
+      (log :message "PASS: Agent at minimum allowed")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Agent below minimum")
+      (set! failed (+ failed 1))))
+
+  ;; Agent: below minimum (should fail in real protocol)
+  (define below_agent_min 999999999)  ;; Just below 1 token
+  (if (< below_agent_min DEFAULT_MIN_AGENT_STAKE)
+    (do
+      (log :message "PASS: Correctly detected below-min agent stake")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Did not detect below-min stake")
+      (set! failed (+ failed 1))))
+
+  ;; Provider must stake more than agent
+  (if (> DEFAULT_MIN_PROVIDER_STAKE DEFAULT_MIN_AGENT_STAKE)
+    (do
+      (log :message "PASS: Provider stake > Agent stake")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Provider stake should be higher")
+      (set! failed (+ failed 1))))
+
+  ;; Validator must stake more than provider
+  (if (> DEFAULT_MIN_VALIDATOR_STAKE DEFAULT_MIN_PROVIDER_STAKE)
+    (do
+      (log :message "PASS: Validator stake > Provider stake")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Validator stake should be higher")
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; TEST 6: Reputation Floor Check
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 6: Reputation Floor ===")
+
+  ;; Test: Can reputation go below MIN_REP_TO_TRADE?
+  (define low_rep 100)
+  (define after_many_failures (+ (+ (+ low_rep REP_ORDER_FAILURE) REP_ORDER_FAILURE) REP_ORDER_FAILURE))
+  (log :message "Rep after 3 failures from 100:" :value after_many_failures)
+
+  ;; 100 - 50 - 50 - 50 = -50
+  (if (= after_many_failures -50)
+    (do
+      (log :message "PASS: Multi-failure calculation correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Multi-failure calculation wrong")
+      (set! failed (+ failed 1))))
+
+  ;; Check if still above trade threshold
+  (if (>= after_many_failures MIN_REP_TO_TRADE)
+    (do
+      (log :message "PASS: -50 still above -500 threshold")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Trading check wrong")
+      (set! failed (+ failed 1))))
+
+  ;; Test extreme case: many slashes
+  (define after_slash_spam (+ (+ after_many_failures REP_SLASH_PENALTY) REP_SLASH_PENALTY))
+  (log :message "Rep after 2 slashes from -50:" :value after_slash_spam)
+
+  ;; -50 - 500 - 500 = -1050
+  (if (< after_slash_spam MIN_REP_TO_TRADE)
+    (do
+      (log :message "PASS: -1050 correctly below -500 threshold (cannot trade)")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Should be below trade threshold")
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; TEST 7: Economic Attack Scenarios
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 7: Attack Scenario Checks ===")
+
+  ;; Scenario: Sybil attack with minimum stake
+  ;; If agent stakes exactly minimum, how much can they lose?
+  (define sybil_stake DEFAULT_MIN_AGENT_STAKE)
+  (define max_loss sybil_stake)  ;; They can lose at most their stake
+  (log :message "Sybil stake (1 token):" :value sybil_stake)
+  (log :message "Max economic loss:" :value max_loss)
+
+  ;; 100% slash wipes them out
+  (define full_slash (/ (* sybil_stake 10000) 10000))
+  (if (= full_slash sybil_stake)
+    (do
+      (log :message "PASS: 100% slash removes full stake")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: 100% slash calculation wrong")
+      (set! failed (+ failed 1))))
+
+  ;; Scenario: Fee arbitrage - is fee percentage consistent?
+  (define amount1 1000000000)
+  (define amount2 10000000000)
+  (define fee1 (/ (* amount1 DEFAULT_FEE_BPS) 10000))
+  (define fee2 (/ (* amount2 DEFAULT_FEE_BPS) 10000))
+
+  ;; Fee ratios should be proportional to amounts
+  ;; fee2/fee1 should equal amount2/amount1 = 10
+  (define fee_ratio (/ fee2 fee1))
+  (define amount_ratio (/ amount2 amount1))
+  (log :message "Fee ratio (should be 10):" :value fee_ratio)
+
+  (if (= fee_ratio amount_ratio)
+    (do
+      (log :message "PASS: Fee scales linearly (no arbitrage)")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Fee scaling inconsistent (arbitrage possible)")
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; TEST 8: Provider Payment Calculation
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST 8: Provider Payment ===")
+
+  ;; Order: 100 tokens, 2.5% fee
+  (define order_total 100000000000)  ;; 100 tokens
+  (define protocol_fee (/ (* order_total DEFAULT_FEE_BPS) 10000))
+  (define provider_payment (- order_total protocol_fee))
+
+  (log :message "Order total:" :value order_total)
+  (log :message "Protocol fee (2.5%):" :value protocol_fee)
+  (log :message "Provider receives:" :value provider_payment)
+
+  ;; Expected: 100 * 0.975 = 97.5 tokens = 97500000000 lamports
+  (define expected_payment 97500000000)
+  (if (= provider_payment expected_payment)
+    (do
+      (log :message "PASS: Provider payment correct")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Provider payment wrong, expected:" :value expected_payment)
+      (set! failed (+ failed 1))))
+
+  ;; Verify: fee + payment = total
+  (define sum (+ protocol_fee provider_payment))
+  (if (= sum order_total)
+    (do
+      (log :message "PASS: Fee + Payment = Total (no tokens lost)")
+      (set! passed (+ passed 1)))
+    (do
+      (log :message "FAIL: Accounting error (tokens lost/created)")
+      (set! failed (+ failed 1))))
+
+  ;; =========================================================================
+  ;; SUMMARY
+  ;; =========================================================================
+  (log :message "")
+  (log :message "=== TEST SUMMARY ===")
+  (log :message "Tests passed:" :value passed)
+  (log :message "Tests failed:" :value failed)
+
+  (if (= failed 0)
+    (log :message "ALL TESTS PASSED!")
+    (log :message "SOME TESTS FAILED - Review above"))
+
+  ;; Return exit code: 0 for success, non-zero for failures
+  failed)

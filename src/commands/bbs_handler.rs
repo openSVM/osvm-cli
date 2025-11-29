@@ -41,7 +41,9 @@ pub async fn handle_bbs_command(matches: &ArgMatches) -> Result<()> {
         Some(("server", sub_m)) => handle_server(sub_m).await,
         Some(("interactive", sub_m)) => handle_interactive(sub_m).await,
         Some(("tui", sub_m)) => handle_tui(sub_m).await,
+        Some(("threads", sub_m)) => handle_threads(sub_m).await,
         Some(("stats", sub_m)) => handle_stats(sub_m).await,
+        Some(("analytics", sub_m)) => handle_analytics(sub_m).await,
         Some(("mesh", sub_m)) => handle_mesh(sub_m).await,
         _ => {
             println!("{}", "Use 'osvm bbs --help' for available commands".yellow());
@@ -1048,6 +1050,936 @@ async fn run_bbs_tui_async<B: ratatui::backend::Backend>(
     }
 }
 
+/// Thread display data (mirrors http_server::ThreadedPostInfo for CLI)
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+struct ThreadedPost {
+    id: String,
+    board: String,
+    author: String,
+    author_node: String,
+    body: String,
+    created_at: i64,
+    parent_id: Option<String>,
+    is_local: bool,
+    reply_count: i64,
+    score: i32,
+    replies: Vec<ThreadedPost>,
+    depth: u32,
+    collapsed: bool,
+}
+
+/// Flattened thread item for display
+#[derive(Clone, Debug)]
+struct FlattenedThread {
+    post: ThreadedPost,
+    visible: bool,        // Is this visible (parent not collapsed)?
+    is_collapsed: bool,   // Is this post itself collapsed?
+    has_children: bool,   // Does it have children?
+    sentiment: Option<ThreadSentiment>,  // Sentiment analysis result
+    ai_summary: Option<String>,          // AI-generated summary of collapsed children
+}
+
+/// Thread sentiment classification
+#[derive(Clone, Debug)]
+enum ThreadSentiment {
+    Positive,   // Constructive, helpful
+    Neutral,    // Factual, informational
+    Negative,   // Critical, angry
+    Mixed,      // Both positive and negative
+}
+
+impl ThreadSentiment {
+    fn color(&self) -> colored::Color {
+        match self {
+            ThreadSentiment::Positive => colored::Color::Green,
+            ThreadSentiment::Neutral => colored::Color::White,
+            ThreadSentiment::Negative => colored::Color::Red,
+            ThreadSentiment::Mixed => colored::Color::Yellow,
+        }
+    }
+
+    fn icon(&self) -> &'static str {
+        match self {
+            ThreadSentiment::Positive => "😊",
+            ThreadSentiment::Neutral => "😐",
+            ThreadSentiment::Negative => "😠",
+            ThreadSentiment::Mixed => "🤔",
+        }
+    }
+}
+
+/// Thread viewer mode
+#[derive(Clone, Debug, PartialEq)]
+enum ViewerMode {
+    Normal,
+    Reply { target_post_id: String },
+    Summary { post_id: String, loading: bool },
+}
+
+/// Thread viewer state
+struct ThreadViewerState {
+    flattened: Vec<FlattenedThread>,
+    selected_idx: usize,
+    scroll_offset: usize,
+    board_name: String,
+    server_url: Option<String>,
+    mode: ViewerMode,
+    input_buffer: String,
+    status_message: Option<String>,
+    ws_connected: bool,
+}
+
+/// Handle threads command - interactive collapsible thread viewer
+async fn handle_threads(matches: &ArgMatches) -> Result<()> {
+    use crossterm::{
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, Clear, ClearType},
+        cursor,
+    };
+    use std::io::{self, Write};
+
+    let board_name = matches.get_one::<String>("board").unwrap().to_uppercase();
+    let server_url = matches.get_one::<String>("server").cloned();
+    let json_output = matches.get_flag("json");
+
+    // Fetch threads
+    let threads = if let Some(ref url) = server_url {
+        // Fetch from HTTP server
+        fetch_threads_from_server(url, &board_name).await?
+    } else {
+        // Fetch from local database (reuse http_server logic)
+        fetch_threads_from_local(&board_name)?
+    };
+
+    if json_output {
+        // Just output JSON and exit
+        println!("{}", serde_json::to_string_pretty(&threads)?);
+        return Ok(());
+    }
+
+    if threads.is_empty() {
+        println!("{}", "No threads found in this board.".yellow());
+        println!("Try posting first: {}", "osvm bbs post <BOARD> \"message\"".cyan());
+        return Ok(());
+    }
+
+    // Create viewer state
+    let mut state = ThreadViewerState {
+        flattened: flatten_threads(&threads),
+        selected_idx: 0,
+        scroll_offset: 0,
+        board_name: board_name.clone(),
+        server_url,
+        mode: ViewerMode::Normal,
+        input_buffer: String::new(),
+        status_message: None,
+        ws_connected: false,
+    };
+
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+
+    let result = run_thread_viewer_async(&mut stdout, &mut state).await;
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
+
+    result
+}
+
+/// Fetch threads from HTTP server
+async fn fetch_threads_from_server(url: &str, board: &str) -> Result<Vec<ThreadedPost>> {
+    let url = format!("{}/api/boards/{}/threads", url.trim_end_matches('/'), board);
+    let response = reqwest::get(&url).await
+        .map_err(|e| anyhow!("Failed to fetch from server: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(anyhow!("Server returned error: {}", response.status()));
+    }
+
+    let api_response: serde_json::Value = response.json().await
+        .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
+
+    // Extract data from ApiResponse wrapper
+    let data = api_response.get("data")
+        .ok_or_else(|| anyhow!("Missing data field in response"))?;
+
+    let threads: Vec<ThreadedPost> = serde_json::from_value(data.clone())
+        .map_err(|e| anyhow!("Failed to parse threads: {}", e))?;
+
+    Ok(threads)
+}
+
+/// Fetch threads from local database
+fn fetch_threads_from_local(board_name: &str) -> Result<Vec<ThreadedPost>> {
+    use crate::utils::bbs::http_server;
+
+    let mut conn = db_err(db::establish_connection())?;
+    let our_node_id = format!("!{:08x}", std::process::id());
+
+    // Get board
+    let board = db::boards::get_by_name(&mut conn, board_name)
+        .map_err(|_| anyhow!("Board '{}' not found", board_name))?;
+
+    // Collect posts (reusing http_server logic pattern)
+    let mut all_posts: Vec<http_server::UnifiedPostInfo> = Vec::new();
+
+    // Add local posts
+    if let Ok(posts) = db::posts::list_for_board(&mut conn, board.id, 500) {
+        for p in posts {
+            let user_name = db::users::get_by_user_id(&mut conn, p.user_id)
+                .map(|u| u.short_name)
+                .unwrap_or_else(|_| "???".to_string());
+            let reply_count = db::posts::reply_count(&mut conn, p.id);
+            let parent_id = p.unified_parent_id();
+
+            all_posts.push(http_server::UnifiedPostInfo {
+                id: p.id.to_string(),
+                board: board_name.to_string(),
+                author: user_name,
+                author_node: "local".to_string(),
+                body: p.body.clone(),
+                created_at: p.created_at_us / 1_000_000,
+                parent_id,
+                is_local: true,
+                reply_count,
+                score: p.score,
+            });
+        }
+    }
+
+    // Add federated posts
+    if let Ok(fed_posts) = db::federated::get_messages_for_board(&mut conn, board_name, 0, 500) {
+        for fp in fed_posts {
+            if fp.origin_node == our_node_id {
+                continue;
+            }
+            let reply_count = db::federated::reply_count(&mut conn, &fp.message_id);
+
+            all_posts.push(http_server::UnifiedPostInfo {
+                id: fp.message_id.clone(),
+                board: fp.board.clone(),
+                author: fp.author_name.clone(),
+                author_node: fp.author_node.clone(),
+                body: fp.body.clone(),
+                created_at: fp.created_at,
+                parent_id: fp.parent_id.clone(),
+                is_local: false,
+                reply_count,
+                score: 0,
+            });
+        }
+    }
+
+    // Build thread tree manually here
+    let threads = build_local_thread_tree(&all_posts);
+    Ok(threads)
+}
+
+/// Build thread tree from flat posts (local version for CLI)
+fn build_local_thread_tree(posts: &[http_server::UnifiedPostInfo]) -> Vec<ThreadedPost> {
+    use std::collections::HashMap;
+    use crate::utils::bbs::http_server;
+
+    // Map id -> children
+    let mut children_map: HashMap<String, Vec<&http_server::UnifiedPostInfo>> = HashMap::new();
+    let mut roots: Vec<&http_server::UnifiedPostInfo> = Vec::new();
+
+    for post in posts {
+        if let Some(ref parent_id) = post.parent_id {
+            children_map.entry(parent_id.clone()).or_default().push(post);
+        } else {
+            roots.push(post);
+        }
+    }
+
+    // Sort roots by score (desc) then created_at (desc)
+    roots.sort_by(|a, b| {
+        match b.score.cmp(&a.score) {
+            std::cmp::Ordering::Equal => b.created_at.cmp(&a.created_at),
+            other => other,
+        }
+    });
+
+    fn build_thread(
+        post: &http_server::UnifiedPostInfo,
+        children_map: &HashMap<String, Vec<&http_server::UnifiedPostInfo>>,
+        depth: u32,
+    ) -> ThreadedPost {
+        let mut replies = Vec::new();
+
+        if let Some(children) = children_map.get(&post.id) {
+            let mut sorted: Vec<_> = children.iter().copied().collect();
+            sorted.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+
+            for child in sorted {
+                replies.push(build_thread(child, children_map, depth + 1));
+            }
+        }
+
+        ThreadedPost {
+            id: post.id.clone(),
+            board: post.board.clone(),
+            author: post.author.clone(),
+            author_node: post.author_node.clone(),
+            body: post.body.clone(),
+            created_at: post.created_at,
+            parent_id: post.parent_id.clone(),
+            is_local: post.is_local,
+            reply_count: post.reply_count,
+            score: post.score,
+            replies,
+            depth,
+            collapsed: post.score < -2,  // Auto-collapse low-score posts
+        }
+    }
+
+    roots.iter().map(|r| build_thread(r, &children_map, 0)).collect()
+}
+
+/// Flatten threads for display (with visibility tracking)
+fn flatten_threads(threads: &[ThreadedPost]) -> Vec<FlattenedThread> {
+    let mut result = Vec::new();
+
+    fn flatten_recursive(
+        post: &ThreadedPost,
+        result: &mut Vec<FlattenedThread>,
+        parent_collapsed: bool,
+    ) {
+        let visible = !parent_collapsed;
+        let has_children = !post.replies.is_empty();
+
+        // Basic sentiment analysis from content
+        let sentiment = analyze_sentiment(&post.body, post.score);
+
+        result.push(FlattenedThread {
+            post: post.clone(),
+            visible,
+            is_collapsed: post.collapsed,
+            has_children,
+            sentiment: Some(sentiment),
+            ai_summary: None,  // Filled on demand
+        });
+
+        let child_hidden = parent_collapsed || post.collapsed;
+        for child in &post.replies {
+            flatten_recursive(child, result, child_hidden);
+        }
+    }
+
+    for thread in threads {
+        flatten_recursive(thread, &mut result, false);
+    }
+
+    result
+}
+
+/// Simple keyword-based sentiment analysis (runs locally, no AI needed)
+fn analyze_sentiment(text: &str, score: i32) -> ThreadSentiment {
+    let text_lower = text.to_lowercase();
+
+    // Positive indicators
+    let positive_words = ["thanks", "great", "awesome", "helpful", "love", "excellent",
+                          "agree", "good", "nice", "perfect", "amazing", "happy", "👍", "❤️", "😊"];
+    // Negative indicators
+    let negative_words = ["wrong", "bad", "hate", "terrible", "awful", "disagree",
+                          "stupid", "broken", "bug", "issue", "problem", "angry", "👎", "😠"];
+
+    let positive_count: i32 = positive_words.iter()
+        .filter(|w| text_lower.contains(*w))
+        .count() as i32;
+    let negative_count: i32 = negative_words.iter()
+        .filter(|w| text_lower.contains(*w))
+        .count() as i32;
+
+    // Factor in voting score
+    let score_factor = if score > 2 { 1 } else if score < -2 { -1 } else { 0 };
+
+    let total = positive_count - negative_count + score_factor;
+
+    if positive_count > 0 && negative_count > 0 {
+        ThreadSentiment::Mixed
+    } else if total > 0 {
+        ThreadSentiment::Positive
+    } else if total < 0 {
+        ThreadSentiment::Negative
+    } else {
+        ThreadSentiment::Neutral
+    }
+}
+
+/// Re-flatten after toggle
+fn reflatten(flattened: &mut Vec<FlattenedThread>) {
+    // Track collapsed state by id
+    let collapsed_ids: std::collections::HashSet<String> = flattened.iter()
+        .filter(|f| f.is_collapsed)
+        .map(|f| f.post.id.clone())
+        .collect();
+
+    // Mark visibility
+    for i in 0..flattened.len() {
+        let depth = flattened[i].post.depth;
+
+        if depth == 0 {
+            flattened[i].visible = true;
+        } else {
+            // Check if any ancestor is collapsed
+            let mut visible = true;
+            let mut current_depth = depth;
+
+            // Walk backwards to find parent
+            for j in (0..i).rev() {
+                if flattened[j].post.depth < current_depth {
+                    if collapsed_ids.contains(&flattened[j].post.id) {
+                        visible = false;
+                        break;
+                    }
+                    current_depth = flattened[j].post.depth;
+                    if current_depth == 0 {
+                        break;
+                    }
+                }
+            }
+            flattened[i].visible = visible;
+        }
+    }
+}
+
+/// Run the interactive thread viewer (async with all features)
+async fn run_thread_viewer_async(
+    stdout: &mut std::io::Stdout,
+    state: &mut ThreadViewerState,
+) -> Result<()> {
+    use crossterm::{
+        event::{self, Event, KeyCode, KeyModifiers},
+        execute,
+        terminal::{Clear, ClearType},
+        cursor,
+    };
+    use std::time::Duration;
+    use std::io::Write;
+
+    loop {
+        // Get terminal size
+        let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+        let max_visible = (height - 6) as usize;  // Header + footer + status/input
+
+        // Get visible items
+        let visible_items: Vec<(usize, &FlattenedThread)> = state.flattened.iter()
+            .enumerate()
+            .filter(|(_, f)| f.visible)
+            .collect();
+
+        // Clamp selection
+        if !visible_items.is_empty() && state.selected_idx >= visible_items.len() {
+            state.selected_idx = visible_items.len() - 1;
+        }
+
+        // Adjust scroll
+        if state.selected_idx < state.scroll_offset {
+            state.scroll_offset = state.selected_idx;
+        }
+        if state.selected_idx >= state.scroll_offset + max_visible {
+            state.scroll_offset = state.selected_idx.saturating_sub(max_visible - 1);
+        }
+
+        // Draw screen
+        execute!(stdout, Clear(ClearType::All), cursor::MoveTo(0, 0))?;
+
+        // Header with mode indicator
+        let mode_indicator = match &state.mode {
+            ViewerMode::Normal => "",
+            ViewerMode::Reply { .. } => " [REPLY MODE]",
+            ViewerMode::Summary { loading, .. } => if *loading { " [LOADING SUMMARY...]" } else { " [SUMMARY]" },
+        };
+        let ws_indicator = if state.ws_connected { " 🔗" } else { "" };
+        let header = format!(
+            "📋 {} Threads{}{} | u/d=vote | r=reply | s=summary | c/e=collapse | q=quit",
+            state.board_name, mode_indicator, ws_indicator
+        );
+        println!("{}", header.cyan().bold());
+        println!("{}", "─".repeat(width as usize).dimmed());
+
+        // Draw visible threads
+        for (view_idx, (flat_idx, item)) in visible_items.iter().enumerate().skip(state.scroll_offset).take(max_visible) {
+            let is_selected = view_idx == state.selected_idx;
+            let depth = item.post.depth as usize;
+            let indent = "  ".repeat(depth);
+
+            // Build collapse indicator
+            let collapse_icon = if item.has_children {
+                if item.is_collapsed { "[+]" } else { "[-]" }
+            } else {
+                "   "
+            };
+
+            // Sentiment icon
+            let sentiment_icon = item.sentiment.as_ref()
+                .map(|s| s.icon())
+                .unwrap_or("");
+
+            // Score display with vote arrows
+            let score_str = if item.post.score > 0 {
+                format!("+{}", item.post.score).green().to_string()
+            } else if item.post.score < 0 {
+                format!("{}", item.post.score).red().to_string()
+            } else {
+                "0".dimmed().to_string()
+            };
+
+            // Truncate body for display
+            let max_body_len = (width as usize).saturating_sub(indent.len() + 40);
+            let body_preview: String = item.post.body.chars()
+                .take(max_body_len)
+                .collect::<String>()
+                .replace('\n', " ");
+
+            // Format the line with sentiment color
+            let prefix = if is_selected { "▶ " } else { "  " };
+
+            let line = format!(
+                "{}{}{} {} {} {} {} {}",
+                prefix,
+                indent,
+                collapse_icon,
+                sentiment_icon,
+                score_str,
+                item.post.author.bold(),
+                "•".dimmed(),
+                body_preview
+            );
+
+            // Apply sentiment color to the line
+            let colored_line = if let Some(ref sentiment) = item.sentiment {
+                match sentiment {
+                    ThreadSentiment::Positive => line.green(),
+                    ThreadSentiment::Negative => line.red(),
+                    ThreadSentiment::Mixed => line.yellow(),
+                    ThreadSentiment::Neutral => line.normal(),
+                }
+            } else {
+                line.normal()
+            };
+
+            if is_selected {
+                println!("{}", colored_line.on_blue());
+            } else {
+                println!("{}", colored_line);
+            }
+
+            // Show AI summary if this post is collapsed and has one
+            if item.is_collapsed && item.ai_summary.is_some() {
+                let summary = item.ai_summary.as_ref().unwrap();
+                let summary_line = format!("{}     📝 {}", indent, summary);
+                println!("{}", summary_line.italic().dimmed());
+            }
+        }
+
+        // Status bar / Input area
+        execute!(stdout, cursor::MoveTo(0, height - 3))?;
+        println!("{}", "─".repeat(width as usize).dimmed());
+
+        // Mode-specific display
+        match &state.mode {
+            ViewerMode::Reply { target_post_id } => {
+                println!("Replying to post #{}: {}", target_post_id, "(Enter to send, Esc to cancel)".dimmed());
+                print!("> {}", state.input_buffer);
+            }
+            ViewerMode::Summary { post_id, loading } => {
+                if *loading {
+                    println!("Generating AI summary for post #{}...", post_id);
+                } else {
+                    println!("Summary mode for post #{}", post_id);
+                }
+            }
+            ViewerMode::Normal => {
+                if let Some(ref msg) = state.status_message {
+                    println!("{}", msg);
+                } else {
+                    // Footer
+                    let visible_count = visible_items.len();
+                    let total_count = state.flattened.len();
+                    let footer = format!(
+                        " Showing {}/{} | Scroll: {}/{} | j/k=nav ↑↓ | Enter=toggle",
+                        visible_count,
+                        total_count,
+                        state.scroll_offset + 1,
+                        visible_count.saturating_sub(max_visible - 1).max(1)
+                    );
+                    println!("{}", footer.dimmed());
+                }
+            }
+        }
+
+        stdout.flush()?;
+
+        // Handle input
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                // Mode-specific key handling
+                match &state.mode {
+                    ViewerMode::Reply { target_post_id } => {
+                        match key.code {
+                            KeyCode::Esc => {
+                                state.mode = ViewerMode::Normal;
+                                state.input_buffer.clear();
+                            }
+                            KeyCode::Enter => {
+                                // Submit reply
+                                if !state.input_buffer.is_empty() {
+                                    let reply_text = state.input_buffer.clone();
+                                    let target = target_post_id.clone();
+                                    state.input_buffer.clear();
+                                    state.mode = ViewerMode::Normal;
+
+                                    // Post the reply
+                                    match submit_reply(&state.board_name, &target, &reply_text, state.server_url.as_deref()).await {
+                                        Ok(_) => {
+                                            state.status_message = Some(format!("{} Reply posted!", "✓".green()));
+                                            // Refresh threads
+                                            if let Ok(threads) = refresh_threads(&state.board_name, state.server_url.as_deref()).await {
+                                                state.flattened = flatten_threads(&threads);
+                                                reflatten(&mut state.flattened);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            state.status_message = Some(format!("{} Failed: {}", "✗".red(), e));
+                                        }
+                                    }
+                                }
+                            }
+                            KeyCode::Backspace => {
+                                state.input_buffer.pop();
+                            }
+                            KeyCode::Char(c) => {
+                                state.input_buffer.push(c);
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
+                    ViewerMode::Summary { .. } => {
+                        if key.code == KeyCode::Esc || key.code == KeyCode::Char('s') {
+                            state.mode = ViewerMode::Normal;
+                        }
+                        continue;
+                    }
+                    ViewerMode::Normal => {}
+                }
+
+                // Normal mode key handling
+                match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        return Ok(());
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() - 1 {
+                            state.selected_idx += 1;
+                        }
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        state.selected_idx = state.selected_idx.saturating_sub(1);
+                    }
+                    KeyCode::Enter | KeyCode::Char(' ') => {
+                        // Toggle collapse
+                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
+                            let (flat_idx, _) = visible_items[state.selected_idx];
+                            if state.flattened[flat_idx].has_children {
+                                state.flattened[flat_idx].is_collapsed = !state.flattened[flat_idx].is_collapsed;
+                                reflatten(&mut state.flattened);
+                            }
+                        }
+                    }
+                    // FEATURE 1: Upvote/Downvote
+                    KeyCode::Char('u') => {
+                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
+                            let (flat_idx, _) = visible_items[state.selected_idx];
+                            let post_id = &state.flattened[flat_idx].post.id;
+                            match cast_vote_on_post(post_id, 1, state.server_url.as_deref()).await {
+                                Ok(new_score) => {
+                                    state.flattened[flat_idx].post.score = new_score;
+                                    state.status_message = Some(format!("{} Upvoted! Score: {}", "▲".green(), new_score));
+                                }
+                                Err(e) => {
+                                    state.status_message = Some(format!("{} Vote failed: {}", "✗".red(), e));
+                                }
+                            }
+                        }
+                    }
+                    KeyCode::Char('d') => {
+                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
+                            let (flat_idx, _) = visible_items[state.selected_idx];
+                            let post_id = &state.flattened[flat_idx].post.id;
+                            match cast_vote_on_post(post_id, -1, state.server_url.as_deref()).await {
+                                Ok(new_score) => {
+                                    state.flattened[flat_idx].post.score = new_score;
+                                    state.status_message = Some(format!("{} Downvoted! Score: {}", "▼".red(), new_score));
+                                }
+                                Err(e) => {
+                                    state.status_message = Some(format!("{} Vote failed: {}", "✗".red(), e));
+                                }
+                            }
+                        }
+                    }
+                    // FEATURE 2: Reply mode
+                    KeyCode::Char('r') => {
+                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
+                            let (flat_idx, _) = visible_items[state.selected_idx];
+                            let post_id = state.flattened[flat_idx].post.id.clone();
+                            state.mode = ViewerMode::Reply { target_post_id: post_id };
+                            state.input_buffer.clear();
+                        }
+                    }
+                    // FEATURE 4: AI Summary
+                    KeyCode::Char('s') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
+                            let (flat_idx, _) = visible_items[state.selected_idx];
+                            if state.flattened[flat_idx].has_children && state.flattened[flat_idx].is_collapsed {
+                                let post_id = state.flattened[flat_idx].post.id.clone();
+                                state.mode = ViewerMode::Summary { post_id: post_id.clone(), loading: true };
+
+                                // Collect children text for summarization
+                                let children_text = collect_children_text(&state.flattened, flat_idx);
+                                match generate_thread_summary(&children_text).await {
+                                    Ok(summary) => {
+                                        state.flattened[flat_idx].ai_summary = Some(summary);
+                                        state.status_message = Some(format!("{} Summary generated!", "✓".green()));
+                                    }
+                                    Err(e) => {
+                                        state.status_message = Some(format!("{} Summary failed: {}", "✗".red(), e));
+                                    }
+                                }
+                                state.mode = ViewerMode::Normal;
+                            } else {
+                                state.status_message = Some("Collapse a thread with children first (Enter), then press 's'".yellow().to_string());
+                            }
+                        }
+                    }
+                    KeyCode::Char('c') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        // Collapse all
+                        for f in state.flattened.iter_mut() {
+                            if f.has_children {
+                                f.is_collapsed = true;
+                            }
+                        }
+                        reflatten(&mut state.flattened);
+                    }
+                    KeyCode::Char('e') => {
+                        // Expand all
+                        for f in state.flattened.iter_mut() {
+                            f.is_collapsed = false;
+                        }
+                        reflatten(&mut state.flattened);
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(());
+                    }
+                    KeyCode::PageDown => {
+                        state.selected_idx = (state.selected_idx + max_visible).min(visible_items.len().saturating_sub(1));
+                    }
+                    KeyCode::PageUp => {
+                        state.selected_idx = state.selected_idx.saturating_sub(max_visible);
+                    }
+                    KeyCode::Home => {
+                        state.selected_idx = 0;
+                        state.scroll_offset = 0;
+                    }
+                    KeyCode::End => {
+                        state.selected_idx = visible_items.len().saturating_sub(1);
+                    }
+                    // FEATURE 3: Refresh (for now, WebSocket would be automatic)
+                    KeyCode::Char('R') => {
+                        state.status_message = Some("Refreshing...".cyan().to_string());
+                        if let Ok(threads) = refresh_threads(&state.board_name, state.server_url.as_deref()).await {
+                            state.flattened = flatten_threads(&threads);
+                            reflatten(&mut state.flattened);
+                            state.status_message = Some(format!("{} Refreshed!", "✓".green()));
+                        }
+                    }
+                    _ => {}
+                }
+
+                // Clear status after a few iterations (simple timeout)
+                if state.status_message.is_some() {
+                    // We'll let it stay for one more loop iteration
+                }
+            }
+        } else {
+            // Clear status message on poll timeout
+            state.status_message = None;
+        }
+    }
+}
+
+/// Cast a vote on a post (local or via HTTP)
+async fn cast_vote_on_post(post_id: &str, vote_type: i32, server_url: Option<&str>) -> Result<i32> {
+    if let Some(url) = server_url {
+        // Vote via HTTP API
+        let vote_url = format!("{}/api/posts/{}/vote", url.trim_end_matches('/'), post_id);
+        let client = reqwest::Client::new();
+        let response = client.post(&vote_url)
+            .json(&serde_json::json!({ "vote": vote_type }))
+            .send()
+            .await
+            .map_err(|e| anyhow!("Vote request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("Vote failed: {}", response.status()));
+        }
+
+        let result: serde_json::Value = response.json().await?;
+        let new_score = result.get("data")
+            .and_then(|d| d.get("new_score"))
+            .and_then(|s| s.as_i64())
+            .unwrap_or(0) as i32;
+        Ok(new_score)
+    } else {
+        // Vote locally
+        let mut conn = db_err(db::establish_connection())?;
+        let post_id_num: i32 = post_id.parse().map_err(|_| anyhow!("Invalid post ID"))?;
+
+        // Use a default user ID for local voting (we'd need proper user tracking in production)
+        let user_id = 1; // TODO: Get actual user from session
+
+        match db::votes::cast_vote(&mut conn, user_id, post_id_num, vote_type) {
+            Ok(result) => {
+                let new_score = match result {
+                    db::votes::VoteResult::Voted { new_score } => new_score,
+                    db::votes::VoteResult::Changed { new_score, .. } => new_score,
+                    db::votes::VoteResult::Removed { new_score } => new_score,
+                };
+                Ok(new_score)
+            }
+            Err(e) => Err(anyhow!("Vote failed: {}", e)),
+        }
+    }
+}
+
+/// Submit a reply to a post
+async fn submit_reply(board: &str, parent_id: &str, body: &str, server_url: Option<&str>) -> Result<()> {
+    if let Some(url) = server_url {
+        // Reply via HTTP API
+        let reply_url = format!("{}/api/boards/{}/posts", url.trim_end_matches('/'), board);
+        let client = reqwest::Client::new();
+        let response = client.post(&reply_url)
+            .json(&serde_json::json!({
+                "message": body,
+                "parent_id": parent_id
+            }))
+            .send()
+            .await
+            .map_err(|e| anyhow!("Reply request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("Reply failed: {}", response.status()));
+        }
+        Ok(())
+    } else {
+        // Reply locally
+        let mut conn = db_err(db::establish_connection())?;
+
+        // Get or create user for local posting (using observe which upserts)
+        let node_id = format!("!{:08x}", std::process::id());
+        let now_us = crate::utils::bbs::db::now_as_useconds();
+        let (user, _) = db::users::observe(&mut conn, &node_id, Some("CLI"), Some("CLI User"), now_us)
+            .map_err(|e| anyhow!("Failed to get/create user: {}", e))?;
+
+        // Get board
+        let board_record = db::boards::get_by_name(&mut conn, board)
+            .map_err(|_| anyhow!("Board not found"))?;
+
+        // Parse parent_id - if it's numeric, it's a local reply; otherwise federated
+        if let Ok(local_parent) = parent_id.parse::<i32>() {
+            // Local reply
+            db::posts::create_with_parent(&mut conn, board_record.id, user.id, body, Some(local_parent))
+                .map_err(|e| anyhow!("Failed to create reply: {}", e))?;
+        } else {
+            // Federated reply
+            db::posts::create_with_federated_parent(&mut conn, board_record.id, user.id, body, parent_id)
+                .map_err(|e| anyhow!("Failed to create reply: {}", e))?;
+        }
+        Ok(())
+    }
+}
+
+/// Refresh threads from source
+async fn refresh_threads(board: &str, server_url: Option<&str>) -> Result<Vec<ThreadedPost>> {
+    if let Some(url) = server_url {
+        fetch_threads_from_server(url, board).await
+    } else {
+        fetch_threads_from_local(board)
+    }
+}
+
+/// Collect children text for AI summarization
+fn collect_children_text(flattened: &[FlattenedThread], parent_idx: usize) -> String {
+    let parent_depth = flattened[parent_idx].post.depth;
+    let mut texts = Vec::new();
+
+    for item in flattened.iter().skip(parent_idx + 1) {
+        if item.post.depth <= parent_depth {
+            break; // No longer a child
+        }
+        let indent = "  ".repeat((item.post.depth - parent_depth - 1) as usize);
+        texts.push(format!("{}- {}: {}", indent, item.post.author, item.post.body));
+    }
+
+    texts.join("\n")
+}
+
+/// Generate AI summary of thread content
+async fn generate_thread_summary(content: &str) -> Result<String> {
+    // Try to use AI service if available
+    let openai_url = std::env::var("OPENAI_URL").ok();
+    let openai_key = std::env::var("OPENAI_KEY").ok();
+
+    if let (Some(url), Some(key)) = (openai_url, openai_key) {
+        let client = reqwest::Client::new();
+        let prompt = format!(
+            "Summarize this thread discussion in 1-2 sentences. Be concise and capture the main points:\n\n{}",
+            content
+        );
+
+        let response = client.post(&url)
+            .header("Authorization", format!("Bearer {}", key))
+            .json(&serde_json::json!({
+                "model": "gpt-3.5-turbo",
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant that summarizes discussions concisely."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 100,
+                "temperature": 0.3
+            }))
+            .send()
+            .await;
+
+        if let Ok(resp) = response {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(choice) = json.get("choices").and_then(|c| c.get(0)) {
+                    if let Some(message) = choice.get("message").and_then(|m| m.get("content")) {
+                        return Ok(message.as_str().unwrap_or("Summary unavailable").to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: simple extractive summary
+    let sentences: Vec<&str> = content.split('.').collect();
+    if sentences.is_empty() {
+        return Ok("No content to summarize".to_string());
+    }
+
+    // Take first and last meaningful parts
+    let preview = content.chars().take(150).collect::<String>();
+    Ok(format!("{}...", preview.replace('\n', " ")))
+}
+
 /// Handle stats command
 async fn handle_stats(matches: &ArgMatches) -> Result<()> {
     let mut conn = db_err(db::establish_connection())?;
@@ -1082,6 +2014,228 @@ async fn handle_stats(matches: &ArgMatches) -> Result<()> {
         println!("  Users: {} ({} active)", user_count, active_users);
         println!("  Radio: {}", if radio_connected { "Connected".green() } else { "Disconnected".dimmed() });
         println!("\n  Database: {}", crate::utils::bbs::db_path().display());
+    }
+
+    Ok(())
+}
+
+/// Handle analytics command - comprehensive board analytics
+async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
+    use chrono::{Local, TimeZone, Timelike};
+
+    let mut conn = db_err(db::establish_connection())?;
+    let board_name = matches.get_one::<String>("board")
+        .map(|s| s.to_uppercase())
+        .unwrap_or_else(|| "GENERAL".to_string());
+    let days: i64 = matches.get_one::<String>("days")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
+    let json = matches.get_flag("json");
+
+    // Get board
+    let board = match db::boards::get_by_name(&mut conn, &board_name) {
+        Ok(b) => b,
+        Err(_) => {
+            println!("{}", format!("Board '{}' not found", board_name).red());
+            return Ok(());
+        }
+    };
+
+    // Calculate time range
+    let now_us = db::now_as_useconds();
+    let cutoff_us = now_us - (days * 24 * 60 * 60 * 1_000_000);
+
+    // Get all posts for the board in the time range
+    let posts = db::posts::list_for_board(&mut conn, board.id, 10000)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| p.created_at_us >= cutoff_us)
+        .collect::<Vec<_>>();
+
+    // Analyze votes
+    let mut total_upvotes = 0i64;
+    let mut total_downvotes = 0i64;
+    let mut total_score: i64 = 0;
+    let mut positive_posts = 0;
+    let mut negative_posts = 0;
+    let mut neutral_posts = 0;
+
+    // Sentiment analysis
+    let mut sentiment_positive = 0;
+    let mut sentiment_negative = 0;
+    let mut sentiment_neutral = 0;
+    let mut sentiment_mixed = 0;
+
+    // Activity by hour
+    let mut activity_by_hour: [u32; 24] = [0; 24];
+
+    // Top contributors
+    let mut contributor_posts: std::collections::HashMap<i32, u32> = std::collections::HashMap::new();
+
+    for post in &posts {
+        // Score analysis
+        total_score += post.score as i64;
+        if post.score > 0 {
+            positive_posts += 1;
+            total_upvotes += post.score as i64;
+        } else if post.score < 0 {
+            negative_posts += 1;
+            total_downvotes += (-post.score) as i64;
+        } else {
+            neutral_posts += 1;
+        }
+
+        // Vote counts from user_votes table
+        let (up, down) = db::votes::get_vote_counts(&mut conn, post.id);
+        total_upvotes = total_upvotes.max(up);
+        total_downvotes = total_downvotes.max(down);
+
+        // Sentiment (reuse the analyze_sentiment function)
+        let sentiment = analyze_sentiment(&post.body, post.score);
+        match sentiment {
+            ThreadSentiment::Positive => sentiment_positive += 1,
+            ThreadSentiment::Negative => sentiment_negative += 1,
+            ThreadSentiment::Neutral => sentiment_neutral += 1,
+            ThreadSentiment::Mixed => sentiment_mixed += 1,
+        }
+
+        // Activity by hour
+        if let chrono::MappedLocalTime::Single(dt) = Local.timestamp_micros(post.created_at_us) {
+            let hour = dt.hour() as usize;
+            activity_by_hour[hour] += 1;
+        }
+
+        // Track contributors
+        *contributor_posts.entry(post.user_id).or_insert(0) += 1;
+    }
+
+    // Get top contributors
+    let mut top_contributors: Vec<(i32, u32)> = contributor_posts.into_iter().collect();
+    top_contributors.sort_by(|a, b| b.1.cmp(&a.1));
+    let top_5: Vec<_> = top_contributors.into_iter().take(5).collect();
+
+    // Peak hour
+    let peak_hour = activity_by_hour.iter()
+        .enumerate()
+        .max_by_key(|(_, &count)| count)
+        .map(|(hour, _)| hour)
+        .unwrap_or(0);
+
+    // Format output
+    if json {
+        let top_contributors_json: Vec<_> = top_5.iter()
+            .filter_map(|(user_id, count)| {
+                db::users::get_by_user_id(&mut conn, *user_id)
+                    .ok()
+                    .map(|u| serde_json::json!({
+                        "user": u.short_name,
+                        "node_id": u.node_id,
+                        "posts": count,
+                    }))
+            })
+            .collect();
+
+        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+            "board": board_name,
+            "period_days": days,
+            "posts": {
+                "total": posts.len(),
+                "with_positive_score": positive_posts,
+                "with_negative_score": negative_posts,
+                "neutral": neutral_posts,
+            },
+            "votes": {
+                "total_upvotes": total_upvotes,
+                "total_downvotes": total_downvotes,
+                "net_score": total_score,
+                "upvote_ratio": if total_upvotes + total_downvotes > 0 {
+                    (total_upvotes as f64 / (total_upvotes + total_downvotes) as f64 * 100.0).round()
+                } else { 0.0 },
+            },
+            "sentiment": {
+                "positive": sentiment_positive,
+                "negative": sentiment_negative,
+                "neutral": sentiment_neutral,
+                "mixed": sentiment_mixed,
+            },
+            "activity": {
+                "peak_hour": peak_hour,
+                "by_hour": activity_by_hour.to_vec(),
+            },
+            "top_contributors": top_contributors_json,
+        }))?);
+    } else {
+        println!("{}", format!("📊 Analytics: {} (Last {} days)", board_name, days).cyan().bold());
+        println!("{}", "═".repeat(50));
+
+        // Post summary
+        println!("\n{}", "📝 Posts".bold());
+        println!("   Total: {}", posts.len());
+        println!("   With positive score: {} {}", positive_posts, "▲".green());
+        println!("   With negative score: {} {}", negative_posts, "▼".red());
+        println!("   Neutral: {}", neutral_posts);
+
+        // Vote summary
+        println!("\n{}", "🗳️  Votes".bold());
+        println!("   Total upvotes: {} {}", total_upvotes, "▲".green());
+        println!("   Total downvotes: {} {}", total_downvotes, "▼".red());
+        println!("   Net score: {}", if total_score >= 0 {
+            format!("+{}", total_score).green()
+        } else {
+            format!("{}", total_score).red()
+        });
+        if total_upvotes + total_downvotes > 0 {
+            let ratio = total_upvotes as f64 / (total_upvotes + total_downvotes) as f64 * 100.0;
+            println!("   Upvote ratio: {:.1}%", ratio);
+        }
+
+        // Sentiment summary
+        println!("\n{}", "😊 Sentiment".bold());
+        let total_sentiment = sentiment_positive + sentiment_negative + sentiment_neutral + sentiment_mixed;
+        if total_sentiment > 0 {
+            println!("   Positive: {} ({:.1}%) {}", sentiment_positive,
+                sentiment_positive as f64 / total_sentiment as f64 * 100.0, "😊".green());
+            println!("   Negative: {} ({:.1}%) {}", sentiment_negative,
+                sentiment_negative as f64 / total_sentiment as f64 * 100.0, "😠".red());
+            println!("   Neutral:  {} ({:.1}%) {}", sentiment_neutral,
+                sentiment_neutral as f64 / total_sentiment as f64 * 100.0, "😐");
+            println!("   Mixed:    {} ({:.1}%) {}", sentiment_mixed,
+                sentiment_mixed as f64 / total_sentiment as f64 * 100.0, "🤔".yellow());
+        }
+
+        // Activity chart (simplified sparkline)
+        println!("\n{}", "⏰ Activity by Hour".bold());
+        let max_activity = *activity_by_hour.iter().max().unwrap_or(&1);
+        let bar_chars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+        print!("   ");
+        for count in activity_by_hour.iter() {
+            let level = if max_activity > 0 {
+                (*count as f64 / max_activity as f64 * 7.0).round() as usize
+            } else { 0 };
+            print!("{}", bar_chars[level.min(7)]);
+        }
+        println!();
+        println!("   0h            12h            24h");
+        println!("   Peak hour: {}:00", peak_hour);
+
+        // Top contributors
+        if !top_5.is_empty() {
+            println!("\n{}", "🏆 Top Contributors".bold());
+            for (i, (user_id, count)) in top_5.iter().enumerate() {
+                let user_name = db::users::get_by_user_id(&mut conn, *user_id)
+                    .map(|u| u.short_name)
+                    .unwrap_or_else(|_| "???".to_string());
+                let medal = match i {
+                    0 => "🥇",
+                    1 => "🥈",
+                    2 => "🥉",
+                    _ => "  ",
+                };
+                println!("   {} {} - {} posts", medal, user_name, count);
+            }
+        }
+
+        println!("\n{}", "─".repeat(50).dimmed());
     }
 
     Ok(())

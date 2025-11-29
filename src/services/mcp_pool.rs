@@ -46,6 +46,8 @@ struct PooledInstance {
     last_used: Mutex<Instant>,
     /// Instance ID for debugging
     id: usize,
+    /// Cached tool→server mapping (populated on first use)
+    tool_server_map: Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl PooledInstance {
@@ -53,14 +55,23 @@ impl PooledInstance {
         let mut service = McpService::new_with_debug(debug);
         service.load_config()?;
 
-        // Initialize all servers
+        // Initialize all servers and build tool→server map
         let servers: Vec<String> = service.list_servers()
             .iter()
             .map(|(id, _)| (*id).clone())
             .collect();
 
+        let mut tool_map = std::collections::HashMap::new();
+
         for server_id in servers {
-            let _ = service.initialize_server(&server_id).await;
+            if service.initialize_server(&server_id).await.is_ok() {
+                // Cache all tools from this server
+                if let Ok(tools) = service.list_tools(&server_id).await {
+                    for tool in tools {
+                        tool_map.insert(tool.name.clone(), server_id.clone());
+                    }
+                }
+            }
         }
 
         Ok(Self {
@@ -68,6 +79,7 @@ impl PooledInstance {
             busy: AtomicBool::new(false),
             last_used: Mutex::new(Instant::now()),
             id,
+            tool_server_map: Mutex::new(tool_map),
         })
     }
 
@@ -99,24 +111,19 @@ pub struct McpGuard {
 }
 
 impl McpGuard {
-    /// Call an MCP tool through this pooled instance
+    /// Call an MCP tool through this pooled instance (uses cached tool→server map)
     pub async fn call_tool(&self, tool_name: &str, params: Option<Value>) -> Result<Value> {
-        let mut service = self.instance.service.lock().await;
+        // Look up server from cache (fast path)
+        let server_id = {
+            let map = self.instance.tool_server_map.lock().await;
+            map.get(tool_name).cloned()
+        };
 
-        // Find the server that has this tool
-        let servers: Vec<String> = service.list_servers()
-            .iter()
-            .map(|(id, _)| (*id).clone())
-            .collect();
-
-        for server_id in servers {
-            if let Ok(tools) = service.list_tools(&server_id).await {
-                if tools.iter().any(|t| t.name == tool_name) {
-                    let result = service.call_tool(&server_id, tool_name, params).await?;
-                    self.instance.update_last_used().await;
-                    return Ok(result);
-                }
-            }
+        if let Some(server_id) = server_id {
+            let mut service = self.instance.service.lock().await;
+            let result = service.call_tool(&server_id, tool_name, params).await?;
+            self.instance.update_last_used().await;
+            return Ok(result);
         }
 
         Err(anyhow::anyhow!("Tool '{}' not found in any MCP server", tool_name))

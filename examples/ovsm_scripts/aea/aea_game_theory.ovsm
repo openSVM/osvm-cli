@@ -1,0 +1,403 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AEA GAME THEORY - MULTI-AGENT STRATEGIC REASONING
+;;; Nash Equilibrium Analysis for Autonomous Economic Agent Competition
+;;; Written in OVSM LISP - Interpreter Script (Not Compiled to sBPF)
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; PURPOSE:
+;;; When multiple AI agents compete in the same market, simple profit maximization
+;;; leads to race-to-the-bottom pricing. This module implements game-theoretic
+;;; reasoning to help agents find stable, profitable equilibria.
+;;;
+;;; CONCEPTS IMPLEMENTED:
+;;; 1. Prisoner's Dilemma in Pricing - cooperation vs. undercutting
+;;; 2. Nash Equilibrium Detection - stable strategy profiles
+;;; 3. Tit-for-Tat with Forgiveness - adaptive retaliation
+;;; 4. Market Collusion Detection - identify price-fixing attempts
+;;; 5. Stackelberg Leader/Follower - first-mover advantage
+;;; 6. Mechanism Design - incentive-compatible auction strategies
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (log :message "=== AEA GAME THEORY MODULE v1.0 ===")
+  (log :message "Multi-Agent Strategic Reasoning")
+  (log :message "")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; MARKET STATE
+  ;; Current competitive landscape
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Our agent's ID and state
+  (define MY_AGENT_ID "agent_001")
+  (define MY_REPUTATION 500)
+  (define MY_STAKE 50000000000)  ;; 50 tokens staked
+
+  ;; Competing agents in the market
+  (define competitors
+    [{:agent_id "agent_002"
+      :reputation 450
+      :stake 40000000000
+      :avg_price 5500000000      ;; Their average price for code_review
+      :response_time 0.8        ;; How fast they respond (0-1)
+      :quality_score 85         ;; Historical quality rating
+      :recent_actions ["undercut" "hold" "hold" "undercut"]}
+
+     {:agent_id "agent_003"
+      :reputation 600
+      :stake 80000000000
+      :avg_price 7000000000
+      :response_time 0.5
+      :quality_score 92
+      :recent_actions ["hold" "hold" "raise" "hold"]}
+
+     {:agent_id "agent_004"
+      :reputation 200
+      :stake 15000000000
+      :avg_price 4000000000
+      :response_time 0.95
+      :quality_score 70
+      :recent_actions ["undercut" "undercut" "undercut" "undercut"]}])
+
+  ;; Market reference price
+  (define MARKET_PRICE 6000000000)  ;; Base market rate for code_review
+
+  (log :message "Competitors in market:" :value (length competitors))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; GAME THEORY ANALYSIS FUNCTIONS
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Calculate payoff matrix for pricing game
+  ;; Assumes: Higher price = higher margin but fewer sales
+  ;;          Lower price = more sales but lower margin
+  (define calc_pricing_payoff
+    (lambda (my_price competitor_price market_demand quality_diff)
+      (do
+        ;; Price advantage (who's cheaper)
+        (define price_ratio (/ my_price competitor_price))
+        ;; Market share calculation (simplified)
+        (define base_share
+          (if (< price_ratio 1)
+            (- 70 (* 20 price_ratio))  ;; We're cheaper: 50-70% share
+            (if (> price_ratio 1)
+              (- 50 (* 20 (- price_ratio 1)))  ;; We're pricier: 30-50%
+              50)))                            ;; Same price: 50%
+        ;; Quality adjustment
+        (define quality_bonus (* quality_diff 0.5))
+        (define adjusted_share (+ base_share quality_bonus))
+        ;; Calculate profit
+        (define margin (- my_price (* MARKET_PRICE 0.5)))  ;; Assume 50% cost
+        (define sales (* market_demand (/ adjusted_share 100)))
+        (* margin sales))))
+
+  ;; Detect competitor strategy type
+  (define classify_strategy
+    (lambda (recent_actions)
+      (do
+        (define undercuts 0)
+        (define holds 0)
+        (define raises 0)
+        (for (action recent_actions)
+          (do
+            (if (= action "undercut") (set! undercuts (+ undercuts 1)) null)
+            (if (= action "hold") (set! holds (+ holds 1)) null)
+            (if (= action "raise") (set! raises (+ raises 1)) null)))
+        ;; Classify based on pattern
+        (if (>= undercuts 3)
+          "aggressive"
+          (if (>= holds 3)
+            "cooperative"
+            (if (>= raises 2)
+              "premium"
+              "mixed"))))))
+
+  ;; Tit-for-Tat response calculation
+  (define tit_for_tat_response
+    (lambda (competitor_last_action my_last_action forgiveness_prob)
+      (do
+        ;; Basic TFT: mirror last action
+        (define base_response
+          (if (= competitor_last_action "undercut")
+            "undercut"
+            (if (= competitor_last_action "raise")
+              "hold"
+              "hold")))
+        ;; Add forgiveness for occasional cooperation
+        (define should_forgive (< (% (now) 100) (* forgiveness_prob 100)))
+        (if (and (= base_response "undercut") should_forgive)
+          "hold"
+          base_response))))
+
+  ;; Find Nash Equilibrium price
+  (define find_nash_equilibrium
+    (lambda (my_cost competitor_costs market_size)
+      (do
+        ;; Cournot equilibrium for quantity competition
+        ;; Nash price = (cost + market_price) / 2 approximately
+        (define avg_competitor_cost (/ (+ competitor_costs 0) (max 1 (length competitors))))
+        (define nash_price
+          (/ (+ my_cost MARKET_PRICE (/ avg_competitor_cost 2)) 2))
+        nash_price)))
+
+  (log :message "")
+  (log :message "=== COMPETITOR ANALYSIS ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; ANALYZE EACH COMPETITOR
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  (for (comp competitors)
+    (do
+      (define agent_id (get comp :agent_id))
+      (define avg_price (get comp :avg_price))
+      (define actions (get comp :recent_actions))
+      (define quality (get comp :quality_score))
+      (define stake (get comp :stake))
+
+      (log :message "")
+      (log :message "--- Analyzing" :value agent_id)
+
+      ;; Classify their strategy
+      (define strategy (classify_strategy actions))
+      (log :message "Strategy Type:" :value strategy)
+      (log :message "Avg Price:" :value avg_price)
+      (log :message "Quality Score:" :value quality)
+
+      ;; Calculate threat level
+      (define price_threat
+        (if (< avg_price MARKET_PRICE)
+          (- 100 (* 100 (/ avg_price MARKET_PRICE)))
+          0))
+      (define quality_threat (- quality 80))
+      (define stake_power (/ stake 1000000000))
+      (define total_threat (+ price_threat quality_threat stake_power))
+
+      (log :message "Threat Score:" :value total_threat)
+
+      ;; Recommend response
+      (define response
+        (if (= strategy "aggressive")
+          (do
+            (log :message "RESPONSE: Match their price selectively")
+            "selective_match")
+          (if (= strategy "cooperative")
+            (do
+              (log :message "RESPONSE: Maintain cooperation, don't undercut")
+              "maintain")
+            (if (= strategy "premium")
+              (do
+                (log :message "RESPONSE: Compete on quality, not price")
+                "quality_focus")
+              (do
+                (log :message "RESPONSE: Monitor and adapt")
+                "adaptive")))))
+      null))
+
+  (log :message "")
+  (log :message "=== PRICING GAME SIMULATION ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; SIMULATE PRICING SCENARIOS
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Scenario 1: Cooperative pricing (all at market rate)
+  (define coop_payoff
+    (calc_pricing_payoff MARKET_PRICE MARKET_PRICE 100 5))
+  (log :message "")
+  (log :message "Scenario 1: All cooperate (market price)")
+  (log :message "Our payoff:" :value coop_payoff)
+
+  ;; Scenario 2: We undercut
+  (define undercut_price (* MARKET_PRICE 0.9))
+  (define undercut_payoff
+    (calc_pricing_payoff undercut_price MARKET_PRICE 100 5))
+  (log :message "")
+  (log :message "Scenario 2: We undercut by 10%")
+  (log :message "Our payoff:" :value undercut_payoff)
+
+  ;; Scenario 3: They undercut
+  (define their_undercut (* MARKET_PRICE 0.9))
+  (define betrayed_payoff
+    (calc_pricing_payoff MARKET_PRICE their_undercut 100 5))
+  (log :message "")
+  (log :message "Scenario 3: They undercut, we hold")
+  (log :message "Our payoff:" :value betrayed_payoff)
+
+  ;; Scenario 4: Mutual undercutting (price war)
+  (define war_payoff
+    (calc_pricing_payoff undercut_price their_undercut 100 5))
+  (log :message "")
+  (log :message "Scenario 4: Price war (mutual undercut)")
+  (log :message "Our payoff:" :value war_payoff)
+
+  ;; Calculate dominant strategy
+  (log :message "")
+  (log :message "=== DOMINANT STRATEGY ANALYSIS ===")
+
+  (define gain_from_defecting (- undercut_payoff coop_payoff))
+  (define loss_from_being_betrayed (- coop_payoff betrayed_payoff))
+  (define war_loss (- coop_payoff war_payoff))
+
+  (log :message "Gain from undercutting first:" :value gain_from_defecting)
+  (log :message "Loss if betrayed:" :value loss_from_being_betrayed)
+  (log :message "Cost of price war:" :value war_loss)
+
+  ;; Prisoner's Dilemma detection
+  (if (and (> gain_from_defecting 0)
+           (> loss_from_being_betrayed 0)
+           (> war_loss gain_from_defecting))
+    (do
+      (log :message "")
+      (log :message "DETECTED: Classic Prisoner's Dilemma!")
+      (log :message "Individual incentive to undercut, but mutual harm if all do")
+      (log :message "RECOMMENDATION: Use Tit-for-Tat with Forgiveness"))
+    (do
+      (log :message "")
+      (log :message "Not a strict Prisoner's Dilemma")
+      (log :message "Alternative strategies may be optimal")))
+
+  (log :message "")
+  (log :message "=== NASH EQUILIBRIUM SEARCH ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; FIND EQUILIBRIUM PRICE
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Assume 50% cost base
+  (define my_cost (/ MARKET_PRICE 2))
+  (define competitor_avg_cost (/ MARKET_PRICE 2))
+
+  (define nash_price
+    (find_nash_equilibrium my_cost competitor_avg_cost 100))
+
+  (log :message "Nash Equilibrium Price:" :value nash_price)
+  (log :message "As percentage of market:" :value (/ (* nash_price 100) MARKET_PRICE))
+
+  ;; Compare to current competitor prices
+  (define min_competitor_price 100000000000)
+  (for (comp competitors)
+    (do
+      (define p (get comp :avg_price))
+      (if (< p min_competitor_price)
+        (set! min_competitor_price p)
+        null)))
+
+  (log :message "Lowest competitor price:" :value min_competitor_price)
+
+  ;; Recommend strategic price
+  (define strategic_price
+    (if (> nash_price min_competitor_price)
+      (do
+        (log :message "Nash price above competition - aim for quality premium")
+        (* nash_price 1.1))
+      (do
+        (log :message "Nash price below competition - opportunity exists")
+        nash_price)))
+
+  (log :message "RECOMMENDED PRICE:" :value strategic_price)
+
+  (log :message "")
+  (log :message "=== COLLUSION DETECTION ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; DETECT POTENTIAL MARKET MANIPULATION
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Check if competitors are suspiciously coordinated
+  (define price_variance 0)
+  (define total_price 0)
+  (define num_comps 0)
+
+  (for (comp competitors)
+    (do
+      (set! total_price (+ total_price (get comp :avg_price)))
+      (set! num_comps (+ num_comps 1))))
+
+  (define avg_comp_price (/ total_price num_comps))
+
+  ;; Calculate variance
+  (for (comp competitors)
+    (do
+      (define diff (- (get comp :avg_price) avg_comp_price))
+      (set! price_variance (+ price_variance (* diff diff)))))
+
+  (define price_std (/ price_variance num_comps))
+  (log :message "Price variance among competitors:" :value price_std)
+
+  (if (< price_std 100000000000)  ;; Low variance threshold
+    (do
+      (log :message "")
+      (log :message "WARNING: Low price variance detected!")
+      (log :message "Possible coordinated pricing among competitors")
+      (log :message "Strategy: Differentiate on quality/service, not price"))
+    (do
+      (log :message "Price variance normal - competitive market")))
+
+  (log :message "")
+  (log :message "=== FINAL STRATEGIC RECOMMENDATIONS ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; STRATEGIC RECOMMENDATIONS
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  (log :message "")
+  (log :message "1. PRICING STRATEGY:")
+  (log :message "   Target Price:" :value strategic_price)
+  (log :message "   Floor Price:" :value (* MARKET_PRICE 0.7))
+  (log :message "   Ceiling Price:" :value (* MARKET_PRICE 1.3))
+
+  (log :message "")
+  (log :message "2. COMPETITOR RESPONSES:")
+  (log :message "   vs Aggressive (agent_004):")
+  (log :message "     - Don't engage in price war")
+  (log :message "     - Compete on quality and reputation")
+  (log :message "     - They have low stake = high slash risk")
+
+  (log :message "")
+  (log :message "   vs Cooperative (agent_003):")
+  (log :message "     - Maintain cooperative pricing")
+  (log :message "     - They're premium positioned, don't threaten")
+  (log :message "     - Potential for implicit market segmentation")
+
+  (log :message "")
+  (log :message "   vs Mixed (agent_002):")
+  (log :message "     - Use Tit-for-Tat with 20% forgiveness")
+  (log :message "     - Signal cooperation through consistent pricing")
+  (log :message "     - Quick retaliation if they undercut")
+
+  (log :message "")
+  (log :message "3. MARKET ENTRY TIMING:")
+  (log :message "   - Enter bids early (first-mover advantage)")
+  (log :message "   - Avoid bidding same time as aggressive competitors")
+  (log :message "   - Weekend/off-hours may have less competition")
+
+  (log :message "")
+  (log :message "4. LONG-TERM POSITIONING:")
+  (log :message "   - Build reputation above 600 (premium tier)")
+  (log :message "   - Increase stake to signal commitment")
+  (log :message "   - Specialize in high-quality, high-margin services")
+
+  (log :message "")
+  (log :message "=== GAME THEORY ANALYSIS COMPLETE ===")
+  0)
+
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; END OF GAME THEORY MODULE
+;;;
+;;; KEY INSIGHTS:
+;;; 1. Agent markets often exhibit Prisoner's Dilemma dynamics
+;;; 2. Tit-for-Tat with Forgiveness is robust against most strategies
+;;; 3. Reputation and stake serve as commitment mechanisms
+;;; 4. Quality differentiation escapes pure price competition
+;;; 5. First-mover advantage significant in sequential games
+;;;
+;;; FUTURE ENHANCEMENTS:
+;;; - Multi-stage game analysis (repeated interactions)
+;;; - Bayesian updating on competitor strategies
+;;; - Auction theory for service bidding
+;;; - Coalition formation and betrayal detection
+;;; - Evolutionary stable strategies across agent populations
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════

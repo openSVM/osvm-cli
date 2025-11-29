@@ -12,6 +12,7 @@ pub mod queued_messages;
 pub mod moderators;
 pub mod federated;
 pub mod mesh_messages;
+pub mod votes;
 
 use crate::utils::bbs::db_path;
 
@@ -69,7 +70,7 @@ pub fn initialize_database(conn: &mut SqliteConnection) -> Result<()> {
     )
     .execute(conn)?;
 
-    // Create posts table (with parent_id for reply threading)
+    // Create posts table (with parent_id for reply threading, federated_parent_id for cross-node, score for voting)
     diesel::sql_query(
         r#"CREATE TABLE IF NOT EXISTS posts (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +79,8 @@ pub fn initialize_database(conn: &mut SqliteConnection) -> Result<()> {
             body TEXT NOT NULL,
             created_at_us BIGINT NOT NULL,
             parent_id INTEGER,
+            federated_parent_id TEXT,
+            score INTEGER NOT NULL DEFAULT 0,
             UNIQUE(created_at_us),
             FOREIGN KEY (user_id) REFERENCES users (id),
             FOREIGN KEY (board_id) REFERENCES boards (id),
@@ -85,6 +88,10 @@ pub fn initialize_database(conn: &mut SqliteConnection) -> Result<()> {
         )"#,
     )
     .execute(conn)?;
+
+    // Add new columns if they don't exist (migration for existing databases)
+    let _ = diesel::sql_query("ALTER TABLE posts ADD COLUMN federated_parent_id TEXT").execute(conn);
+    let _ = diesel::sql_query("ALTER TABLE posts ADD COLUMN score INTEGER NOT NULL DEFAULT 0").execute(conn);
 
     // Create board_states table
     diesel::sql_query(
@@ -211,6 +218,21 @@ pub fn initialize_database(conn: &mut SqliteConnection) -> Result<()> {
         "CREATE INDEX IF NOT EXISTS idx_mesh_messages_from_node ON mesh_messages(from_node_id)"
     ).execute(conn)?;
 
+    // Create user_votes table (for tracking per-user votes)
+    diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS user_votes (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL,
+            vote_type INTEGER NOT NULL,
+            created_at_us BIGINT NOT NULL,
+            UNIQUE(user_id, post_id),
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (post_id) REFERENCES posts (id)
+        )"#,
+    )
+    .execute(conn)?;
+
     Ok(())
 }
 
@@ -266,6 +288,20 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<()> {
 
     let _ = diesel::sql_query(
         "CREATE INDEX IF NOT EXISTS idx_mesh_messages_from_node ON mesh_messages(from_node_id)"
+    ).execute(conn);
+
+    // Create user_votes table if it doesn't exist (migration for existing DBs)
+    let _ = diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS user_votes (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            post_id INTEGER NOT NULL,
+            vote_type INTEGER NOT NULL,
+            created_at_us BIGINT NOT NULL,
+            UNIQUE(user_id, post_id),
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (post_id) REFERENCES posts (id)
+        )"#
     ).execute(conn);
 
     Ok(())

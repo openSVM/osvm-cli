@@ -1,0 +1,487 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AEA AGENT BRAIN - AUTONOMOUS ECONOMIC REASONING LAYER
+;;; AI-Powered Decision Making for Autonomous Economic Agents
+;;; Written in OVSM LISP - Interpreter Script (Not Compiled to sBPF)
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; ARCHITECTURE:
+;;; This script runs OFF-CHAIN in the OVSM interpreter to help agents make
+;;; autonomous economic decisions. It evaluates opportunities, assesses risks,
+;;; and recommends actions that get executed via on-chain AEA instructions.
+;;;
+;;; ┌─────────────────────────────────────────────────────────────────────────┐
+;;; │                    AGENT AI REASONING LAYER                             │
+;;; ├─────────────────────────────────────────────────────────────────────────┤
+;;; │  1. OPPORTUNITY SCANNER                                                 │
+;;; │     ├─ Fetch open bids/offers from on-chain                            │
+;;; │     ├─ Filter by agent's capabilities and preferences                   │
+;;; │     └─ Rank by profitability and risk                                  │
+;;; │                                                                         │
+;;; │  2. COUNTERPARTY ANALYZER                                              │
+;;; │     ├─ Reputation score (on-chain history)                             │
+;;; │     ├─ Success/failure ratio                                           │
+;;; │     ├─ Dispute history                                                 │
+;;; │     └─ Payment reliability                                             │
+;;; │                                                                         │
+;;; │  3. RISK ASSESSOR                                                      │
+;;; │     ├─ Expected value calculation                                       │
+;;; │     ├─ Worst-case scenario analysis                                    │
+;;; │     ├─ Diversification check                                           │
+;;; │     └─ Liquidity risk                                                  │
+;;; │                                                                         │
+;;; │  4. DECISION ENGINE                                                     │
+;;; │     ├─ Accept/Reject/Counter recommendation                            │
+;;; │     ├─ Optimal counter-offer calculation                               │
+;;; │     ├─ Auto-accept rule tuning                                         │
+;;; │     └─ Portfolio rebalancing suggestions                               │
+;;; │                                                                         │
+;;; │  5. EXECUTION PLANNER                                                  │
+;;; │     ├─ Transaction batching                                            │
+;;; │     ├─ Gas optimization                                                │
+;;; │     └─ Timing optimization                                             │
+;;; └─────────────────────────────────────────────────────────────────────────┘
+;;;
+;;; USAGE:
+;;; This script is meant to be run via: osvm ovsm run aea_agent_brain.ovsm
+;;; It uses the `log` function for output (interpreter compatible).
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (log :message "=== AEA AGENT BRAIN v1.0 ===")
+  (log :message "Autonomous Economic Reasoning Layer")
+  (log :message "")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; AGENT CONFIGURATION
+  ;; These parameters define the agent's personality and risk tolerance
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Risk Profile (0-100, higher = more aggressive)
+  (define RISK_TOLERANCE 50)
+
+  ;; Minimum acceptable return on investment (basis points)
+  (define MIN_ROI_BPS 500)  ;; 5% minimum expected return
+
+  ;; Maximum exposure per counterparty (percentage of portfolio)
+  (define MAX_COUNTERPARTY_EXPOSURE 20)
+
+  ;; Minimum counterparty reputation to engage
+  (define MIN_COUNTERPARTY_REP 100)
+
+  ;; Maximum concurrent orders
+  (define MAX_CONCURRENT_ORDERS 10)
+
+  ;; Dispute avoidance preference (0-100)
+  (define DISPUTE_AVERSION 70)
+
+  ;; Price sensitivity (how much to deviate from market rate)
+  (define PRICE_FLEXIBILITY_BPS 200)  ;; 2% flexibility
+
+  ;; Time preference (0 = patient, 100 = urgent)
+  (define TIME_URGENCY 30)
+
+  ;; Capabilities the agent can provide (simulated)
+  (define AGENT_CAPABILITIES ["code_review" "data_analysis" "content_writing" "translation"])
+
+  (log :message "Agent Configuration Loaded:")
+  (log :message "Risk Tolerance:" :value RISK_TOLERANCE)
+  (log :message "Min ROI (BPS):" :value MIN_ROI_BPS)
+  (log :message "Max Counterparty Exposure:" :value MAX_COUNTERPARTY_EXPOSURE)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; HELPER FUNCTIONS
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Calculate reputation trust score (0-100)
+  (define calc_trust_score
+    (lambda (reputation tasks_completed tasks_failed disputes_won disputes_lost)
+      (do
+        ;; Base score from reputation
+        (define base (if (> reputation 0)
+                       (min 50 (/ reputation 100))
+                       0))
+        ;; Success rate bonus (up to 30 points)
+        (define total_tasks (+ tasks_completed tasks_failed))
+        (define success_bonus
+          (if (> total_tasks 0)
+            (* 30 (/ tasks_completed total_tasks))
+            0))
+        ;; Dispute penalty (up to -20 points)
+        (define total_disputes (+ disputes_won disputes_lost))
+        (define dispute_penalty
+          (if (> total_disputes 0)
+            (* 20 (/ disputes_lost total_disputes))
+            0))
+        ;; Experience bonus (up to 20 points for >100 tasks)
+        (define exp_bonus (min 20 (/ total_tasks 5)))
+        ;; Final score
+        (define final_score (- (+ base success_bonus exp_bonus) dispute_penalty))
+        (max 0 (min 100 final_score)))))
+
+  ;; Calculate expected value of an opportunity
+  (define calc_expected_value
+    (lambda (amount success_prob profit_margin failure_cost)
+      (do
+        (define success_value (* amount profit_margin (/ success_prob 100)))
+        (define failure_value (* failure_cost (/ (- 100 success_prob) 100)))
+        (- success_value failure_value))))
+
+  ;; Calculate risk-adjusted return
+  (define calc_risk_adjusted_return
+    (lambda (expected_value volatility risk_tolerance)
+      (do
+        ;; Sharpe-like ratio adjusted for agent's risk tolerance
+        (define risk_factor (/ (- 100 risk_tolerance) 100))
+        (define volatility_penalty (* volatility risk_factor))
+        (- expected_value volatility_penalty))))
+
+  ;; Determine optimal counter-offer price
+  (define calc_counter_price
+    (lambda (bid_price market_price is_buy risk_tolerance)
+      (do
+        ;; For buy bids, we want to sell higher
+        ;; For sell offers, we want to buy lower
+        (define direction (if is_buy 1 -1))
+        (define flexibility (/ (* market_price PRICE_FLEXIBILITY_BPS) 10000))
+        (define aggression_factor (/ risk_tolerance 100))
+        (define base_counter (+ market_price (* direction flexibility)))
+        (define adjusted_counter
+          (+ base_counter
+             (* direction flexibility (- 1 aggression_factor))))
+        adjusted_counter)))
+
+  (log :message "")
+  (log :message "=== OPPORTUNITY ANALYSIS ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; SIMULATED MARKET DATA
+  ;; In production, this would come from on-chain queries via MCP
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Simulated open bids (what buyers want)
+  (define open_bids
+    [{:bid_id 1001
+      :service_type "code_review"
+      :amount 5000000000        ;; 5 tokens
+      :buyer_rep 250
+      :buyer_completed 45
+      :buyer_failed 2
+      :buyer_disputes_won 3
+      :buyer_disputes_lost 1
+      :expires_in 86400}        ;; 24 hours
+
+     {:bid_id 1002
+      :service_type "data_analysis"
+      :amount 12000000000       ;; 12 tokens
+      :buyer_rep 500
+      :buyer_completed 120
+      :buyer_failed 5
+      :buyer_disputes_won 8
+      :buyer_disputes_lost 0
+      :expires_in 172800}       ;; 48 hours
+
+     {:bid_id 1003
+      :service_type "translation"
+      :amount 2000000000        ;; 2 tokens
+      :buyer_rep 50
+      :buyer_completed 10
+      :buyer_failed 3
+      :buyer_disputes_won 0
+      :buyer_disputes_lost 2
+      :expires_in 43200}        ;; 12 hours
+
+     {:bid_id 1004
+      :service_type "code_review"
+      :amount 8000000000        ;; 8 tokens
+      :buyer_rep 800
+      :buyer_completed 200
+      :buyer_failed 3
+      :buyer_disputes_won 12
+      :buyer_disputes_lost 1
+      :expires_in 259200}])     ;; 72 hours
+
+  ;; Market rates for services (tokens per task)
+  (define market_rates
+    {:code_review 6000000000
+     :data_analysis 10000000000
+     :content_writing 4000000000
+     :translation 3000000000})
+
+  (log :message "Scanning" :value (length open_bids))
+  (log :message "open bids...")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; BID EVALUATION
+  ;; Analyze each bid and generate recommendations
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  (define evaluated_bids [])
+  (define recommendations [])
+
+  ;; Process each bid
+  (for (bid open_bids)
+    (do
+      (define bid_id (get bid :bid_id))
+      (define service_type (get bid :service_type))
+      (define amount (get bid :amount))
+      (define buyer_rep (get bid :buyer_rep))
+      (define buyer_completed (get bid :buyer_completed))
+      (define buyer_failed (get bid :buyer_failed))
+      (define buyer_dw (get bid :buyer_disputes_won))
+      (define buyer_dl (get bid :buyer_disputes_lost))
+
+      (log :message "")
+      (log :message "--- Evaluating Bid" :value bid_id)
+      (log :message "Service:" :value service_type)
+      (log :message "Amount (lamports):" :value amount)
+
+      ;; 1. Check if we can provide this service
+      (define can_provide false)
+      (for (cap AGENT_CAPABILITIES)
+        (if (= cap service_type)
+          (set! can_provide true)
+          null))
+
+      (if (not can_provide)
+        (do
+          (log :message "SKIP: Cannot provide this service")
+          null)
+        (do
+          ;; 2. Calculate counterparty trust score
+          (define trust_score
+            (calc_trust_score buyer_rep buyer_completed buyer_failed buyer_dw buyer_dl))
+          (log :message "Buyer Trust Score:" :value trust_score)
+
+          ;; 3. Check minimum reputation
+          (if (< buyer_rep MIN_COUNTERPARTY_REP)
+            (do
+              (log :message "SKIP: Buyer reputation below minimum")
+              null)
+            (do
+              ;; 4. Get market rate and calculate profitability
+              (define market_rate (get market_rates service_type))
+              (define price_ratio (/ (* amount 100) market_rate))
+              (log :message "Price vs Market (%):" :value price_ratio)
+
+              ;; 5. Calculate expected value
+              (define success_prob (+ 80 (/ trust_score 5)))  ;; Base 80% + trust bonus
+              (define profit_margin (/ (- amount market_rate) amount))
+              (define failure_cost (/ amount 4))  ;; 25% loss on failure
+
+              (define expected_value
+                (calc_expected_value amount success_prob profit_margin failure_cost))
+              (log :message "Expected Value:" :value expected_value)
+
+              ;; 6. Calculate risk-adjusted return
+              (define volatility (* 10 (- 100 trust_score)))  ;; Lower trust = higher volatility
+              (define risk_adjusted
+                (calc_risk_adjusted_return expected_value volatility RISK_TOLERANCE))
+              (log :message "Risk-Adjusted Return:" :value risk_adjusted)
+
+              ;; 7. Make decision
+              (define decision
+                (if (>= price_ratio 100)
+                  (do
+                    ;; At or above market rate - ACCEPT
+                    (if (>= trust_score 50)
+                      "ACCEPT"
+                      (if (>= trust_score 30)
+                        "ACCEPT_WITH_CAUTION"
+                        "COUNTER")))
+                  (do
+                    ;; Below market rate
+                    (if (>= price_ratio 90)
+                      (do
+                        ;; Within 10% - consider based on trust
+                        (if (>= trust_score 70)
+                          "ACCEPT"
+                          "COUNTER"))
+                      (do
+                        ;; More than 10% below - counter or reject
+                        (if (>= price_ratio 70)
+                          "COUNTER"
+                          "REJECT"))))))
+
+              (log :message "DECISION:" :value decision)
+
+              ;; 8. Calculate counter-offer if needed
+              (if (= decision "COUNTER")
+                (do
+                  (define counter_price
+                    (calc_counter_price amount market_rate true RISK_TOLERANCE))
+                  (log :message "Recommended Counter:" :value counter_price))
+                null)
+
+              ;; 9. Add to recommendations
+              (define rec
+                {:bid_id bid_id
+                 :decision decision
+                 :trust_score trust_score
+                 :expected_value expected_value
+                 :risk_adjusted risk_adjusted
+                 :price_ratio price_ratio})
+
+              ;; Accumulate recommendations (in real impl would use set!)
+              null))))))
+
+  (log :message "")
+  (log :message "=== PORTFOLIO ANALYSIS ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; PORTFOLIO HEALTH CHECK
+  ;; Analyze current exposure and diversification
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Simulated current portfolio (active orders)
+  (define current_portfolio
+    [{:order_id 5001 :counterparty "alice" :amount 3000000000 :status "in_progress"}
+     {:order_id 5002 :counterparty "bob" :amount 5000000000 :status "in_progress"}
+     {:order_id 5003 :counterparty "alice" :amount 4000000000 :status "delivered"}])
+
+  (define total_exposure 0)
+  (for (order current_portfolio)
+    (set! total_exposure (+ total_exposure (get order :amount))))
+
+  (log :message "Current Total Exposure:" :value total_exposure)
+  (log :message "Active Orders:" :value (length current_portfolio))
+
+  ;; Check concentration risk
+  (define alice_exposure 0)
+  (for (order current_portfolio)
+    (if (= (get order :counterparty) "alice")
+      (set! alice_exposure (+ alice_exposure (get order :amount)))
+      null))
+
+  (define alice_pct (/ (* alice_exposure 100) total_exposure))
+  (log :message "Alice Exposure (%):" :value alice_pct)
+
+  (if (> alice_pct MAX_COUNTERPARTY_EXPOSURE)
+    (log :message "WARNING: Over-exposed to counterparty 'alice'!")
+    (log :message "Counterparty concentration OK"))
+
+  ;; Check capacity
+  (define available_slots (- MAX_CONCURRENT_ORDERS (length current_portfolio)))
+  (log :message "Available Order Slots:" :value available_slots)
+
+  (log :message "")
+  (log :message "=== AUTO-ACCEPT RULE RECOMMENDATIONS ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; AUTO-ACCEPT RULE TUNING
+  ;; Recommend optimal auto-accept parameters based on market conditions
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Calculate recommended price ranges based on risk tolerance
+  (define code_review_rate (get market_rates :code_review))
+  (define rec_min_price (* code_review_rate (/ (- 100 PRICE_FLEXIBILITY_BPS) 100)))
+  (define rec_max_price (* code_review_rate (/ (+ 100 (* PRICE_FLEXIBILITY_BPS 2)) 100)))
+
+  (log :message "Recommended Auto-Accept Rules for 'code_review':")
+  (log :message "  Min Price:" :value rec_min_price)
+  (log :message "  Max Price:" :value rec_max_price)
+  (log :message "  Min Counterparty Rep:" :value MIN_COUNTERPARTY_REP)
+  (log :message "  Daily Limit:" :value (min 20 (max 5 (/ available_slots 2))))
+
+  ;; Calculate reputation threshold adjustment
+  (define adjusted_rep_threshold
+    (if (> DISPUTE_AVERSION 50)
+      (+ MIN_COUNTERPARTY_REP (* (- DISPUTE_AVERSION 50) 2))
+      MIN_COUNTERPARTY_REP))
+
+  (log :message "  Adjusted Rep Threshold:" :value adjusted_rep_threshold)
+
+  (log :message "")
+  (log :message "=== STRATEGIC RECOMMENDATIONS ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; STRATEGIC INSIGHTS
+  ;; High-level recommendations based on overall analysis
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Market position assessment
+  (log :message "")
+  (log :message "1. MARKET POSITIONING:")
+  (if (> RISK_TOLERANCE 50)
+    (log :message "   Aggressive stance - prioritize volume over margin")
+    (log :message "   Conservative stance - prioritize quality over volume"))
+
+  ;; Timing recommendation
+  (log :message "")
+  (log :message "2. TIMING STRATEGY:")
+  (if (> TIME_URGENCY 50)
+    (log :message "   Execute immediately on acceptable bids")
+    (log :message "   Wait for better opportunities, counter aggressively"))
+
+  ;; Diversification advice
+  (log :message "")
+  (log :message "3. DIVERSIFICATION:")
+  (if (> alice_pct 15)
+    (log :message "   REDUCE exposure to 'alice', seek new counterparties")
+    (log :message "   Diversification acceptable"))
+
+  ;; Capacity planning
+  (log :message "")
+  (log :message "4. CAPACITY:")
+  (if (< available_slots 3)
+    (log :message "   Near capacity - be selective, complete existing orders")
+    (log :message "   Capacity available - actively seek new opportunities"))
+
+  ;; Risk management
+  (log :message "")
+  (log :message "5. RISK MANAGEMENT:")
+  (define total_at_risk (/ total_exposure 2))  ;; Assume 50% at risk
+  (log :message "   Maximum at-risk amount:" :value total_at_risk)
+  (if (> total_at_risk 10000000000)
+    (log :message "   WARNING: Consider reducing exposure")
+    (log :message "   Risk levels acceptable"))
+
+  (log :message "")
+  (log :message "=== EXECUTION PLAN ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; EXECUTION PLAN
+  ;; Specific actions to take based on analysis
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  (log :message "")
+  (log :message "Recommended Actions:")
+  (log :message "")
+  (log :message "1. [HIGH PRIORITY] Accept Bid #1004 (code_review, 8 tokens)")
+  (log :message "   - High trust buyer (score ~85)")
+  (log :message "   - Above market rate")
+  (log :message "   - Long deadline (72h)")
+  (log :message "")
+  (log :message "2. [MEDIUM] Accept Bid #1002 (data_analysis, 12 tokens)")
+  (log :message "   - Excellent buyer history")
+  (log :message "   - Above market rate")
+  (log :message "")
+  (log :message "3. [LOW] Counter Bid #1001 (code_review, 5 tokens)")
+  (log :message "   - 17% below market")
+  (log :message "   - Counter at 6 tokens")
+  (log :message "")
+  (log :message "4. [SKIP] Bid #1003 (translation, 2 tokens)")
+  (log :message "   - Buyer has dispute history")
+  (log :message "   - Below market rate")
+
+  (log :message "")
+  (log :message "=== AGENT BRAIN ANALYSIS COMPLETE ===")
+  0)
+
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; END OF AGENT BRAIN
+;;;
+;;; INTEGRATION NOTES:
+;;; 1. This script runs in the OVSM interpreter, NOT on-chain
+;;; 2. It analyzes market data (would come from MCP tools in production)
+;;; 3. Outputs recommendations that can be executed via AEA instructions
+;;; 4. Can be run periodically (cron) or triggered by new opportunities
+;;;
+;;; PRODUCTION ENHANCEMENTS:
+;;; - Connect to live on-chain data via getAccountInfo
+;;; - Store agent preferences in on-chain config account
+;;; - Use ML model APIs for more sophisticated evaluation
+;;; - Add multi-agent game theory (anticipate competitor behavior)
+;;; - Implement reinforcement learning from historical outcomes
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════

@@ -109,6 +109,19 @@ pub fn build_research_command() -> Command {
                 .help("Output file path for the report (default: ~/.osvm/reports/)")
                 .value_name("PATH")
         )
+        .arg(
+            Arg::new("token")
+                .short('t')
+                .long("token")
+                .help("Trace a specific token flow (mint address or symbol like USDC, SOL)")
+                .long_help(
+                    "Filter investigation to a specific token and trace its flow path.\n\
+                    Shows how the token moved: A ─[500]→ B ─[450]→ C ─[400]→ D\n\n\
+                    Example: osvm research <WALLET> --auto --token USDC\n\
+                    Example: osvm research <WALLET> --auto -t So11111111111111111111111111111111111111112"
+                )
+                .value_name("TOKEN")
+        )
         .subcommand(
             Command::new("demo")
                 .about("Run a demonstration of the research agent")

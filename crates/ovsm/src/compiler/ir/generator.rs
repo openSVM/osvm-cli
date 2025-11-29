@@ -1472,31 +1472,49 @@ impl IrGenerator {
                 }
 
                 // Handle (mem-store base offset value) - direct memory store
+                // Supports both constant and dynamic offsets
                 if name == "mem-store" && args.len() == 3 {
                     let base_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-store base has no result"))?;
-                    let offset = match &args[1].value {
-                        Expression::IntLiteral(n) => *n,
-                        _ => return Err(Error::runtime("mem-store offset must be constant")),
-                    };
                     let value_reg = self.generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("mem-store value has no result"))?;
-                    self.emit(IrInstruction::Store(base_reg, value_reg, offset));
+
+                    // Try constant offset first (most common case)
+                    if let Expression::IntLiteral(offset) = &args[1].value {
+                        self.emit(IrInstruction::Store(base_reg, value_reg, *offset));
+                    } else {
+                        // Dynamic offset: compute effective address = base + offset
+                        let offset_reg = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("mem-store offset has no result"))?;
+                        let addr_reg = self.alloc_reg();
+                        self.emit(IrInstruction::Add(addr_reg, base_reg, offset_reg));
+                        // Store at computed address with 0 offset
+                        self.emit(IrInstruction::Store(addr_reg, value_reg, 0));
+                    }
                     return Ok(None); // Store has no result
                 }
 
                 // Handle (mem-store1 base offset value) - store 1 byte to memory
                 // Stores the low byte of value at ptr+offset
+                // Supports both constant and dynamic offsets
                 if name == "mem-store1" && args.len() == 3 {
                     let base_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-store1 base has no result"))?;
-                    let offset = match &args[1].value {
-                        Expression::IntLiteral(n) => *n,
-                        _ => return Err(Error::runtime("mem-store1 offset must be constant")),
-                    };
                     let value_reg = self.generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("mem-store1 value has no result"))?;
-                    self.emit(IrInstruction::Store1(base_reg, value_reg, offset));
+
+                    // Try constant offset first (most common case)
+                    if let Expression::IntLiteral(offset) = &args[1].value {
+                        self.emit(IrInstruction::Store1(base_reg, value_reg, *offset));
+                    } else {
+                        // Dynamic offset: compute effective address = base + offset
+                        let offset_reg = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("mem-store1 offset has no result"))?;
+                        let addr_reg = self.alloc_reg();
+                        self.emit(IrInstruction::Add(addr_reg, base_reg, offset_reg));
+                        // Store at computed address with 0 offset
+                        self.emit(IrInstruction::Store1(addr_reg, value_reg, 0));
+                    }
                     return Ok(None); // Store has no result
                 }
 
@@ -5751,18 +5769,26 @@ impl IrGenerator {
                 self.emit(IrInstruction::JumpIf(cond_reg, then_label.clone()));
                 self.emit(IrInstruction::Jump(else_label.clone()));
 
-                // Then
+                // Then - if branch returns None, use 0 (null) as default value
                 self.emit(IrInstruction::Label(then_label));
-                let then_reg = self.generate_expr(then_expr)?
-                    .ok_or_else(|| Error::runtime("Ternary then has no result"))?;
-                self.emit(IrInstruction::Move(result_reg, then_reg));
+                let then_result = self.generate_expr(then_expr)?;
+                if let Some(then_reg) = then_result {
+                    self.emit(IrInstruction::Move(result_reg, then_reg));
+                } else {
+                    // Side-effect only branch - use null (0) as value
+                    self.emit(IrInstruction::ConstNull(result_reg));
+                }
                 self.emit(IrInstruction::Jump(end_label.clone()));
 
-                // Else
+                // Else - if branch returns None, use 0 (null) as default value
                 self.emit(IrInstruction::Label(else_label));
-                let else_reg = self.generate_expr(else_expr)?
-                    .ok_or_else(|| Error::runtime("Ternary else has no result"))?;
-                self.emit(IrInstruction::Move(result_reg, else_reg));
+                let else_result = self.generate_expr(else_expr)?;
+                if let Some(else_reg) = else_result {
+                    self.emit(IrInstruction::Move(result_reg, else_reg));
+                } else {
+                    // Side-effect only branch - use null (0) as value
+                    self.emit(IrInstruction::ConstNull(result_reg));
+                }
 
                 // End
                 self.emit(IrInstruction::Label(end_label));

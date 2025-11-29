@@ -69,7 +69,9 @@ pub struct Post {
     pub user_id: i32,
     pub body: String,
     pub created_at_us: i64,
-    pub parent_id: Option<i32>,  // For reply threading (null = top-level post)
+    pub parent_id: Option<i32>,  // For local reply threading (null = top-level post)
+    pub federated_parent_id: Option<String>,  // For federated parent references (e.g., "!abc123:5")
+    pub score: i32,  // Upvotes minus downvotes
 }
 
 impl Post {
@@ -78,7 +80,13 @@ impl Post {
     }
 
     pub fn is_reply(&self) -> bool {
-        self.parent_id.is_some()
+        self.parent_id.is_some() || self.federated_parent_id.is_some()
+    }
+
+    /// Get the unified parent ID (federated takes precedence if set)
+    pub fn unified_parent_id(&self) -> Option<String> {
+        self.federated_parent_id.clone()
+            .or_else(|| self.parent_id.map(|id| id.to_string()))
     }
 }
 
@@ -93,7 +101,9 @@ pub struct NewPost<'a> {
     pub body: &'a str,
     #[validate(range(min = EARLY_2024, max=EARLY_2200))]
     pub created_at_us: &'a i64,
-    pub parent_id: Option<i32>,  // For reply threading
+    pub parent_id: Option<i32>,  // For local reply threading
+    pub federated_parent_id: Option<&'a str>,  // For federated parent references
+    pub score: i32,  // Initial score (default 0)
 }
 
 #[derive(Debug, Clone, Identifiable, Queryable, Selectable)]
@@ -374,4 +384,28 @@ pub struct NewMeshMessage<'a> {
 pub struct MeshMessageUpdate {
     pub response: Option<String>,
     pub responded_at_us: Option<i64>,
+}
+
+// ============================================
+// UserVote - for tracking user votes on posts
+// ============================================
+
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(table_name = crate::utils::bbs::schema::user_votes)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct UserVote {
+    pub id: i32,
+    pub user_id: i32,
+    pub post_id: i32,
+    pub vote_type: i32,  // 1 = upvote, -1 = downvote
+    pub created_at_us: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::utils::bbs::schema::user_votes)]
+pub struct NewUserVote {
+    pub user_id: i32,
+    pub post_id: i32,
+    pub vote_type: i32,
+    pub created_at_us: i64,
 }

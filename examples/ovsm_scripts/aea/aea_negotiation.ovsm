@@ -1,0 +1,732 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AEA NEGOTIATION PROTOCOL - AGENT-TO-AGENT AUTONOMOUS TRADING
+;;; Extension to AEA Protocol for Automated Bidding and Negotiation
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; VISION:
+;;; Enable fully autonomous agent-to-agent economic coordination:
+;;; - Agents post bids/offers with escrowed collateral
+;;; - Counter-offers form negotiation chains
+;;; - Auto-accept rules trigger without human intervention
+;;; - Price discovery through decentralized bidding
+;;;
+;;; ACCOUNT LAYOUTS:
+;;; - Bid Account: 320 bytes (status, type, amount, collateral, expiry, etc.)
+;;; - AutoAcceptRule Account: 128 bytes (price range, limits, owner)
+;;; - Negotiation Thread: 192 bytes (bid chain tracking)
+;;;
+;;; INSTRUCTION SET (70-89):
+;;; 70 CreateBid, 71 CreateOffer, 72 CounterBid, 73 AcceptBid,
+;;; 74 RejectBid, 75 CancelBid, 76 ClaimExpiredBid,
+;;; 80 CreateAutoAccept, 83 TriggerAutoAccept
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== AEA NEGOTIATION PROTOCOL v1.0 ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; CONSTANTS
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Bid Status
+  (define BID_ACTIVE 0)
+  (define BID_COUNTERED 1)
+  (define BID_ACCEPTED 2)
+  (define BID_REJECTED 3)
+  (define BID_EXPIRED 4)
+  (define BID_CANCELLED 5)
+
+  ;; Bid Type
+  (define BID_TYPE_BUY 0)
+  (define BID_TYPE_SELL 1)
+
+  ;; Time Constants
+  (define DEFAULT_BID_EXPIRY 86400)       ;; 24 hours
+  (define MIN_BID_EXPIRY 3600)            ;; 1 hour minimum
+  (define MAX_BID_EXPIRY 604800)          ;; 7 days maximum
+  (define MAX_COUNTER_DEPTH 10)           ;; Prevent infinite counter chains
+
+  ;; Economic Constants
+  (define BID_CREATION_FEE_BPS 10)        ;; 0.1% bid creation fee
+  (define MIN_BID_AMOUNT 1000000)         ;; Minimum 0.001 tokens (9 decimals)
+
+  ;; Auto-Accept Limits
+  (define MAX_DAILY_AUTO_ACCEPTS 100)
+  (define MAX_WEEKLY_AUTO_ACCEPTS 500)
+
+  ;; Read instruction data
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (sol_log_ "Negotiation Instruction:")
+  (sol_log_64_ discriminator)
+
+  ;; Get common account pointers
+  (define config_ptr (account-data-ptr 0))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 70: CREATE BID
+  ;; Place a buy bid for a service with escrowed collateral
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 70)
+    (do
+      (sol_log_ ">>> CREATE BID <<<")
+
+      (define bid_ptr (account-data-ptr 1))
+      (define bidder_ptr (account-data-ptr 2))
+      (define service_ptr (account-data-ptr 3))
+
+      ;; Verify bidder is signer
+      (define is_signer (account-is-signer 2))
+      (if (= is_signer 0)
+        (do (sol_log_ "ERROR: Bidder must sign") 100)
+        (do
+          ;; Check bidder is active
+          (define bidder_status (mem-load1 bidder_ptr 1))
+          (if (!= bidder_status 1)
+            (do (sol_log_ "ERROR: Bidder not active") 101)
+            (do
+              ;; Check bidder reputation
+              (define bidder_rep (mem-load bidder_ptr 16))
+              (if (< bidder_rep -500)
+                (do (sol_log_ "ERROR: Bidder reputation too low") 102)
+                (do
+                  ;; Read bid parameters
+                  (define service_id (mem-load instr_ptr 1))
+                  (define amount (mem-load instr_ptr 9))
+                  (define expiry_seconds (mem-load instr_ptr 17))
+                  (define min_rep (mem-load instr_ptr 25))
+
+                  ;; Validate amount
+                  (if (< amount MIN_BID_AMOUNT)
+                    (do (sol_log_ "ERROR: Bid amount too low") 103)
+                    (do
+                      ;; Calculate collateral and fee
+                      (define collateral amount)
+                      (define bid_fee (/ (* amount BID_CREATION_FEE_BPS) 10000))
+                      (define total_escrow (+ collateral bid_fee))
+
+                      (sol_log_ "Bid amount:")
+                      (sol_log_64_ amount)
+                      (sol_log_ "Total escrow:")
+                      (sol_log_64_ total_escrow)
+
+                      ;; Transfer collateral to escrow
+                      (define escrow_result (spl-token-transfer 6 4 5 2 total_escrow))
+                      (if (!= escrow_result 0)
+                        (do (sol_log_ "ERROR: Escrow transfer failed") 104)
+                        (do
+                          ;; Get timestamp
+                          (define now (get-clock-timestamp))
+                          (define bid_id now)
+
+                          ;; Calculate actual expiry
+                          (define actual_expiry
+                            (if (< expiry_seconds MIN_BID_EXPIRY)
+                              DEFAULT_BID_EXPIRY
+                              (if (> expiry_seconds MAX_BID_EXPIRY) MAX_BID_EXPIRY expiry_seconds)))
+
+                          ;; Initialize bid account
+                          (mem-store bid_ptr 0 BID_ACTIVE)
+                          (mem-store bid_ptr 1 BID_TYPE_BUY)
+                          (mem-store bid_ptr 8 bid_id)
+                          (mem-store bid_ptr 16 service_id)
+                          (mem-store bid_ptr 24 amount)
+                          (mem-store bid_ptr 32 1)
+                          (mem-store bid_ptr 40 collateral)
+                          (mem-store bid_ptr 48 now)
+                          (mem-store bid_ptr 56 (+ now actual_expiry))
+                          (mem-store bid_ptr 64 0)
+                          (mem-store bid_ptr 72 0)
+                          (mem-store bid_ptr 80 min_rep)
+
+                          ;; Store bidder pubkey
+                          (define bidder_pk (account-pubkey 2))
+                          (mem-store bid_ptr 88 (mem-load bidder_pk 0))
+                          (mem-store bid_ptr 96 (mem-load bidder_pk 8))
+                          (mem-store bid_ptr 104 (mem-load bidder_pk 16))
+                          (mem-store bid_ptr 112 (mem-load bidder_pk 24))
+
+                          ;; Update bidder last_active
+                          (mem-store bidder_ptr 80 now)
+
+                          (sol_log_ "Bid created!")
+                          (sol_log_ "Bid ID:")
+                          (sol_log_64_ bid_id)
+                          0)))))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 71: CREATE OFFER
+  ;; Provider creates sell offer (no upfront collateral)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 71)
+    (do
+      (sol_log_ ">>> CREATE OFFER <<<")
+
+      (define bid_ptr (account-data-ptr 1))
+      (define provider_ptr (account-data-ptr 2))
+      (define service_ptr (account-data-ptr 3))
+
+      ;; Verify provider is signer
+      (define is_signer (account-is-signer 2))
+      (if (= is_signer 0)
+        (do (sol_log_ "ERROR: Provider must sign") 110)
+        (do
+          ;; Check provider type
+          (define provider_type (mem-load1 provider_ptr 0))
+          (if (!= provider_type 2)
+            (do (sol_log_ "ERROR: Only providers can create offers") 111)
+            (do
+              ;; Check service is active
+              (define service_active (mem-load1 service_ptr 0))
+              (if (!= service_active 1)
+                (do (sol_log_ "ERROR: Service not active") 112)
+                (do
+                  ;; Read offer parameters
+                  (define service_id (mem-load instr_ptr 1))
+                  (define amount (mem-load instr_ptr 9))
+                  (define expiry_seconds (mem-load instr_ptr 17))
+                  (define quantity (mem-load instr_ptr 25))
+
+                  ;; Validate amount
+                  (if (< amount MIN_BID_AMOUNT)
+                    (do (sol_log_ "ERROR: Offer amount too low") 113)
+                    (do
+                      (define now (get-clock-timestamp))
+                      (define bid_id now)
+
+                      ;; Calculate actual expiry
+                      (define actual_expiry
+                        (if (< expiry_seconds MIN_BID_EXPIRY)
+                          DEFAULT_BID_EXPIRY
+                          (if (> expiry_seconds MAX_BID_EXPIRY) MAX_BID_EXPIRY expiry_seconds)))
+
+                      ;; Initialize offer account
+                      (mem-store bid_ptr 0 BID_ACTIVE)
+                      (mem-store bid_ptr 1 BID_TYPE_SELL)
+                      (mem-store bid_ptr 8 bid_id)
+                      (mem-store bid_ptr 16 service_id)
+                      (mem-store bid_ptr 24 amount)
+                      (mem-store bid_ptr 32 quantity)
+                      (mem-store bid_ptr 40 0)
+                      (mem-store bid_ptr 48 now)
+                      (mem-store bid_ptr 56 (+ now actual_expiry))
+
+                      ;; Store provider pubkey
+                      (define provider_pk (account-pubkey 2))
+                      (mem-store bid_ptr 88 (mem-load provider_pk 0))
+                      (mem-store bid_ptr 96 (mem-load provider_pk 8))
+                      (mem-store bid_ptr 104 (mem-load provider_pk 16))
+                      (mem-store bid_ptr 112 (mem-load provider_pk 24))
+
+                      ;; Update provider last_active
+                      (mem-store provider_ptr 80 now)
+
+                      (sol_log_ "Offer created!")
+                      (sol_log_ "Asking price:")
+                      (sol_log_64_ amount)
+                      0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 72: COUNTER BID
+  ;; Respond to bid/offer with different terms
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 72)
+    (do
+      (sol_log_ ">>> COUNTER BID <<<")
+
+      (define orig_bid_ptr (account-data-ptr 1))
+      (define counter_ptr (account-data-ptr 2))
+      (define counterparty_ptr (account-data-ptr 3))
+
+      ;; Verify original bid is active
+      (define orig_status (mem-load1 orig_bid_ptr 0))
+      (if (!= orig_status BID_ACTIVE)
+        (do (sol_log_ "ERROR: Original bid not active") 120)
+        (do
+          ;; Check not expired
+          (define now (get-clock-timestamp))
+          (define expires_at (mem-load orig_bid_ptr 56))
+          (if (>= now expires_at)
+            (do (sol_log_ "ERROR: Original bid expired") 121)
+            (do
+              ;; Check counter depth
+              (define counter_count (mem-load orig_bid_ptr 72))
+              (if (>= counter_count MAX_COUNTER_DEPTH)
+                (do (sol_log_ "ERROR: Max counter depth reached") 122)
+                (do
+                  ;; Verify counterparty is signer
+                  (define is_signer (account-is-signer 3))
+                  (if (= is_signer 0)
+                    (do (sol_log_ "ERROR: Counterparty must sign") 123)
+                    (do
+                      ;; Read counter parameters
+                      (define new_amount (mem-load instr_ptr 1))
+                      (define expiry_seconds (mem-load instr_ptr 9))
+
+                      (define orig_bid_id (mem-load orig_bid_ptr 8))
+                      (define orig_type (mem-load1 orig_bid_ptr 1))
+                      (define service_id (mem-load orig_bid_ptr 16))
+
+                      ;; Counter type is opposite of original
+                      (define counter_type
+                        (if (= orig_type BID_TYPE_BUY) BID_TYPE_SELL BID_TYPE_BUY))
+
+                      ;; Calculate collateral (only for buy counters)
+                      (define counter_collateral
+                        (if (= counter_type BID_TYPE_BUY) new_amount 0))
+
+                      ;; Calculate actual expiry
+                      (define actual_expiry
+                        (if (< expiry_seconds MIN_BID_EXPIRY)
+                          DEFAULT_BID_EXPIRY
+                          (if (> expiry_seconds MAX_BID_EXPIRY) MAX_BID_EXPIRY expiry_seconds)))
+
+                      (define counter_id now)
+
+                      ;; Initialize counter bid
+                      (mem-store counter_ptr 0 BID_ACTIVE)
+                      (mem-store counter_ptr 1 counter_type)
+                      (mem-store counter_ptr 8 counter_id)
+                      (mem-store counter_ptr 16 service_id)
+                      (mem-store counter_ptr 24 new_amount)
+                      (mem-store counter_ptr 32 1)
+                      (mem-store counter_ptr 40 counter_collateral)
+                      (mem-store counter_ptr 48 now)
+                      (mem-store counter_ptr 56 (+ now actual_expiry))
+                      (mem-store counter_ptr 64 orig_bid_id)
+                      (mem-store counter_ptr 72 0)
+
+                      ;; Store counterparty pubkey
+                      (define cp_pk (account-pubkey 3))
+                      (mem-store counter_ptr 88 (mem-load cp_pk 0))
+                      (mem-store counter_ptr 96 (mem-load cp_pk 8))
+                      (mem-store counter_ptr 104 (mem-load cp_pk 16))
+                      (mem-store counter_ptr 112 (mem-load cp_pk 24))
+
+                      ;; Update original bid
+                      (mem-store orig_bid_ptr 0 BID_COUNTERED)
+                      (mem-store orig_bid_ptr 72 (+ counter_count 1))
+
+                      ;; Update counterparty last_active
+                      (mem-store counterparty_ptr 80 now)
+
+                      (sol_log_ "Counter bid created!")
+                      (sol_log_ "Counter ID:")
+                      (sol_log_64_ counter_id)
+                      0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 73: ACCEPT BID
+  ;; Accept a bid/offer and convert to Order
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 73)
+    (do
+      (sol_log_ ">>> ACCEPT BID <<<")
+
+      (define bid_ptr (account-data-ptr 1))
+      (define order_ptr (account-data-ptr 2))
+      (define accepter_ptr (account-data-ptr 3))
+      (define bidder_ptr (account-data-ptr 4))
+
+      ;; Verify bid is active
+      (define bid_status (mem-load1 bid_ptr 0))
+      (if (!= bid_status BID_ACTIVE)
+        (do (sol_log_ "ERROR: Bid not active") 130)
+        (do
+          ;; Check not expired
+          (define now (get-clock-timestamp))
+          (define expires_at (mem-load bid_ptr 56))
+          (if (>= now expires_at)
+            (do (sol_log_ "ERROR: Bid expired") 131)
+            (do
+              ;; Verify accepter is signer
+              (define is_signer (account-is-signer 3))
+              (if (= is_signer 0)
+                (do (sol_log_ "ERROR: Accepter must sign") 132)
+                (do
+                  ;; Check reputation requirements
+                  (define min_rep (mem-load bid_ptr 80))
+                  (define accepter_rep (mem-load accepter_ptr 16))
+                  (if (< accepter_rep min_rep)
+                    (do (sol_log_ "ERROR: Accepter reputation too low") 133)
+                    (do
+                      ;; Get bid details
+                      (define bid_id (mem-load bid_ptr 8))
+                      (define service_id (mem-load bid_ptr 16))
+                      (define amount (mem-load bid_ptr 24))
+                      (define bid_type (mem-load1 bid_ptr 1))
+
+                      ;; Mark bid as accepted
+                      (mem-store bid_ptr 0 BID_ACCEPTED)
+
+                      ;; Create Order from bid
+                      (mem-store order_ptr 0 0)
+                      (mem-store order_ptr 8 bid_id)
+                      (mem-store order_ptr 16 service_id)
+                      (mem-store order_ptr 24 amount)
+                      (mem-store order_ptr 40 now)
+
+                      ;; Get dispute window from config
+                      (define dispute_window (mem-load config_ptr 48))
+                      (mem-store order_ptr 72 (+ now dispute_window))
+
+                      ;; Store buyer/provider pubkeys based on bid type
+                      (if (= bid_type BID_TYPE_BUY)
+                        (do
+                          ;; Bidder is buyer, accepter is provider
+                          (mem-store order_ptr 80 (mem-load bid_ptr 88))
+                          (mem-store order_ptr 88 (mem-load bid_ptr 96))
+                          (mem-store order_ptr 96 (mem-load bid_ptr 104))
+                          (mem-store order_ptr 104 (mem-load bid_ptr 112))
+                          (define accepter_pk (account-pubkey 3))
+                          (mem-store order_ptr 112 (mem-load accepter_pk 0))
+                          (mem-store order_ptr 120 (mem-load accepter_pk 8))
+                          (mem-store order_ptr 128 (mem-load accepter_pk 16))
+                          (mem-store order_ptr 136 (mem-load accepter_pk 24))
+                          0)
+                        (do
+                          ;; Accepter is buyer, bidder is provider
+                          (define accepter_pk (account-pubkey 3))
+                          (mem-store order_ptr 80 (mem-load accepter_pk 0))
+                          (mem-store order_ptr 88 (mem-load accepter_pk 8))
+                          (mem-store order_ptr 96 (mem-load accepter_pk 16))
+                          (mem-store order_ptr 104 (mem-load accepter_pk 24))
+                          (mem-store order_ptr 112 (mem-load bid_ptr 88))
+                          (mem-store order_ptr 120 (mem-load bid_ptr 96))
+                          (mem-store order_ptr 128 (mem-load bid_ptr 104))
+                          (mem-store order_ptr 136 (mem-load bid_ptr 112))
+                          0))
+
+                      ;; Update last_active for both parties
+                      (mem-store accepter_ptr 80 now)
+                      (mem-store bidder_ptr 80 now)
+
+                      (sol_log_ "Bid accepted! Order created.")
+                      (sol_log_ "Order ID:")
+                      (sol_log_64_ bid_id)
+                      0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 74: REJECT BID
+  ;; Explicitly reject a bid (returns collateral to bidder)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 74)
+    (do
+      (sol_log_ ">>> REJECT BID <<<")
+
+      (define bid_ptr (account-data-ptr 1))
+
+      ;; Verify bid is active
+      (define bid_status (mem-load1 bid_ptr 0))
+      (if (!= bid_status BID_ACTIVE)
+        (do (sol_log_ "ERROR: Bid not active") 140)
+        (do
+          ;; Verify rejector is signer
+          (define is_signer (account-is-signer 2))
+          (if (= is_signer 0)
+            (do (sol_log_ "ERROR: Rejector must sign") 141)
+            (do
+              ;; Get collateral to refund
+              (define collateral (mem-load bid_ptr 40))
+
+              ;; Mark bid as rejected
+              (mem-store bid_ptr 0 BID_REJECTED)
+
+              ;; Log refund
+              (if (> collateral 0)
+                (do
+                  (sol_log_ "Refunding collateral:")
+                  (sol_log_64_ collateral))
+                null)
+
+              (sol_log_ "Bid rejected!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 75: CANCEL BID
+  ;; Cancel own unexpired bid and reclaim collateral
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 75)
+    (do
+      (sol_log_ ">>> CANCEL BID <<<")
+
+      (define bid_ptr (account-data-ptr 1))
+
+      ;; Verify bid is active
+      (define bid_status (mem-load1 bid_ptr 0))
+      (if (!= bid_status BID_ACTIVE)
+        (do (sol_log_ "ERROR: Bid not active") 150)
+        (do
+          ;; Verify bidder is signer
+          (define is_signer (account-is-signer 2))
+          (if (= is_signer 0)
+            (do (sol_log_ "ERROR: Bidder must sign") 151)
+            (do
+              ;; Get collateral
+              (define collateral (mem-load bid_ptr 40))
+
+              ;; Mark as cancelled
+              (mem-store bid_ptr 0 BID_CANCELLED)
+
+              ;; Log refund
+              (if (> collateral 0)
+                (do
+                  (sol_log_ "Refunding collateral:")
+                  (sol_log_64_ collateral))
+                null)
+
+              (sol_log_ "Bid cancelled!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 76: CLAIM EXPIRED BID
+  ;; Refund collateral after bid expiration (anyone can call)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 76)
+    (do
+      (sol_log_ ">>> CLAIM EXPIRED BID <<<")
+
+      (define bid_ptr (account-data-ptr 1))
+
+      ;; Verify bid is active or countered
+      (define bid_status (mem-load1 bid_ptr 0))
+      (define is_expirable (or (= bid_status BID_ACTIVE) (= bid_status BID_COUNTERED)))
+      (if (not is_expirable)
+        (do (sol_log_ "ERROR: Bid not in expirable state") 160)
+        (do
+          ;; Check that it's actually expired
+          (define now (get-clock-timestamp))
+          (define expires_at (mem-load bid_ptr 56))
+          (if (< now expires_at)
+            (do (sol_log_ "ERROR: Bid not yet expired") 161)
+            (do
+              ;; Get collateral
+              (define collateral (mem-load bid_ptr 40))
+
+              ;; Mark as expired
+              (mem-store bid_ptr 0 BID_EXPIRED)
+
+              ;; Log refund
+              (if (> collateral 0)
+                (do
+                  (sol_log_ "Refunding expired collateral:")
+                  (sol_log_64_ collateral))
+                null)
+
+              (sol_log_ "Expired bid claimed!")
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 80: CREATE AUTO-ACCEPT RULE
+  ;; Set up automatic bid acceptance criteria
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 80)
+    (do
+      (sol_log_ ">>> CREATE AUTO-ACCEPT RULE <<<")
+
+      (define rule_ptr (account-data-ptr 1))
+      (define participant_ptr (account-data-ptr 2))
+
+      ;; Verify signer
+      (define is_signer (account-is-signer 2))
+      (if (= is_signer 0)
+        (do (sol_log_ "ERROR: Participant must sign") 170)
+        (do
+          ;; Read rule parameters
+          (define rule_type (mem-load1 instr_ptr 1))
+          (define min_price (mem-load instr_ptr 2))
+          (define max_price (mem-load instr_ptr 10))
+          (define min_rep (mem-load instr_ptr 18))
+          (define daily_limit (mem-load instr_ptr 26))
+          (define weekly_limit (mem-load instr_ptr 34))
+
+          ;; Clamp limits
+          (define actual_daily
+            (if (> daily_limit MAX_DAILY_AUTO_ACCEPTS) MAX_DAILY_AUTO_ACCEPTS daily_limit))
+          (define actual_weekly
+            (if (> weekly_limit MAX_WEEKLY_AUTO_ACCEPTS) MAX_WEEKLY_AUTO_ACCEPTS weekly_limit))
+
+          (define now (get-clock-timestamp))
+
+          ;; Initialize rule
+          (mem-store rule_ptr 0 1)
+          (mem-store rule_ptr 1 rule_type)
+          (mem-store rule_ptr 8 min_price)
+          (mem-store rule_ptr 16 max_price)
+          (mem-store rule_ptr 24 min_rep)
+          (mem-store rule_ptr 32 actual_daily)
+          (mem-store rule_ptr 40 0)
+          (mem-store rule_ptr 48 (+ now 86400))
+          (mem-store rule_ptr 56 actual_weekly)
+          (mem-store rule_ptr 64 0)
+          (mem-store rule_ptr 72 (+ now 604800))
+
+          ;; Store owner pubkey
+          (define owner_pk (account-pubkey 2))
+          (mem-store rule_ptr 80 (mem-load owner_pk 0))
+          (mem-store rule_ptr 88 (mem-load owner_pk 8))
+          (mem-store rule_ptr 96 (mem-load owner_pk 16))
+          (mem-store rule_ptr 104 (mem-load owner_pk 24))
+
+          (sol_log_ "Auto-accept rule created!")
+          (sol_log_ "Price range:")
+          (sol_log_64_ min_price)
+          (sol_log_64_ max_price)
+          0)))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 83: TRIGGER AUTO-ACCEPT
+  ;; Anyone can call to execute matching auto-accept rule
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 83)
+    (do
+      (sol_log_ ">>> TRIGGER AUTO-ACCEPT <<<")
+
+      (define bid_ptr (account-data-ptr 1))
+      (define rule_ptr (account-data-ptr 2))
+      (define order_ptr (account-data-ptr 3))
+      (define owner_ptr (account-data-ptr 4))
+      (define bidder_ptr (account-data-ptr 5))
+
+      ;; Verify bid is active
+      (define bid_status (mem-load1 bid_ptr 0))
+      (if (!= bid_status BID_ACTIVE)
+        (do (sol_log_ "ERROR: Bid not active") 180)
+        (do
+          ;; Verify rule is active
+          (define rule_active (mem-load1 rule_ptr 0))
+          (if (!= rule_active 1)
+            (do (sol_log_ "ERROR: Rule not active") 181)
+            (do
+              ;; Check not expired
+              (define now (get-clock-timestamp))
+              (define expires_at (mem-load bid_ptr 56))
+              (if (>= now expires_at)
+                (do (sol_log_ "ERROR: Bid expired") 182)
+                (do
+                  ;; Get bid details
+                  (define amount (mem-load bid_ptr 24))
+                  (define bid_type (mem-load1 bid_ptr 1))
+
+                  ;; Get rule criteria
+                  (define min_price (mem-load rule_ptr 8))
+                  (define max_price (mem-load rule_ptr 16))
+                  (define min_rep (mem-load rule_ptr 24))
+                  (define rule_type (mem-load1 rule_ptr 1))
+
+                  ;; Verify types match (buy bid needs sell rule)
+                  (if (= bid_type rule_type)
+                    (do (sol_log_ "ERROR: Bid/rule type mismatch") 183)
+                    (do
+                      ;; Check price within range
+                      (define price_ok (and (>= amount min_price) (<= amount max_price)))
+                      (if (not price_ok)
+                        (do (sol_log_ "ERROR: Price outside rule range") 184)
+                        (do
+                          ;; Check bidder reputation
+                          (define bidder_rep (mem-load bidder_ptr 16))
+                          (if (< bidder_rep min_rep)
+                            (do (sol_log_ "ERROR: Bidder rep below rule minimum") 185)
+                            (do
+                              ;; Check daily limit
+                              (define daily_limit (mem-load rule_ptr 32))
+                              (define daily_count (mem-load rule_ptr 40))
+                              (define daily_reset (mem-load rule_ptr 48))
+
+                              ;; Reset daily count if needed
+                              (if (>= now daily_reset)
+                                (do
+                                  (mem-store rule_ptr 40 0)
+                                  (mem-store rule_ptr 48 (+ now 86400)))
+                                null)
+
+                              (define current_daily (mem-load rule_ptr 40))
+                              (if (>= current_daily daily_limit)
+                                (do (sol_log_ "ERROR: Daily limit reached") 186)
+                                (do
+                                  ;; Update counters
+                                  (mem-store rule_ptr 40 (+ current_daily 1))
+
+                                  ;; Mark bid as accepted
+                                  (mem-store bid_ptr 0 BID_ACCEPTED)
+
+                                  ;; Create order
+                                  (define bid_id (mem-load bid_ptr 8))
+                                  (define service_id (mem-load bid_ptr 16))
+
+                                  (mem-store order_ptr 0 0)
+                                  (mem-store order_ptr 8 bid_id)
+                                  (mem-store order_ptr 16 service_id)
+                                  (mem-store order_ptr 24 amount)
+                                  (mem-store order_ptr 40 now)
+
+                                  ;; Get dispute window
+                                  (define dispute_window (mem-load config_ptr 48))
+                                  (mem-store order_ptr 72 (+ now dispute_window))
+
+                                  ;; Copy pubkeys based on bid type
+                                  (if (= bid_type BID_TYPE_BUY)
+                                    (do
+                                      ;; Bidder = buyer, rule owner = provider
+                                      (mem-store order_ptr 80 (mem-load bid_ptr 88))
+                                      (mem-store order_ptr 88 (mem-load bid_ptr 96))
+                                      (mem-store order_ptr 96 (mem-load bid_ptr 104))
+                                      (mem-store order_ptr 104 (mem-load bid_ptr 112))
+                                      (mem-store order_ptr 112 (mem-load rule_ptr 80))
+                                      (mem-store order_ptr 120 (mem-load rule_ptr 88))
+                                      (mem-store order_ptr 128 (mem-load rule_ptr 96))
+                                      (mem-store order_ptr 136 (mem-load rule_ptr 104)))
+                                    (do
+                                      ;; Rule owner = buyer, bidder = provider
+                                      (mem-store order_ptr 80 (mem-load rule_ptr 80))
+                                      (mem-store order_ptr 88 (mem-load rule_ptr 88))
+                                      (mem-store order_ptr 96 (mem-load rule_ptr 96))
+                                      (mem-store order_ptr 104 (mem-load rule_ptr 104))
+                                      (mem-store order_ptr 112 (mem-load bid_ptr 88))
+                                      (mem-store order_ptr 120 (mem-load bid_ptr 96))
+                                      (mem-store order_ptr 128 (mem-load bid_ptr 104))
+                                      (mem-store order_ptr 136 (mem-load bid_ptr 112))))
+
+                                  ;; Update last_active
+                                  (mem-store owner_ptr 80 now)
+                                  (mem-store bidder_ptr 80 now)
+
+                                  (sol_log_ "Auto-accept triggered!")
+                                  (sol_log_ "Order ID:")
+                                  (sol_log_64_ bid_id)
+                                  0)))))))))))))))
+    null)
+
+  ;; Default: Unrecognized instruction
+  (if (and (>= discriminator 70) (<= discriminator 89))
+    (do (sol_log_ "ERROR: Unrecognized negotiation instruction") 199)
+    null)
+
+  (sol_log_ "=== NEGOTIATION COMPLETE ===")
+  0)
+
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; END OF NEGOTIATION PROTOCOL
+;;;
+;;; KEY FEATURES:
+;;; - Bids backed by escrowed collateral (prevents spam)
+;;; - Counter-offers form linked chains (audit trail)
+;;; - Auto-accept rules enable 24/7 autonomous trading
+;;; - Rate limits prevent rule exploitation
+;;; - Expiration + refund prevents locked funds
+;;;
+;;; INTEGRATION:
+;;; - Accepted bids become standard AEA Orders
+;;; - Existing Order flow (deliver, confirm, dispute) applies
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════

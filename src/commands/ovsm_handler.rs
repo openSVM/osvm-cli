@@ -293,6 +293,107 @@ pub async fn handle_ovsm_command(
                 }
             }
         }
+        Some(("fmt", fmt_matches)) => {
+            let script = fmt_matches.get_one::<String>("script").expect("required");
+            let write = fmt_matches.get_flag("write");
+            let check = fmt_matches.get_flag("check");
+            let indent_size = *fmt_matches.get_one::<u8>("indent").unwrap_or(&2) as usize;
+
+            // Read the script
+            let source = std::fs::read_to_string(script)?;
+
+            // Format the source
+            let formatted = format_ovsm_script(&source, indent_size);
+
+            if check {
+                // Check mode: exit 1 if not formatted
+                if source == formatted {
+                    println!("✅ {} is correctly formatted", script);
+                } else {
+                    eprintln!("❌ {} needs formatting", script);
+                    std::process::exit(1);
+                }
+            } else if write {
+                // Write back to file
+                if source == formatted {
+                    println!("✅ {} is already formatted", script);
+                } else {
+                    std::fs::write(script, &formatted)?;
+                    println!("✅ Formatted {}", script);
+                }
+            } else {
+                // Print to stdout
+                print!("{}", formatted);
+            }
+        }
+        Some(("lint", lint_matches)) => {
+            let script = lint_matches.get_one::<String>("script").expect("required");
+            let verbose = lint_matches.get_flag("verbose");
+            let fix = lint_matches.get_flag("fix");
+
+            println!("🔍 Linting OVSM script: {}", script);
+
+            // Read the script
+            let source = std::fs::read_to_string(script)?;
+
+            // Run structural analysis
+            let report = lint_ovsm_script(&source, verbose);
+
+            // Display results
+            println!("\n{}", report.summary);
+
+            if !report.instruction_boundaries.is_empty() {
+                println!("\n📋 Instruction Boundaries (discriminator checks):");
+                for boundary in &report.instruction_boundaries {
+                    let status = if boundary.depth_at_start == boundary.expected_start_depth {
+                        "✅"
+                    } else {
+                        "⚠️ "
+                    };
+                    println!(
+                        "  {} Line {}: {} (depth: {} → {})",
+                        status,
+                        boundary.line,
+                        boundary.instruction_name,
+                        boundary.depth_at_start,
+                        boundary.depth_at_end
+                    );
+                }
+            }
+
+            if !report.issues.is_empty() {
+                println!("\n🚨 Issues Found:");
+                for issue in &report.issues {
+                    println!("  {} Line {}: {}", issue.severity, issue.line, issue.message);
+                    if let Some(suggestion) = &issue.suggestion {
+                        println!("     💡 Suggestion: {}", suggestion);
+                    }
+                }
+            }
+
+            if report.issues.is_empty() {
+                println!("\n✅ No structural issues found!");
+            } else if fix {
+                // Apply auto-fix if requested
+                if let Some(fixed_source) = attempt_auto_fix(&source, &report) {
+                    let backup_path = format!("{}.bak", script);
+                    std::fs::write(&backup_path, &source)?;
+                    std::fs::write(script, &fixed_source)?;
+                    println!("\n🔧 Auto-fix applied! Backup saved to: {}", backup_path);
+                } else {
+                    println!("\n⚠️  Could not auto-fix issues. Manual review required.");
+                }
+            }
+
+            // Final paren balance check
+            println!("\n📊 Overall Statistics:");
+            println!("   Total lines: {}", report.total_lines);
+            println!("   Max depth: {}", report.max_depth);
+            println!("   Final balance: {}", report.final_balance);
+            if report.final_balance != 0 {
+                println!("   ⚠️  {} unclosed parentheses", report.final_balance.abs());
+            }
+        }
         Some(("examples", examples_matches)) => {
             let category = examples_matches.get_one::<String>("category");
             let list = examples_matches.get_flag("list");
@@ -393,4 +494,519 @@ pub async fn handle_ovsm_command(
     }
 
     Ok(())
+}
+
+// ============================================================================
+// OVSM Lint Analysis
+// ============================================================================
+
+/// Report from linting an OVSM script
+#[derive(Debug)]
+struct LintReport {
+    summary: String,
+    instruction_boundaries: Vec<InstructionBoundary>,
+    issues: Vec<LintIssue>,
+    total_lines: usize,
+    max_depth: i32,
+    final_balance: i32,
+}
+
+/// Information about an instruction boundary (discriminator check)
+#[derive(Debug)]
+struct InstructionBoundary {
+    line: usize,
+    instruction_name: String,
+    depth_at_start: i32,
+    depth_at_end: i32,
+    expected_start_depth: i32,
+}
+
+/// A lint issue found in the script
+#[derive(Debug)]
+struct LintIssue {
+    line: usize,
+    message: String,
+    suggestion: Option<String>,
+    severity: LintSeverity,
+}
+
+/// Severity level for lint issues
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum LintSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl std::fmt::Display for LintSeverity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LintSeverity::Error => write!(f, "❌"),
+            LintSeverity::Warning => write!(f, "⚠️ "),
+            LintSeverity::Info => write!(f, "ℹ️ "),
+        }
+    }
+}
+
+/// Track variable definitions and usage
+#[derive(Debug, Clone)]
+struct VariableInfo {
+    name: String,
+    defined_at: usize,
+    used_at: Vec<usize>,
+    scope_depth: i32,
+}
+
+/// Analyze OVSM script for structural issues
+fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut depth: i32 = 0;
+    let mut max_depth: i32 = 0;
+    let mut instruction_boundaries = Vec::new();
+    let mut issues = Vec::new();
+
+    // Track the depth at each line for verbose output
+    let mut line_depths: Vec<(usize, i32, i32)> = Vec::new(); // (line_num, start_depth, end_depth)
+
+    // Pattern to detect instruction boundary: (if (= discriminator N)
+    let discriminator_pattern = regex::Regex::new(
+        r"\(if\s+\(=\s+discriminator\s+(\d+)\)"
+    ).unwrap();
+
+    // Pattern to detect closing of instruction block: null))
+    let null_close_pattern = regex::Regex::new(r"null\)*\s*$").unwrap();
+
+    // Patterns for additional checks
+    let define_pattern = regex::Regex::new(r"\(define\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s").unwrap();
+    let set_pattern = regex::Regex::new(r"\(set!\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s").unwrap();
+    let identifier_pattern = regex::Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_-]*)\b").unwrap();
+
+    // Track variables for unused/shadowing detection
+    let mut variables: std::collections::HashMap<String, VariableInfo> = std::collections::HashMap::new();
+    let mut scope_stack: Vec<(i32, Vec<String>)> = Vec::new(); // (depth, vars defined at this depth)
+
+    // Auto-detect expected base depth from first instruction
+    let mut expected_base_depth: Option<i32> = None;
+
+    // First pass: find first instruction to establish base depth
+    let mut temp_depth: i32 = 0;
+    for line in lines.iter() {
+        let (opens, closes) = count_parens_smart(line);
+
+        if discriminator_pattern.is_match(line) {
+            expected_base_depth = Some(temp_depth);
+            break;
+        }
+        temp_depth += opens - closes;
+    }
+
+    let base_depth = expected_base_depth.unwrap_or(1);
+
+    // Track if we just saw a return/abort (for unreachable code detection)
+    let mut after_return = false;
+    let mut return_depth: i32 = 0;
+
+    // Reserved/built-in identifiers that shouldn't be shadowed
+    let builtins: std::collections::HashSet<&str> = [
+        "define", "set!", "if", "do", "let", "for", "while", "break", "continue",
+        "true", "false", "null", "and", "or", "not", "range", "length", "get",
+        "sol_log_", "sol_log_64_", "mem-load", "mem-store", "mem-load1", "mem-store1",
+        "account-data-ptr", "account-is-signer", "instruction-data-ptr",
+    ].iter().cloned().collect();
+
+    for (line_idx, line) in lines.iter().enumerate() {
+        let line_num = line_idx + 1;
+        let start_depth = depth;
+
+        // Skip comments and empty lines for some checks
+        let trimmed = line.trim();
+        let is_comment = trimmed.starts_with(";;");
+
+        // Count parens on this line (ignoring those in strings and comments)
+        let (opens, closes) = count_parens_smart(line);
+        depth += opens - closes;
+
+        if depth > max_depth {
+            max_depth = depth;
+        }
+
+        let end_depth = depth;
+        line_depths.push((line_num, start_depth, end_depth));
+
+        // Track scope changes
+        if end_depth > start_depth {
+            scope_stack.push((end_depth, Vec::new()));
+        } else if end_depth < start_depth {
+            // Pop scopes and check for unused variables
+            while let Some((scope_depth, vars)) = scope_stack.last() {
+                if *scope_depth > end_depth {
+                    for var_name in vars {
+                        if let Some(info) = variables.get(var_name) {
+                            if info.used_at.is_empty() && !var_name.starts_with('_') {
+                                issues.push(LintIssue {
+                                    line: info.defined_at,
+                                    message: format!("Unused variable '{}'", var_name),
+                                    suggestion: Some(format!(
+                                        "Remove or use this variable, or prefix with '_' to suppress warning"
+                                    )),
+                                    severity: LintSeverity::Warning,
+                                });
+                            }
+                        }
+                        variables.remove(var_name);
+                    }
+                    scope_stack.pop();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Check for unreachable code after return
+        if after_return && !is_comment && !trimmed.is_empty() && end_depth >= return_depth {
+            // Only flag if we're still at the same or deeper nesting level
+            if !trimmed.starts_with(')') {
+                issues.push(LintIssue {
+                    line: line_num,
+                    message: "Unreachable code after return/abort".to_string(),
+                    suggestion: Some("Remove this code or restructure the control flow".to_string()),
+                    severity: LintSeverity::Warning,
+                });
+            }
+        }
+
+        // Detect return/abort patterns
+        if !is_comment {
+            if trimmed.contains("(abort") || trimmed.contains("(return") {
+                after_return = true;
+                return_depth = end_depth;
+            }
+            // Also check for numeric returns at end of blocks (like "0)" or "1)")
+            if regex::Regex::new(r"^\d+\)*$").unwrap().is_match(trimmed) && end_depth < start_depth {
+                // This is a return value at end of block - reset unreachable tracking
+                after_return = false;
+            }
+            // Reset if we've exited the return's scope
+            if end_depth < return_depth {
+                after_return = false;
+            }
+        }
+
+        // Track variable definitions
+        if !is_comment {
+            for caps in define_pattern.captures_iter(line) {
+                let var_name = caps.get(1).unwrap().as_str().to_string();
+
+                // Check for shadowing
+                if let Some(existing) = variables.get(&var_name) {
+                    issues.push(LintIssue {
+                        line: line_num,
+                        message: format!(
+                            "Variable '{}' shadows definition at line {}",
+                            var_name, existing.defined_at
+                        ),
+                        suggestion: Some("Use a different name to avoid confusion".to_string()),
+                        severity: LintSeverity::Warning,
+                    });
+                }
+
+                // Check for shadowing builtins
+                if builtins.contains(var_name.as_str()) {
+                    issues.push(LintIssue {
+                        line: line_num,
+                        message: format!("Variable '{}' shadows a built-in function", var_name),
+                        suggestion: Some("Use a different name - shadowing builtins is confusing".to_string()),
+                        severity: LintSeverity::Warning,
+                    });
+                }
+
+                variables.insert(var_name.clone(), VariableInfo {
+                    name: var_name.clone(),
+                    defined_at: line_num,
+                    used_at: Vec::new(),
+                    scope_depth: end_depth,
+                });
+
+                // Track in current scope
+                if let Some((_, vars)) = scope_stack.last_mut() {
+                    vars.push(var_name);
+                }
+            }
+
+            // Track variable uses (but not in define/set! positions)
+            let line_without_defines = define_pattern.replace_all(line, "(define __PLACEHOLDER__ ");
+            let line_without_sets = set_pattern.replace_all(&line_without_defines, "(set! __PLACEHOLDER__ ");
+
+            for caps in identifier_pattern.captures_iter(&line_without_sets) {
+                let ident = caps.get(1).unwrap().as_str();
+                if let Some(info) = variables.get_mut(ident) {
+                    if !info.used_at.contains(&line_num) {
+                        info.used_at.push(line_num);
+                    }
+                }
+            }
+        }
+
+        // Check for discriminator pattern
+        if let Some(caps) = discriminator_pattern.captures(line) {
+            let instr_num = caps.get(1).map_or("?", |m| m.as_str());
+            instruction_boundaries.push(InstructionBoundary {
+                line: line_num,
+                instruction_name: format!("Instruction {}", instr_num),
+                depth_at_start: start_depth,
+                depth_at_end: end_depth,
+                expected_start_depth: base_depth,
+            });
+
+            // Check if depth is appropriate - all instructions should start at the SAME depth
+            if start_depth != base_depth {
+                issues.push(LintIssue {
+                    line: line_num,
+                    message: format!(
+                        "Instruction {} starts at depth {} (expected {} based on first instruction)",
+                        instr_num, start_depth, base_depth
+                    ),
+                    suggestion: Some(
+                        "Check parenthesis balance in previous instruction block".to_string()
+                    ),
+                    severity: LintSeverity::Error,
+                });
+            }
+        }
+
+        // Check for potential structural issues
+        if null_close_pattern.is_match(line) && end_depth > base_depth {
+            // This might indicate the 'null' is inside a (do ...) instead of being the else branch
+            if verbose {
+                issues.push(LintIssue {
+                    line: line_num,
+                    message: format!(
+                        "'null' appears at depth {} (should be {} for else branch)",
+                        end_depth, base_depth
+                    ),
+                    suggestion: Some("Ensure (do ...) block is closed before 'null'".to_string()),
+                    severity: LintSeverity::Info,
+                });
+            }
+        }
+
+        // Detect negative depth (too many closes)
+        if depth < 0 {
+            issues.push(LintIssue {
+                line: line_num,
+                message: "More closing parens than opening on this line".to_string(),
+                suggestion: Some("Remove extra ')' characters".to_string()),
+                severity: LintSeverity::Error,
+            });
+        }
+
+        // Additional lint checks
+
+        // Check for TODO/FIXME comments
+        if is_comment && (trimmed.contains("TODO") || trimmed.contains("FIXME")) {
+            issues.push(LintIssue {
+                line: line_num,
+                message: format!("Found {} marker", if trimmed.contains("TODO") { "TODO" } else { "FIXME" }),
+                suggestion: None,
+                severity: LintSeverity::Info,
+            });
+        }
+
+        // Check for extremely long lines
+        if line.len() > 120 && !is_comment {
+            issues.push(LintIssue {
+                line: line_num,
+                message: format!("Line exceeds 120 characters ({} chars)", line.len()),
+                suggestion: Some("Consider breaking into multiple lines for readability".to_string()),
+                severity: LintSeverity::Info,
+            });
+        }
+    }
+
+    // Check final balance
+    if depth != 0 {
+        issues.push(LintIssue {
+            line: lines.len(),
+            message: format!("File ends with {} unclosed parentheses", depth),
+            suggestion: Some(format!("Add {} closing parentheses at end", depth)),
+            severity: LintSeverity::Error,
+        });
+    }
+
+    // Check for unused top-level variables
+    for (name, info) in &variables {
+        if info.used_at.is_empty() && !name.starts_with('_') {
+            issues.push(LintIssue {
+                line: info.defined_at,
+                message: format!("Unused variable '{}'", name),
+                suggestion: Some("Remove or use this variable, or prefix with '_' to suppress".to_string()),
+                severity: LintSeverity::Warning,
+            });
+        }
+    }
+
+    // Sort issues by line number, then by severity
+    issues.sort_by(|a, b| {
+        a.line.cmp(&b.line).then_with(|| {
+            // Errors first, then warnings, then info
+            match (&a.severity, &b.severity) {
+                (LintSeverity::Error, LintSeverity::Error) => std::cmp::Ordering::Equal,
+                (LintSeverity::Error, _) => std::cmp::Ordering::Less,
+                (_, LintSeverity::Error) => std::cmp::Ordering::Greater,
+                (LintSeverity::Warning, LintSeverity::Warning) => std::cmp::Ordering::Equal,
+                (LintSeverity::Warning, _) => std::cmp::Ordering::Less,
+                (_, LintSeverity::Warning) => std::cmp::Ordering::Greater,
+                _ => std::cmp::Ordering::Equal,
+            }
+        })
+    });
+
+    // Count issues by severity
+    let error_count = issues.iter().filter(|i| i.severity == LintSeverity::Error).count();
+    let warning_count = issues.iter().filter(|i| i.severity == LintSeverity::Warning).count();
+    let info_count = issues.iter().filter(|i| i.severity == LintSeverity::Info).count();
+
+    // Generate summary
+    let summary = if issues.is_empty() {
+        format!(
+            "✅ OVSM Lint: {} lines analyzed, {} instructions, no issues (base depth: {})",
+            lines.len(),
+            instruction_boundaries.len(),
+            base_depth
+        )
+    } else {
+        format!(
+            "⚠️  OVSM Lint: {} lines, {} instructions — {} error(s), {} warning(s), {} info",
+            lines.len(),
+            instruction_boundaries.len(),
+            error_count,
+            warning_count,
+            info_count
+        )
+    };
+
+    // Verbose depth trace
+    if verbose {
+        println!("\n📈 Depth trace (line: start → end) [base depth: {}]:", base_depth);
+        for (line_num, start, end) in &line_depths {
+            if *start != *end || *start > 3 {
+                let indicator = if *end > *start { "↗" } else if *end < *start { "↘" } else { "→" };
+                println!("   Line {:4}: {:2} {} {:2}", line_num, start, indicator, end);
+            }
+        }
+    }
+
+    LintReport {
+        summary,
+        instruction_boundaries,
+        issues,
+        total_lines: lines.len(),
+        max_depth,
+        final_balance: depth,
+    }
+}
+
+/// Count opening and closing parens, ignoring those in strings and comments
+fn count_parens_smart(line: &str) -> (i32, i32) {
+    let mut opens = 0i32;
+    let mut closes = 0i32;
+    let mut in_string = false;
+    let mut chars = line.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            ';' if !in_string => break, // Comment - ignore rest of line
+            '"' => in_string = !in_string,
+            '\\' if in_string => { chars.next(); } // Escape sequence
+            '(' if !in_string => opens += 1,
+            ')' if !in_string => closes += 1,
+            _ => {}
+        }
+    }
+
+    (opens, closes)
+}
+
+/// Attempt to auto-fix simple parenthesis imbalances
+fn attempt_auto_fix(source: &str, report: &LintReport) -> Option<String> {
+    // Only auto-fix if it's a simple case: just missing closing parens at end
+    if report.final_balance > 0 && report.issues.len() == 1 {
+        let mut fixed = source.to_string();
+        // Add the missing closing parens
+        fixed.push_str(&")".repeat(report.final_balance as usize));
+        Some(fixed)
+    } else {
+        None
+    }
+}
+
+// ============================================================================
+// OVSM Formatter
+// ============================================================================
+
+/// Format OVSM source code with consistent indentation
+fn format_ovsm_script(source: &str, indent_size: usize) -> String {
+    let mut result = String::new();
+    let mut depth: i32 = 0;
+    let indent = " ".repeat(indent_size);
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // Skip empty lines but preserve them
+        if trimmed.is_empty() {
+            result.push('\n');
+            continue;
+        }
+
+        // Handle comments - preserve them at current depth
+        if trimmed.starts_with(";;") {
+            // Full-line comments get indented to current depth
+            for _ in 0..depth {
+                result.push_str(&indent);
+            }
+            result.push_str(trimmed);
+            result.push('\n');
+            continue;
+        }
+
+        // Count leading closes on this line (they should be dedented)
+        let leading_closes = count_leading_closes(trimmed);
+
+        // Adjust depth for leading closes BEFORE indenting
+        let line_depth = (depth - leading_closes as i32).max(0);
+
+        // Add indentation
+        for _ in 0..line_depth {
+            result.push_str(&indent);
+        }
+
+        // Add the trimmed line content
+        result.push_str(trimmed);
+        result.push('\n');
+
+        // Update depth for next line based on ALL parens on this line
+        let (opens, closes) = count_parens_smart(trimmed);
+        depth = (depth + opens - closes).max(0);
+    }
+
+    // Remove trailing newline if original didn't have one
+    if !source.ends_with('\n') && result.ends_with('\n') {
+        result.pop();
+    }
+
+    result
+}
+
+/// Count leading closing parentheses on a line
+fn count_leading_closes(line: &str) -> usize {
+    let mut count = 0;
+    for c in line.chars() {
+        match c {
+            ')' => count += 1,
+            ' ' | '\t' => continue,
+            _ => break,
+        }
+    }
+    count
 }

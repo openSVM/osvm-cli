@@ -27,7 +27,9 @@ diesel::table! {
         user_id -> Integer,
         body -> Text,
         created_at_us -> BigInt,
-        parent_id -> Nullable<Integer>,  // For reply threading (null = top-level post)
+        parent_id -> Nullable<Integer>,  // For local reply threading (null = top-level post)
+        federated_parent_id -> Nullable<Text>,  // For federated parent references (e.g., "!abc123:5")
+        score -> Integer,  // Upvotes minus downvotes for thread scoring
     }
 }
 
@@ -111,12 +113,25 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    user_votes (id) {
+        id -> Integer,
+        user_id -> Integer,          // Who voted
+        post_id -> Integer,          // Which post
+        vote_type -> Integer,        // 1 = upvote, -1 = downvote
+        created_at_us -> BigInt,     // When they voted
+    }
+}
+
 diesel::joinable!(board_states -> boards (board_id));
 diesel::joinable!(board_states -> users (user_id));
 diesel::joinable!(posts -> boards (board_id));
 diesel::joinable!(posts -> users (user_id));
 diesel::joinable!(users -> boards (in_board));
 // Note: moderators has multiple FK to users, so we define joins manually in queries
+
+diesel::joinable!(user_votes -> users (user_id));
+diesel::joinable!(user_votes -> posts (post_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     board_states,
@@ -128,4 +143,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     federated_messages,
     known_peers,
     mesh_messages,
+    user_votes,
 );

@@ -326,10 +326,89 @@ pub fn build_bbs_command() -> Command {
                         .default_missing_value("localhost:4403"),
                 ),
         )
+        // Threaded view (collapsible)
+        .subcommand(
+            Command::new("threads")
+                .about("View posts as collapsible threads (interactive)")
+                .long_about(
+                    "Launch an interactive thread viewer with collapsible threads.\n\
+                    \n\
+                    Features:\n\
+                    • Hierarchical view of posts and replies\n\
+                    • Collapsible threads (press Enter/Space to toggle)\n\
+                    • Score-based auto-collapse (low-scored posts collapse by default)\n\
+                    • Color-coded depth for nested replies\n\
+                    • Vim-style navigation (j/k for up/down)\n\
+                    \n\
+                    Keyboard shortcuts:\n\
+                    • j/k/↓/↑   - Move selection up/down\n\
+                    • Enter/Space - Toggle expand/collapse\n\
+                    • c          - Collapse all threads\n\
+                    • e          - Expand all threads\n\
+                    • r          - Refresh from database\n\
+                    • q/Esc      - Quit",
+                )
+                .arg(
+                    Arg::new("board")
+                        .value_name("BOARD")
+                        .help("Board name to view")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    Arg::new("server")
+                        .long("server")
+                        .short('s')
+                        .value_name("URL")
+                        .help("Fetch from HTTP server instead of local database (e.g., http://localhost:8080)"),
+                )
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(ArgAction::SetTrue)
+                        .help("Output raw JSON threads (non-interactive)"),
+                ),
+        )
         // Stats and info
         .subcommand(
             Command::new("stats")
                 .about("Show BBS statistics")
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(ArgAction::SetTrue)
+                        .help("Output in JSON format"),
+                ),
+        )
+        // Analytics dashboard
+        .subcommand(
+            Command::new("analytics")
+                .about("Show board analytics: vote patterns, activity trends, sentiment")
+                .long_about(
+                    "Display comprehensive analytics for a board including:\n\
+                    \n\
+                    • Vote patterns (upvotes/downvotes distribution)\n\
+                    • Activity trends by hour and day\n\
+                    • Sentiment analysis of posts\n\
+                    • Top contributors and engagement metrics\n\
+                    \n\
+                    Example:\n\
+                    osvm bbs analytics GENERAL --days 7"
+                )
+                .arg(
+                    Arg::new("board")
+                        .value_name("BOARD")
+                        .help("Board name to analyze (default: GENERAL)")
+                        .index(1),
+                )
+                .arg(
+                    Arg::new("days")
+                        .long("days")
+                        .short('d')
+                        .value_name("DAYS")
+                        .help("Number of days to analyze (default: 7)")
+                        .default_value("7"),
+                )
                 .arg(
                     Arg::new("json")
                         .long("json")

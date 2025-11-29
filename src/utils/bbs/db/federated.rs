@@ -60,6 +60,14 @@ pub fn message_exists(conn: &mut SqliteConnection, message_id: &str) -> bool {
         .unwrap_or(0) > 0
 }
 
+/// Get a single message by message_id
+pub fn get_message(conn: &mut SqliteConnection, message_id: &str) -> Result<FederatedMessageDb> {
+    federated_messages::table
+        .filter(federated_messages::message_id.eq(message_id))
+        .first(conn)
+        .map_err(|e| e.into())
+}
+
 /// Get messages since a timestamp (for sync responses)
 pub fn get_messages_since(
     conn: &mut SqliteConnection,
@@ -93,6 +101,15 @@ pub fn get_messages_for_board(
 /// Count total federated messages
 pub fn message_count(conn: &mut SqliteConnection) -> i64 {
     federated_messages::table
+        .count()
+        .get_result(conn)
+        .unwrap_or(0)
+}
+
+/// Count replies to a specific message (by parent_id)
+pub fn reply_count(conn: &mut SqliteConnection, parent_message_id: &str) -> i64 {
+    federated_messages::table
+        .filter(federated_messages::parent_id.eq(parent_message_id))
         .count()
         .get_result(conn)
         .unwrap_or(0)
