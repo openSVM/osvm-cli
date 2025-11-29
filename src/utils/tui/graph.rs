@@ -4131,7 +4131,7 @@ impl WalletGraph {
         let mut max_density = 1usize;
 
         if self.minimap_heatmap {
-            for (x, y) in &self.node_positions {
+            for (x, y) in &self.render_positions {
                 let gx = ((x - min_x) / cell_w).floor() as usize;
                 let gy = ((y - min_y) / cell_h).floor() as usize;
                 let gx = gx.min(grid_size - 1);
@@ -4198,9 +4198,9 @@ impl WalletGraph {
                     // NORMAL MODE: Draw edges and nodes
                     // Draw all edges as thin lines (simplified for minimap)
                     for (from_idx, to_idx, _) in &self.connections {
-                        if *from_idx < self.node_positions.len() && *to_idx < self.node_positions.len() {
-                            let (x1, y1) = self.node_positions[*from_idx];
-                            let (x2, y2) = self.node_positions[*to_idx];
+                        if *from_idx < self.render_positions.len() && *to_idx < self.render_positions.len() {
+                            let (x1, y1) = self.render_positions[*from_idx];
+                            let (x2, y2) = self.render_positions[*to_idx];
                             ctx.draw(&CanvasLine {
                                 x1, y1, x2, y2,
                                 color: Color::DarkGray,
@@ -4209,7 +4209,7 @@ impl WalletGraph {
                     }
 
                     // Draw all nodes as dots with selection highlighting
-                    for (idx, (x, y)) in self.node_positions.iter().enumerate() {
+                    for (idx, (x, y)) in self.render_positions.iter().enumerate() {
                         let is_selected = Some(idx) == selected_idx;
 
                         // Determine base color
