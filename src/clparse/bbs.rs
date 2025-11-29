@@ -568,4 +568,106 @@ pub fn build_bbs_command() -> Command {
                         .about("Discover peers from on-chain registry"),
                 ),
         )
+        // Mesh message management
+        .subcommand(
+            Command::new("mesh")
+                .about("Meshtastic mesh message management and statistics")
+                .long_about(
+                    "View and manage messages received over Meshtastic radio mesh.\n\
+                    \n\
+                    All mesh messages are stored in the BBS database for analysis and history.\n\
+                    Use this command to view statistics, recent messages, and activity patterns.\n\
+                    \n\
+                    Commands:\n\
+                    • stats   - Show comprehensive mesh statistics\n\
+                    • recent  - View recent mesh messages\n\
+                    • nodes   - List active mesh nodes\n\
+                    • prune   - Clean up old messages",
+                )
+                .arg_required_else_help(true)
+                .subcommand(
+                    Command::new("stats")
+                        .about("Show mesh message statistics")
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format"),
+                        )
+                        .arg(
+                            Arg::new("hourly")
+                                .long("hourly")
+                                .action(ArgAction::SetTrue)
+                                .help("Include hourly activity breakdown"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("recent")
+                        .about("View recent mesh messages")
+                        .arg(
+                            Arg::new("limit")
+                                .long("limit")
+                                .short('n')
+                                .value_name("COUNT")
+                                .default_value("20")
+                                .help("Number of messages to show"),
+                        )
+                        .arg(
+                            Arg::new("commands")
+                                .long("commands")
+                                .short('c')
+                                .action(ArgAction::SetTrue)
+                                .help("Show only command messages"),
+                        )
+                        .arg(
+                            Arg::new("node")
+                                .long("node")
+                                .value_name("NODE_ID")
+                                .help("Filter by node ID (e.g., !abcd1234)"),
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("nodes")
+                        .about("List mesh nodes by activity")
+                        .arg(
+                            Arg::new("limit")
+                                .long("limit")
+                                .short('n')
+                                .value_name("COUNT")
+                                .default_value("10")
+                                .help("Number of nodes to show"),
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format"),
+                        ),
+                )
+                .subcommand(
+                    Command::new("prune")
+                        .about("Remove old mesh messages")
+                        .arg(
+                            Arg::new("keep")
+                                .long("keep")
+                                .short('k')
+                                .value_name("COUNT")
+                                .default_value("1000")
+                                .help("Number of recent messages to keep"),
+                        )
+                        .arg(
+                            Arg::new("force")
+                                .long("force")
+                                .short('f')
+                                .action(ArgAction::SetTrue)
+                                .help("Skip confirmation"),
+                        ),
+                ),
+        )
 }

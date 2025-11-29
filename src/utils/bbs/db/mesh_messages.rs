@@ -145,6 +145,170 @@ pub fn prune_old(conn: &mut SqliteConnection, keep_count: i64) -> Result<usize> 
     }
 }
 
+// ============================================
+// Statistics Functions
+// ============================================
+
+/// Statistics about mesh messages
+#[derive(Debug, Clone)]
+pub struct MeshStats {
+    pub total_messages: i64,
+    pub total_commands: i64,
+    pub total_responses: i64,
+    pub unique_nodes: i64,
+    pub messages_last_hour: i64,
+    pub messages_last_24h: i64,
+    pub top_nodes: Vec<NodeStats>,
+    pub oldest_message: Option<i64>,  // timestamp_us
+    pub newest_message: Option<i64>,  // timestamp_us
+}
+
+/// Statistics for a single node
+#[derive(Debug, Clone)]
+pub struct NodeStats {
+    pub node_id: u32,
+    pub node_name: Option<String>,
+    pub message_count: i64,
+    pub command_count: i64,
+}
+
+/// Get comprehensive mesh statistics
+pub fn get_stats(conn: &mut SqliteConnection) -> Result<MeshStats> {
+    use diesel::dsl::*;
+
+    // Total messages
+    let total_messages = mesh_messages::table
+        .count()
+        .get_result::<i64>(conn)?;
+
+    // Total commands
+    let total_commands = mesh_messages::table
+        .filter(mesh_messages::is_command.eq(true))
+        .count()
+        .get_result::<i64>(conn)?;
+
+    // Total responses (messages that have a response)
+    let total_responses = mesh_messages::table
+        .filter(mesh_messages::response.is_not_null())
+        .count()
+        .get_result::<i64>(conn)?;
+
+    // Unique nodes (using raw SQL for COUNT DISTINCT)
+    let unique_nodes: i64 = diesel::sql_query(
+        "SELECT COUNT(DISTINCT from_node_id) as count FROM mesh_messages"
+    )
+    .get_result::<CountResult>(conn)
+    .map(|r| r.count)
+    .unwrap_or(0);
+
+    // Messages in last hour
+    let one_hour_ago = chrono::Utc::now().timestamp_micros() - (3600 * 1_000_000);
+    let messages_last_hour = mesh_messages::table
+        .filter(mesh_messages::received_at_us.gt(one_hour_ago))
+        .count()
+        .get_result::<i64>(conn)?;
+
+    // Messages in last 24 hours
+    let one_day_ago = chrono::Utc::now().timestamp_micros() - (86400 * 1_000_000);
+    let messages_last_24h = mesh_messages::table
+        .filter(mesh_messages::received_at_us.gt(one_day_ago))
+        .count()
+        .get_result::<i64>(conn)?;
+
+    // Oldest and newest message timestamps
+    let oldest_message = mesh_messages::table
+        .select(min(mesh_messages::received_at_us))
+        .first::<Option<i64>>(conn)?;
+
+    let newest_message = mesh_messages::table
+        .select(max(mesh_messages::received_at_us))
+        .first::<Option<i64>>(conn)?;
+
+    // Top nodes by message count (using raw SQL for GROUP BY)
+    let top_nodes = get_top_nodes(conn, 10)?;
+
+    Ok(MeshStats {
+        total_messages,
+        total_commands,
+        total_responses,
+        unique_nodes,
+        messages_last_hour,
+        messages_last_24h,
+        top_nodes,
+        oldest_message,
+        newest_message,
+    })
+}
+
+/// Helper struct for COUNT queries
+#[derive(QueryableByName)]
+struct CountResult {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    count: i64,
+}
+
+/// Helper struct for top nodes query
+#[derive(QueryableByName)]
+struct TopNodeRow {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    from_node_id: i64,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    from_name: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    msg_count: i64,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    cmd_count: i64,
+}
+
+/// Get top nodes by message count
+pub fn get_top_nodes(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<NodeStats>> {
+    let rows: Vec<TopNodeRow> = diesel::sql_query(format!(
+        "SELECT from_node_id, from_name,
+                COUNT(*) as msg_count,
+                SUM(CASE WHEN is_command THEN 1 ELSE 0 END) as cmd_count
+         FROM mesh_messages
+         GROUP BY from_node_id
+         ORDER BY msg_count DESC
+         LIMIT {}",
+        limit
+    ))
+    .load(conn)?;
+
+    Ok(rows.into_iter().map(|r| NodeStats {
+        node_id: r.from_node_id as u32,
+        node_name: r.from_name,
+        message_count: r.msg_count,
+        command_count: r.cmd_count,
+    }).collect())
+}
+
+/// Get message activity by hour (last 24 hours)
+pub fn get_hourly_activity(conn: &mut SqliteConnection) -> Result<Vec<(i64, i64)>> {
+    // Returns (hour_timestamp, message_count) pairs
+    let one_day_ago = chrono::Utc::now().timestamp_micros() - (86400 * 1_000_000);
+
+    let rows: Vec<HourlyRow> = diesel::sql_query(format!(
+        "SELECT (received_at_us / 3600000000) * 3600000000 as hour_ts,
+                COUNT(*) as msg_count
+         FROM mesh_messages
+         WHERE received_at_us > {}
+         GROUP BY hour_ts
+         ORDER BY hour_ts",
+        one_day_ago
+    ))
+    .load(conn)?;
+
+    Ok(rows.into_iter().map(|r| (r.hour_ts, r.msg_count)).collect())
+}
+
+#[derive(QueryableByName)]
+struct HourlyRow {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    hour_ts: i64,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    msg_count: i64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

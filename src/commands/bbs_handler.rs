@@ -42,6 +42,7 @@ pub async fn handle_bbs_command(matches: &ArgMatches) -> Result<()> {
         Some(("interactive", sub_m)) => handle_interactive(sub_m).await,
         Some(("tui", sub_m)) => handle_tui(sub_m).await,
         Some(("stats", sub_m)) => handle_stats(sub_m).await,
+        Some(("mesh", sub_m)) => handle_mesh(sub_m).await,
         _ => {
             println!("{}", "Use 'osvm bbs --help' for available commands".yellow());
             Ok(())
@@ -1332,4 +1333,301 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Handle mesh message management commands
+async fn handle_mesh(matches: &ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+        Some(("stats", sub_m)) => handle_mesh_stats(sub_m).await,
+        Some(("recent", sub_m)) => handle_mesh_recent(sub_m).await,
+        Some(("nodes", sub_m)) => handle_mesh_nodes(sub_m).await,
+        Some(("prune", sub_m)) => handle_mesh_prune(sub_m).await,
+        _ => {
+            println!("{}", "Mesh Message Commands".cyan().bold());
+            println!("{}", "─".repeat(50));
+            println!("  {} - Show mesh message statistics", "stats".bold());
+            println!("  {} - View recent mesh messages", "recent".bold());
+            println!("  {} - List mesh nodes by activity", "nodes".bold());
+            println!("  {} - Remove old messages", "prune".bold());
+            println!();
+            println!("{}", "Use 'osvm bbs mesh --help' for options.".dimmed());
+            Ok(())
+        }
+    }
+}
+
+/// Show mesh statistics
+async fn handle_mesh_stats(matches: &ArgMatches) -> Result<()> {
+    let json_output = matches.get_flag("json");
+    let show_hourly = matches.get_flag("hourly");
+
+    let mut conn = db_err(db::establish_connection())?;
+
+    let stats = db::mesh_messages::get_stats(&mut conn)
+        .map_err(|e| anyhow::anyhow!("Failed to get mesh stats: {}", e))?;
+
+    if json_output {
+        let json = serde_json::json!({
+            "total_messages": stats.total_messages,
+            "total_commands": stats.total_commands,
+            "total_responses": stats.total_responses,
+            "unique_nodes": stats.unique_nodes,
+            "messages_last_hour": stats.messages_last_hour,
+            "messages_last_24h": stats.messages_last_24h,
+            "oldest_message": stats.oldest_message,
+            "newest_message": stats.newest_message,
+            "top_nodes": stats.top_nodes.iter().map(|n| serde_json::json!({
+                "node_id": format!("!{:08x}", n.node_id),
+                "node_name": n.node_name,
+                "message_count": n.message_count,
+                "command_count": n.command_count,
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("{}", "Mesh Message Statistics".cyan().bold());
+        println!("{}", "─".repeat(50));
+        println!();
+
+        // Overview
+        println!("  {} {}", "Total Messages:".bold(), stats.total_messages);
+        println!("  {} {} ({:.1}%)",
+            "Commands:".bold(),
+            stats.total_commands,
+            if stats.total_messages > 0 {
+                (stats.total_commands as f64 / stats.total_messages as f64) * 100.0
+            } else { 0.0 }
+        );
+        println!("  {} {}", "With Responses:".bold(), stats.total_responses);
+        println!("  {} {}", "Unique Nodes:".bold(), stats.unique_nodes);
+        println!();
+
+        // Activity
+        println!("{}", "Activity".cyan().bold());
+        println!("  {} {}", "Last Hour:".bold(), stats.messages_last_hour);
+        println!("  {} {}", "Last 24h:".bold(), stats.messages_last_24h);
+
+        // Time range
+        if let (Some(oldest), Some(newest)) = (stats.oldest_message, stats.newest_message) {
+            let oldest_dt = chrono::DateTime::from_timestamp_micros(oldest)
+                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or_else(|| "N/A".to_string());
+            let newest_dt = chrono::DateTime::from_timestamp_micros(newest)
+                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or_else(|| "N/A".to_string());
+
+            println!();
+            println!("{}", "Time Range".cyan().bold());
+            println!("  {} {}", "First:".bold(), oldest_dt.dimmed());
+            println!("  {} {}", "Latest:".bold(), newest_dt.dimmed());
+        }
+
+        // Top nodes
+        if !stats.top_nodes.is_empty() {
+            println!();
+            println!("{}", "Top Nodes".cyan().bold());
+            for (i, node) in stats.top_nodes.iter().take(5).enumerate() {
+                let name = node.node_name.as_deref().unwrap_or("Unknown");
+                let node_id = format!("!{:08x}", node.node_id);
+                println!("  {}. {} {} ({} msgs, {} cmds)",
+                    i + 1,
+                    node_id.yellow(),
+                    name,
+                    node.message_count,
+                    node.command_count
+                );
+            }
+        }
+
+        // Hourly activity
+        if show_hourly {
+            println!();
+            println!("{}", "Hourly Activity (Last 24h)".cyan().bold());
+
+            let hourly = db::mesh_messages::get_hourly_activity(&mut conn)
+                .unwrap_or_default();
+
+            if hourly.is_empty() {
+                println!("  {} No activity in the last 24 hours", "─".dimmed());
+            } else {
+                // ASCII bar chart
+                let max_count = hourly.iter().map(|(_, c)| *c).max().unwrap_or(1);
+                for (ts, count) in hourly.iter() {
+                    let dt = chrono::DateTime::from_timestamp_micros(*ts)
+                        .map(|dt| dt.format("%H:00").to_string())
+                        .unwrap_or_else(|| "??:??".to_string());
+
+                    let bar_len = if max_count > 0 {
+                        (*count as f64 / max_count as f64 * 30.0) as usize
+                    } else { 0 };
+                    let bar = "█".repeat(bar_len);
+
+                    println!("  {} {} {} ({})", dt.dimmed(), bar.green(), " ".repeat(30 - bar_len), count);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Show recent mesh messages
+async fn handle_mesh_recent(matches: &ArgMatches) -> Result<()> {
+    let limit: i64 = matches.get_one::<String>("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
+    let commands_only = matches.get_flag("commands");
+    let node_filter = matches.get_one::<String>("node");
+    let json_output = matches.get_flag("json");
+
+    let mut conn = db_err(db::establish_connection())?;
+
+    let messages = if commands_only {
+        db::mesh_messages::get_commands(&mut conn, limit)
+    } else if let Some(node_id_str) = node_filter {
+        // Parse node ID like "!abcd1234"
+        let node_id = crate::utils::bbs::hex_id_to_num(node_id_str)
+            .ok_or_else(|| anyhow::anyhow!("Invalid node ID: {}", node_id_str))?;
+        db::mesh_messages::get_from_node(&mut conn, node_id, limit)
+    } else {
+        db::mesh_messages::get_recent(&mut conn, limit)
+    }.map_err(|e| anyhow::anyhow!("Failed to get messages: {}", e))?;
+
+    if json_output {
+        let json: Vec<_> = messages.iter().map(|m| serde_json::json!({
+            "id": m.id,
+            "from_node_id": format!("!{:08x}", m.from_node_id as u32),
+            "from_name": m.from_name,
+            "body": m.body,
+            "is_command": m.is_command,
+            "received_at": m.received_at_us,
+            "response": m.response,
+        })).collect();
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("{}", "Recent Mesh Messages".cyan().bold());
+        println!("{}", "─".repeat(60));
+
+        if messages.is_empty() {
+            println!("  {} No messages found", "─".dimmed());
+        } else {
+            for msg in messages.iter() {
+                let node_id = format!("!{:08x}", msg.from_node_id as u32);
+                let name = msg.from_name.as_deref().unwrap_or("Unknown");
+                let time = chrono::DateTime::from_timestamp_micros(msg.received_at_us)
+                    .map(|dt| dt.format("%m-%d %H:%M").to_string())
+                    .unwrap_or_else(|| "??-?? ??:??".to_string());
+
+                let cmd_marker = if msg.is_command { "📡" } else { "  " };
+
+                println!();
+                println!("  {} {} {} ({})", cmd_marker, node_id.yellow(), name.cyan(), time.dimmed());
+                println!("     {}", msg.body);
+
+                if let Some(ref response) = msg.response {
+                    println!("     {} {}", "→".green(), response.dimmed());
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// List mesh nodes by activity
+async fn handle_mesh_nodes(matches: &ArgMatches) -> Result<()> {
+    let limit: i64 = matches.get_one::<String>("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    let json_output = matches.get_flag("json");
+
+    let mut conn = db_err(db::establish_connection())?;
+
+    let nodes = db::mesh_messages::get_top_nodes(&mut conn, limit)
+        .map_err(|e| anyhow::anyhow!("Failed to get nodes: {}", e))?;
+
+    if json_output {
+        let json: Vec<_> = nodes.iter().map(|n| serde_json::json!({
+            "node_id": format!("!{:08x}", n.node_id),
+            "node_name": n.node_name,
+            "message_count": n.message_count,
+            "command_count": n.command_count,
+        })).collect();
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("{}", "Mesh Nodes by Activity".cyan().bold());
+        println!("{}", "─".repeat(60));
+        println!();
+        println!("  {:^4} {:^12} {:^20} {:>8} {:>8}", "#", "Node ID", "Name", "Msgs", "Cmds");
+        println!("  {} {} {} {} {}", "─".repeat(4), "─".repeat(12), "─".repeat(20), "─".repeat(8), "─".repeat(8));
+
+        if nodes.is_empty() {
+            println!("  {} No nodes found", "─".dimmed());
+        } else {
+            for (i, node) in nodes.iter().enumerate() {
+                let node_id = format!("!{:08x}", node.node_id);
+                let name = node.node_name.as_deref().unwrap_or("Unknown");
+                let name_truncated = if name.len() > 20 { format!("{}...", &name[..17]) } else { name.to_string() };
+
+                println!("  {:>4} {} {:20} {:>8} {:>8}",
+                    i + 1,
+                    node_id.yellow(),
+                    name_truncated.cyan(),
+                    node.message_count,
+                    node.command_count
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Prune old mesh messages
+async fn handle_mesh_prune(matches: &ArgMatches) -> Result<()> {
+    let keep_count: i64 = matches.get_one::<String>("keep")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1000);
+    let force = matches.get_flag("force");
+
+    let mut conn = db_err(db::establish_connection())?;
+
+    // Get current count
+    let current_count = db::mesh_messages::count(&mut conn)
+        .map_err(|e| anyhow::anyhow!("Failed to count messages: {}", e))?;
+
+    if current_count <= keep_count {
+        println!("{} Only {} messages in database (keeping {}), nothing to prune.",
+            "ℹ".cyan(), current_count, keep_count);
+        return Ok(());
+    }
+
+    let to_delete = current_count - keep_count;
+
+    if !force {
+        println!("{}", "Mesh Message Pruning".yellow().bold());
+        println!("{}", "─".repeat(40));
+        println!("  Current messages: {}", current_count);
+        println!("  Keeping: {}", keep_count);
+        println!("  {} {} messages", "Will delete:".red(), to_delete);
+        println!();
+        print!("Continue? [y/N] ");
+        use std::io::Write;
+        std::io::stdout().flush()?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("{}", "Cancelled.".yellow());
+            return Ok(());
+        }
+    }
+
+    let deleted = db::mesh_messages::prune_old(&mut conn, keep_count)
+        .map_err(|e| anyhow::anyhow!("Failed to prune messages: {}", e))?;
+
+    println!("{} Deleted {} old messages. {} remaining.",
+        "✓".green(), deleted, current_count - deleted as i64);
+
+    Ok(())
 }
