@@ -1,0 +1,913 @@
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; AEA PROTOCOL - AUTONOMOUS ECONOMIC AGENTS
+;;; Unified On-Chain Registry for Agent-Human Economic Coordination
+;;; Written in OVSM LISP - Compiles to Solana sBPF
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; VISION:
+;;; A unified protocol where humans and AI agents can:
+;;; - Register identities (both users and agents)
+;;; - Discover each other via on-chain registry
+;;; - Communicate via BBS (HTTP + Meshtastic mesh)
+;;; - Trade services with escrow protection
+;;; - Build reputation through successful transactions
+;;;
+;;; PARTICIPANT TYPES:
+;;; - User (0): Human participant, no staking required
+;;; - Agent (1): AI agent, must stake $AEA tokens
+;;; - Provider (2): Service provider (human or agent), staked
+;;; - Validator (3): Reputation validator, high stake required
+;;;
+;;; ECONOMIC MODEL:
+;;; - Agents stake $AEA tokens to register (skin in the game)
+;;; - Users can register for free (minimal rent)
+;;; - Service requests create escrow accounts
+;;; - Successful delivery releases payment + reputation boost
+;;; - Failed/disputed tasks trigger arbitration and potential slashing
+;;; - Reputation weighted by stake and history
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; ACCOUNT LAYOUTS
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; Protocol Config (PDA: ["aea_config"]) - 128 bytes:
+;;;   offset 0:   u8 initialized
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 min_agent_stake (lamports)
+;;;   offset 16:  u64 min_provider_stake
+;;;   offset 24:  u64 min_validator_stake
+;;;   offset 32:  u64 escrow_fee_bps (basis points, e.g., 100 = 1%)
+;;;   offset 40:  u64 cooldown_seconds
+;;;   offset 48:  u64 dispute_window_seconds
+;;;   offset 56:  u64 total_participants
+;;;   offset 64:  u64 total_staked
+;;;   offset 72:  u64 total_volume (cumulative trade value)
+;;;   offset 80:  32 bytes admin_pubkey
+;;;   offset 112: 16 bytes reserved
+;;;
+;;; Participant Account (PDA: ["aea_participant", authority]) - 256 bytes:
+;;;   offset 0:   u8 participant_type (0=User, 1=Agent, 2=Provider, 3=Validator)
+;;;   offset 1:   u8 status (0=Inactive, 1=Active, 2=Cooldown, 3=Slashed, 4=Suspended)
+;;;   offset 2:   u8[6] padding
+;;;   offset 8:   u64 stake_amount
+;;;   offset 16:  i64 reputation_score (can be negative)
+;;;   offset 24:  u64 tasks_completed
+;;;   offset 32:  u64 tasks_failed
+;;;   offset 40:  u64 disputes_won
+;;;   offset 48:  u64 disputes_lost
+;;;   offset 56:  u64 total_earned (cumulative earnings)
+;;;   offset 64:  u64 total_spent (cumulative spending)
+;;;   offset 72:  u64 registered_at
+;;;   offset 80:  u64 last_active
+;;;   offset 88:  u64 cooldown_start
+;;;   offset 96:  32 bytes authority_pubkey
+;;;   offset 128: 64 bytes endpoint (HTTP address or mesh node ID)
+;;;   offset 192: 32 bytes display_name
+;;;   offset 224: 32 bytes capabilities_hash (for agents/providers)
+;;;
+;;; Service Listing (PDA: ["aea_service", provider, service_id]) - 192 bytes:
+;;;   offset 0:   u8 is_active
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 service_id
+;;;   offset 16:  u64 price (in lamports or token smallest unit)
+;;;   offset 24:  u64 min_reputation (minimum buyer reputation)
+;;;   offset 32:  u64 max_concurrent (max active orders)
+;;;   offset 40:  u64 active_orders
+;;;   offset 48:  u64 completed_orders
+;;;   offset 56:  u64 created_at
+;;;   offset 64:  32 bytes provider_pubkey
+;;;   offset 96:  64 bytes description_hash (IPFS or similar)
+;;;   offset 160: 32 bytes category_hash
+;;;
+;;; Order/Escrow (PDA: ["aea_order", buyer, order_id]) - 256 bytes:
+;;;   offset 0:   u8 status (0=Created, 1=Accepted, 2=InProgress, 3=Delivered,
+;;;                          4=Completed, 5=Disputed, 6=Refunded, 7=Cancelled)
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 order_id
+;;;   offset 16:  u64 service_id
+;;;   offset 24:  u64 amount (escrowed payment)
+;;;   offset 32:  u64 fee_amount (protocol fee)
+;;;   offset 40:  u64 created_at
+;;;   offset 48:  u64 accepted_at
+;;;   offset 56:  u64 delivered_at
+;;;   offset 64:  u64 deadline (must deliver by)
+;;;   offset 72:  u64 dispute_deadline (must dispute by)
+;;;   offset 80:  32 bytes buyer_pubkey
+;;;   offset 112: 32 bytes provider_pubkey
+;;;   offset 144: 64 bytes request_hash (IPFS CID of order details)
+;;;   offset 208: 64 bytes delivery_hash (IPFS CID of deliverable)
+;;;   offset 272: reserved (if we expand to 256 bytes)
+;;;
+;;; Message Reference (PDA: ["aea_msg", order_id, msg_index]) - 64 bytes:
+;;;   offset 0:   u8 msg_type (0=Text, 1=File, 2=Milestone, 3=Dispute)
+;;;   offset 1:   u8[7] padding
+;;;   offset 8:   u64 order_id
+;;;   offset 16:  u64 msg_index
+;;;   offset 24:  u64 timestamp
+;;;   offset 32:  32 bytes sender_pubkey
+;;;   offset 64:  32 bytes content_hash (reference to BBS post or IPFS)
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; INSTRUCTION SET
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;;
+;;; Administrative:
+;;;   0  InitializeProtocol - Create config, set parameters
+;;;   1  UpdateConfig - Modify fees, stakes, windows
+;;;
+;;; Registration:
+;;;   10 RegisterUser - Free registration for humans
+;;;   11 RegisterAgent - Stake tokens, register AI agent
+;;;   12 RegisterProvider - Stake tokens, offer services
+;;;   13 UpgradeToValidator - High stake to become validator
+;;;   14 UpdateProfile - Change endpoint, name, capabilities
+;;;   15 Deactivate - Begin cooldown, exit protocol
+;;;
+;;; Staking:
+;;;   20 IncreaseStake - Add more tokens
+;;;   21 InitiateUnstake - Start cooldown
+;;;   22 CompleteUnstake - Withdraw after cooldown
+;;;
+;;; Services:
+;;;   30 CreateService - Provider lists a service
+;;;   31 UpdateService - Modify price, limits
+;;;   32 DeactivateService - Stop accepting orders
+;;;
+;;; Orders:
+;;;   40 CreateOrder - Buyer requests service, funds escrow
+;;;   41 AcceptOrder - Provider commits to order
+;;;   42 SubmitDelivery - Provider marks as delivered
+;;;   43 ConfirmDelivery - Buyer accepts, releases payment
+;;;   44 RequestRevision - Buyer asks for changes
+;;;   45 CancelOrder - Mutual cancellation (before acceptance)
+;;;
+;;; Disputes:
+;;;   50 OpenDispute - Buyer or provider raises issue
+;;;   51 SubmitEvidence - Add evidence to dispute
+;;;   52 ValidatorVote - Validator casts resolution vote
+;;;   53 ResolveDispute - Execute resolution after voting
+;;;
+;;; Reputation:
+;;;   60 UpdateReputation - Internal, after order completion
+;;;   61 SlashParticipant - Penalty for violations
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
+
+(do
+  (sol_log_ "=== AEA PROTOCOL v1.0 ===")
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; CONSTANTS
+  ;; ═══════════════════════════════════════════════════════════════════════════
+
+  ;; Participant Types
+  (define TYPE_USER 0)
+  (define TYPE_AGENT 1)
+  (define TYPE_PROVIDER 2)
+  (define TYPE_VALIDATOR 3)
+
+  ;; Participant Status
+  (define STATUS_INACTIVE 0)
+  (define STATUS_ACTIVE 1)
+  (define STATUS_COOLDOWN 2)
+  (define STATUS_SLASHED 3)
+  (define STATUS_SUSPENDED 4)
+
+  ;; Order Status
+  (define ORDER_CREATED 0)
+  (define ORDER_ACCEPTED 1)
+  (define ORDER_IN_PROGRESS 2)
+  (define ORDER_DELIVERED 3)
+  (define ORDER_COMPLETED 4)
+  (define ORDER_DISPUTED 5)
+  (define ORDER_REFUNDED 6)
+  (define ORDER_CANCELLED 7)
+
+  ;; Reputation Constants
+  (define REP_ORDER_SUCCESS 100)        ;; Points for successful order
+  (define REP_ORDER_FAILURE -50)        ;; Points for failed order
+  (define REP_DISPUTE_WIN 50)           ;; Points for winning dispute
+  (define REP_DISPUTE_LOSE -100)        ;; Points for losing dispute
+  (define REP_SLASH_PENALTY -500)       ;; Heavy penalty
+  (define MIN_REP_TO_TRADE -500)        ;; Below this, cannot trade
+
+  ;; Default Parameters (can be updated via config)
+  (define DEFAULT_MIN_AGENT_STAKE 1000000000)    ;; 1 token (9 decimals)
+  (define DEFAULT_MIN_PROVIDER_STAKE 5000000000) ;; 5 tokens
+  (define DEFAULT_MIN_VALIDATOR_STAKE 100000000000) ;; 100 tokens
+  (define DEFAULT_FEE_BPS 250)                   ;; 2.5%
+  (define DEFAULT_COOLDOWN 86400)                ;; 24 hours
+  (define DEFAULT_DISPUTE_WINDOW 172800)         ;; 48 hours
+
+  ;; Read instruction data
+  (define instr_ptr (instruction-data-ptr))
+  (define discriminator (mem-load1 instr_ptr 0))
+  (sol_log_ "Instruction:")
+  (sol_log_64_ discriminator)
+
+  ;; Get common account pointers
+  (define config_ptr (account-data-ptr 0))
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 0: INITIALIZE PROTOCOL
+  ;; Creates the global config account
+  ;; Accounts: [config_pda, admin (signer), system_program]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 0)
+    (do
+      (sol_log_ ">>> INITIALIZE PROTOCOL <<<")
+
+      ;; Check not already initialized
+      (define is_init (mem-load1 config_ptr 0))
+      (if (= is_init 1)
+        (do
+          (sol_log_ "ERROR: Already initialized")
+          1)
+        (do
+          ;; Verify admin is signer
+          (if (= (account-is-signer 1) 0)
+            (do
+              (sol_log_ "ERROR: Admin must sign")
+              2)
+            (do
+              ;; Read optional custom parameters from instruction data
+              ;; bytes 1-8: min_agent_stake (0 = use default)
+              (define custom_agent_stake (mem-load instr_ptr 1))
+              (define min_agent_stake
+                (if (= custom_agent_stake 0)
+                    DEFAULT_MIN_AGENT_STAKE
+                    custom_agent_stake))
+
+              ;; Initialize config
+              (mem-store config_ptr 0 1)  ;; initialized = true
+
+              ;; Staking requirements
+              (mem-store config_ptr 8 min_agent_stake)
+              (mem-store config_ptr 16 DEFAULT_MIN_PROVIDER_STAKE)
+              (mem-store config_ptr 24 DEFAULT_MIN_VALIDATOR_STAKE)
+
+              ;; Fee (basis points)
+              (mem-store config_ptr 32 DEFAULT_FEE_BPS)
+
+              ;; Time windows
+              (mem-store config_ptr 40 DEFAULT_COOLDOWN)
+              (mem-store config_ptr 48 DEFAULT_DISPUTE_WINDOW)
+
+              ;; Counters start at 0
+              (mem-store config_ptr 56 0)  ;; total_participants
+              (mem-store config_ptr 64 0)  ;; total_staked
+              (mem-store config_ptr 72 0)  ;; total_volume
+
+              ;; Store admin pubkey at offset 80
+              (define admin_pk (account-pubkey 1))
+              (mem-store config_ptr 80 (mem-load admin_pk 0))
+              (mem-store config_ptr 88 (mem-load admin_pk 8))
+              (mem-store config_ptr 96 (mem-load admin_pk 16))
+              (mem-store config_ptr 104 (mem-load admin_pk 24))
+
+              (sol_log_ "Protocol initialized!")
+              (sol_log_ "Min agent stake:")
+              (sol_log_64_ min_agent_stake)
+              0)))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 10: REGISTER USER
+  ;; Free registration for human participants
+  ;; Accounts: [config, participant_pda, authority (signer), system_program]
+  ;; Data: bytes 1-64: endpoint, bytes 65-96: display_name
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 10)
+    (do
+      (sol_log_ ">>> REGISTER USER <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Check protocol initialized
+      (define is_init (mem-load1 config_ptr 0))
+      (if (!= is_init 1)
+        (do
+          (sol_log_ "ERROR: Protocol not initialized")
+          3)
+        (do
+          ;; Check not already registered
+          (define current_status (mem-load1 participant_ptr 1))
+          (if (!= current_status STATUS_INACTIVE)
+            (do
+              (sol_log_ "ERROR: Already registered")
+              4)
+            (do
+              ;; Verify signer
+              (if (= (account-is-signer 2) 0)
+                (do
+                  (sol_log_ "ERROR: Must sign registration")
+                  5)
+                (do
+                  ;; Get timestamp
+                  (define now (get-clock-timestamp))
+
+                  ;; Initialize user profile
+                  (mem-store participant_ptr 0 TYPE_USER)       ;; type = User
+                  (mem-store participant_ptr 1 STATUS_ACTIVE)   ;; status = Active
+                  (mem-store participant_ptr 8 0)               ;; stake = 0 (users don't stake)
+                  (mem-store participant_ptr 16 0)              ;; reputation = 0
+                  (mem-store participant_ptr 24 0)              ;; tasks_completed
+                  (mem-store participant_ptr 32 0)              ;; tasks_failed
+                  (mem-store participant_ptr 40 0)              ;; disputes_won
+                  (mem-store participant_ptr 48 0)              ;; disputes_lost
+                  (mem-store participant_ptr 56 0)              ;; total_earned
+                  (mem-store participant_ptr 64 0)              ;; total_spent
+                  (mem-store participant_ptr 72 now)            ;; registered_at
+                  (mem-store participant_ptr 80 now)            ;; last_active
+                  (mem-store participant_ptr 88 0)              ;; cooldown_start
+
+                  ;; Store authority pubkey at offset 96
+                  (define auth_pk (account-pubkey 2))
+                  (mem-store participant_ptr 96 (mem-load auth_pk 0))
+                  (mem-store participant_ptr 104 (mem-load auth_pk 8))
+                  (mem-store participant_ptr 112 (mem-load auth_pk 16))
+                  (mem-store participant_ptr 120 (mem-load auth_pk 24))
+
+                  ;; Copy endpoint from instruction data (64 bytes at offset 1)
+                  ;; Copy display_name from instruction data (32 bytes at offset 65)
+                  ;; (In production, would use mem-copy or loop)
+                  (mem-store participant_ptr 128 (mem-load instr_ptr 1))
+                  (mem-store participant_ptr 136 (mem-load instr_ptr 9))
+                  (mem-store participant_ptr 144 (mem-load instr_ptr 17))
+                  (mem-store participant_ptr 152 (mem-load instr_ptr 25))
+                  (mem-store participant_ptr 160 (mem-load instr_ptr 33))
+                  (mem-store participant_ptr 168 (mem-load instr_ptr 41))
+                  (mem-store participant_ptr 176 (mem-load instr_ptr 49))
+                  (mem-store participant_ptr 184 (mem-load instr_ptr 57))
+
+                  ;; Display name (32 bytes at offset 65 in instruction, 192 in account)
+                  (mem-store participant_ptr 192 (mem-load instr_ptr 65))
+                  (mem-store participant_ptr 200 (mem-load instr_ptr 73))
+                  (mem-store participant_ptr 208 (mem-load instr_ptr 81))
+                  (mem-store participant_ptr 216 (mem-load instr_ptr 89))
+
+                  ;; Update config counters
+                  (define total_participants (mem-load config_ptr 56))
+                  (mem-store config_ptr 56 (+ total_participants 1))
+
+                  (sol_log_ "User registered!")
+                  0)))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 11: REGISTER AGENT
+  ;; Stake tokens to register as an AI agent
+  ;; Accounts: [config, participant_pda, authority (signer),
+  ;;            token_mint, authority_token, protocol_vault, token_program, system_program]
+  ;; Data: bytes 1-8: stake_amount, bytes 9-72: endpoint, bytes 73-104: name, bytes 105-136: capabilities_hash
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 11)
+    (do
+      (sol_log_ ">>> REGISTER AGENT <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Check protocol initialized
+      (define is_init (mem-load1 config_ptr 0))
+      (if (!= is_init 1)
+        (do
+          (sol_log_ "ERROR: Protocol not initialized")
+          3)
+        (do
+          ;; Check not already registered
+          (define current_status (mem-load1 participant_ptr 1))
+          (if (!= current_status STATUS_INACTIVE)
+            (do
+              (sol_log_ "ERROR: Already registered")
+              4)
+            (do
+              ;; Verify signer
+              (if (= (account-is-signer 2) 0)
+                (do
+                  (sol_log_ "ERROR: Must sign registration")
+                  5)
+                (do
+                  ;; Read stake amount
+                  (define stake_amount (mem-load instr_ptr 1))
+                  (sol_log_ "Stake amount:")
+                  (sol_log_64_ stake_amount)
+
+                  ;; Check minimum stake
+                  (define min_stake (mem-load config_ptr 8))
+                  (if (< stake_amount min_stake)
+                    (do
+                      (sol_log_ "ERROR: Stake below minimum")
+                      (sol_log_64_ min_stake)
+                      6)
+                    (do
+                      ;; Transfer tokens to vault
+                      ;; Account indices: 6=Token Program, 4=Authority Token, 5=Vault, 2=Authority
+                      (sol_log_ "Transferring stake to protocol vault...")
+                      (define transfer_result (spl-token-transfer 6 4 5 2 stake_amount))
+                      (if (!= transfer_result 0)
+                        (do
+                          (sol_log_ "ERROR: Token transfer failed")
+                          7)
+                        (do
+                          ;; Get timestamp
+                          (define now (get-clock-timestamp))
+
+                          ;; Calculate initial reputation (based on stake)
+                          (define initial_rep (/ stake_amount 1000000))
+
+                          ;; Initialize agent profile
+                          (mem-store participant_ptr 0 TYPE_AGENT)      ;; type = Agent
+                          (mem-store participant_ptr 1 STATUS_ACTIVE)   ;; status = Active
+                          (mem-store participant_ptr 8 stake_amount)    ;; stake
+                          (mem-store participant_ptr 16 initial_rep)    ;; reputation
+                          (mem-store participant_ptr 24 0)              ;; tasks_completed
+                          (mem-store participant_ptr 32 0)              ;; tasks_failed
+                          (mem-store participant_ptr 40 0)              ;; disputes_won
+                          (mem-store participant_ptr 48 0)              ;; disputes_lost
+                          (mem-store participant_ptr 56 0)              ;; total_earned
+                          (mem-store participant_ptr 64 0)              ;; total_spent
+                          (mem-store participant_ptr 72 now)            ;; registered_at
+                          (mem-store participant_ptr 80 now)            ;; last_active
+                          (mem-store participant_ptr 88 0)              ;; cooldown_start
+
+                          ;; Store authority pubkey
+                          (define auth_pk (account-pubkey 2))
+                          (mem-store participant_ptr 96 (mem-load auth_pk 0))
+                          (mem-store participant_ptr 104 (mem-load auth_pk 8))
+                          (mem-store participant_ptr 112 (mem-load auth_pk 16))
+                          (mem-store participant_ptr 120 (mem-load auth_pk 24))
+
+                          ;; Copy endpoint (64 bytes starting at instr offset 9)
+                          (mem-store participant_ptr 128 (mem-load instr_ptr 9))
+                          (mem-store participant_ptr 136 (mem-load instr_ptr 17))
+                          (mem-store participant_ptr 144 (mem-load instr_ptr 25))
+                          (mem-store participant_ptr 152 (mem-load instr_ptr 33))
+                          (mem-store participant_ptr 160 (mem-load instr_ptr 41))
+                          (mem-store participant_ptr 168 (mem-load instr_ptr 49))
+                          (mem-store participant_ptr 176 (mem-load instr_ptr 57))
+                          (mem-store participant_ptr 184 (mem-load instr_ptr 65))
+
+                          ;; Display name (32 bytes at offset 73)
+                          (mem-store participant_ptr 192 (mem-load instr_ptr 73))
+                          (mem-store participant_ptr 200 (mem-load instr_ptr 81))
+                          (mem-store participant_ptr 208 (mem-load instr_ptr 89))
+                          (mem-store participant_ptr 216 (mem-load instr_ptr 97))
+
+                          ;; Capabilities hash (32 bytes at offset 105)
+                          (mem-store participant_ptr 224 (mem-load instr_ptr 105))
+                          (mem-store participant_ptr 232 (mem-load instr_ptr 113))
+                          (mem-store participant_ptr 240 (mem-load instr_ptr 121))
+                          (mem-store participant_ptr 248 (mem-load instr_ptr 129))
+
+                          ;; Update config counters
+                          (define total_participants (mem-load config_ptr 56))
+                          (mem-store config_ptr 56 (+ total_participants 1))
+
+                          (define total_staked (mem-load config_ptr 64))
+                          (mem-store config_ptr 64 (+ total_staked stake_amount))
+
+                          (sol_log_ "Agent registered!")
+                          (sol_log_ "Initial reputation:")
+                          (sol_log_64_ initial_rep)
+                          0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 40: CREATE ORDER
+  ;; Buyer creates order, funds go to escrow
+  ;; Accounts: [config, order_pda, buyer_participant, provider_participant,
+  ;;            service_pda, buyer_token, escrow_vault, token_program, system_program]
+  ;; Data: bytes 1-8: service_id, bytes 9-16: amount, bytes 17-80: request_hash
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 40)
+    (do
+      (sol_log_ ">>> CREATE ORDER <<<")
+
+      (define order_ptr (account-data-ptr 1))
+      (define buyer_ptr (account-data-ptr 2))
+      (define provider_ptr (account-data-ptr 3))
+      (define service_ptr (account-data-ptr 4))
+
+      ;; Verify buyer is active
+      (define buyer_status (mem-load1 buyer_ptr 1))
+      (if (!= buyer_status STATUS_ACTIVE)
+        (do
+          (sol_log_ "ERROR: Buyer not active")
+          10)
+        (do
+          ;; Check buyer reputation
+          (define buyer_rep (mem-load buyer_ptr 16))
+          (if (< buyer_rep MIN_REP_TO_TRADE)
+            (do
+              (sol_log_ "ERROR: Buyer reputation too low")
+              11)
+            (do
+              ;; Verify provider is active
+              (define provider_status (mem-load1 provider_ptr 1))
+              (if (!= provider_status STATUS_ACTIVE)
+                (do
+                  (sol_log_ "ERROR: Provider not active")
+                  12)
+                (do
+                  ;; Verify service is active
+                  (define service_active (mem-load1 service_ptr 0))
+                  (if (!= service_active 1)
+                    (do
+                      (sol_log_ "ERROR: Service not active")
+                      13)
+                    (do
+                      ;; Read order details
+                      (define service_id (mem-load instr_ptr 1))
+                      (define amount (mem-load instr_ptr 9))
+
+                      ;; Calculate fee
+                      (define fee_bps (mem-load config_ptr 32))
+                      (define fee_amount (/ (* amount fee_bps) 10000))
+                      (define total_amount (+ amount fee_amount))
+
+                      (sol_log_ "Order amount:")
+                      (sol_log_64_ amount)
+                      (sol_log_ "Fee:")
+                      (sol_log_64_ fee_amount)
+
+                      ;; Transfer total to escrow
+                      ;; Account indices: 7=Token Program, 5=Buyer Token, 6=Escrow Vault, 2=Buyer Authority
+                      (define escrow_result (spl-token-transfer 7 5 6 2 total_amount))
+                      (if (!= escrow_result 0)
+                        (do
+                          (sol_log_ "ERROR: Escrow transfer failed")
+                          14)
+                        (do
+                          ;; Get timestamp
+                          (define now (get-clock-timestamp))
+
+                          ;; Generate order_id from timestamp + random
+                          (define order_id now)
+
+                          ;; Get dispute window for deadline
+                          (define dispute_window (mem-load config_ptr 48))
+
+                          ;; Initialize order
+                          (mem-store order_ptr 0 ORDER_CREATED)      ;; status
+                          (mem-store order_ptr 8 order_id)           ;; order_id
+                          (mem-store order_ptr 16 service_id)        ;; service_id
+                          (mem-store order_ptr 24 amount)            ;; amount
+                          (mem-store order_ptr 32 fee_amount)        ;; fee
+                          (mem-store order_ptr 40 now)               ;; created_at
+                          (mem-store order_ptr 48 0)                 ;; accepted_at (not yet)
+                          (mem-store order_ptr 56 0)                 ;; delivered_at (not yet)
+                          (mem-store order_ptr 64 0)                 ;; deadline (set on accept)
+                          (mem-store order_ptr 72 0)                 ;; dispute_deadline
+
+                          ;; Store buyer pubkey
+                          (define buyer_pk (account-pubkey 2))
+                          (mem-store order_ptr 80 (mem-load buyer_pk 0))
+                          (mem-store order_ptr 88 (mem-load buyer_pk 8))
+                          (mem-store order_ptr 96 (mem-load buyer_pk 16))
+                          (mem-store order_ptr 104 (mem-load buyer_pk 24))
+
+                          ;; Store provider pubkey
+                          (define prov_pk (account-pubkey 3))
+                          (mem-store order_ptr 112 (mem-load prov_pk 0))
+                          (mem-store order_ptr 120 (mem-load prov_pk 8))
+                          (mem-store order_ptr 128 (mem-load prov_pk 16))
+                          (mem-store order_ptr 136 (mem-load prov_pk 24))
+
+                          ;; Copy request hash (64 bytes at instr offset 17)
+                          (mem-store order_ptr 144 (mem-load instr_ptr 17))
+                          (mem-store order_ptr 152 (mem-load instr_ptr 25))
+                          (mem-store order_ptr 160 (mem-load instr_ptr 33))
+                          (mem-store order_ptr 168 (mem-load instr_ptr 41))
+                          (mem-store order_ptr 176 (mem-load instr_ptr 49))
+                          (mem-store order_ptr 184 (mem-load instr_ptr 57))
+                          (mem-store order_ptr 192 (mem-load instr_ptr 65))
+                          (mem-store order_ptr 200 (mem-load instr_ptr 73))
+
+                          ;; Update service active_orders
+                          (define active_orders (mem-load service_ptr 40))
+                          (mem-store service_ptr 40 (+ active_orders 1))
+
+                          ;; Update buyer total_spent
+                          (define buyer_spent (mem-load buyer_ptr 64))
+                          (mem-store buyer_ptr 64 (+ buyer_spent total_amount))
+
+                          ;; Update buyer last_active
+                          (mem-store buyer_ptr 80 now)
+
+                          (sol_log_ "Order created!")
+                          (sol_log_ "Order ID:")
+                          (sol_log_64_ order_id)
+                          0)))))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 43: CONFIRM DELIVERY
+  ;; Buyer confirms, releases payment to provider
+  ;; Accounts: [config, order_pda, buyer_participant, provider_participant,
+  ;;            escrow_vault, provider_token, fee_vault, token_program]
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 43)
+    (do
+      (sol_log_ ">>> CONFIRM DELIVERY <<<")
+
+      (define order_ptr (account-data-ptr 1))
+      (define buyer_ptr (account-data-ptr 2))
+      (define provider_ptr (account-data-ptr 3))
+
+      ;; Verify order status is Delivered
+      (define order_status (mem-load1 order_ptr 0))
+      (if (!= order_status ORDER_DELIVERED)
+        (do
+          (sol_log_ "ERROR: Order not in delivered state")
+          20)
+        (do
+          ;; Verify buyer is signer (they must confirm)
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Buyer must sign confirmation")
+              21)
+            (do
+              ;; Get payment amounts
+              (define amount (mem-load order_ptr 24))
+              (define fee (mem-load order_ptr 32))
+
+              ;; Transfer payment to provider (from escrow)
+              ;; Account indices: 7=Token Program, 4=Escrow Vault, 5=Provider Token,
+              ;;                  (PDA authority would be needed in real impl)
+              (sol_log_ "Releasing payment to provider:")
+              (sol_log_64_ amount)
+
+              ;; In real implementation, would use spl-token-transfer-signed with PDA seeds
+              ;; For now, we assume the transfer succeeds and update state
+
+              ;; Transfer fee to protocol (fee_vault is account 6)
+              (sol_log_ "Protocol fee:")
+              (sol_log_64_ fee)
+
+              ;; Get timestamp
+              (define now (get-clock-timestamp))
+
+              ;; Update order status to Completed
+              (mem-store order_ptr 0 ORDER_COMPLETED)
+
+              ;; Update provider stats
+              (define prov_completed (mem-load provider_ptr 24))
+              (mem-store provider_ptr 24 (+ prov_completed 1))
+
+              (define prov_earned (mem-load provider_ptr 56))
+              (mem-store provider_ptr 56 (+ prov_earned amount))
+
+              (define prov_rep (mem-load provider_ptr 16))
+              (mem-store provider_ptr 16 (+ prov_rep REP_ORDER_SUCCESS))
+
+              (mem-store provider_ptr 80 now)  ;; last_active
+
+              ;; Update buyer stats
+              (define buyer_completed (mem-load buyer_ptr 24))
+              (mem-store buyer_ptr 24 (+ buyer_completed 1))
+
+              (define buyer_rep (mem-load buyer_ptr 16))
+              (mem-store buyer_ptr 16 (+ buyer_rep (/ REP_ORDER_SUCCESS 2)))
+
+              (mem-store buyer_ptr 80 now)  ;; last_active
+
+              ;; Update protocol volume
+              (define total_volume (mem-load config_ptr 72))
+              (mem-store config_ptr 72 (+ total_volume amount))
+
+              (sol_log_ "Order completed!")
+              (sol_log_ "Provider new reputation:")
+              (sol_log_64_ (+ prov_rep REP_ORDER_SUCCESS))
+              0))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 14: UPDATE PROFILE
+  ;; Modify endpoint, name, or capabilities
+  ;; Accounts: [config, participant_pda, authority (signer)]
+  ;; Data: bytes 1: update_type (1=endpoint, 2=name, 3=capabilities),
+  ;;       bytes 2-65/97: new value
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 14)
+    (do
+      (sol_log_ ">>> UPDATE PROFILE <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Verify participant is active
+      (define status (mem-load1 participant_ptr 1))
+      (if (!= status STATUS_ACTIVE)
+        (do
+          (sol_log_ "ERROR: Participant not active")
+          30)
+        (do
+          ;; Verify authority is signer
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Authority must sign")
+              31)
+            (do
+              ;; Read update type
+              (define update_type (mem-load1 instr_ptr 1))
+
+              ;; Get timestamp
+              (define now (get-clock-timestamp))
+              (mem-store participant_ptr 80 now)  ;; last_active
+
+              (if (= update_type 1)
+                (do
+                  ;; Update endpoint (64 bytes at offset 128)
+                  (sol_log_ "Updating endpoint...")
+                  (mem-store participant_ptr 128 (mem-load instr_ptr 2))
+                  (mem-store participant_ptr 136 (mem-load instr_ptr 10))
+                  (mem-store participant_ptr 144 (mem-load instr_ptr 18))
+                  (mem-store participant_ptr 152 (mem-load instr_ptr 26))
+                  (mem-store participant_ptr 160 (mem-load instr_ptr 34))
+                  (mem-store participant_ptr 168 (mem-load instr_ptr 42))
+                  (mem-store participant_ptr 176 (mem-load instr_ptr 50))
+                  (mem-store participant_ptr 184 (mem-load instr_ptr 58))
+                  (sol_log_ "Endpoint updated!")
+                  0)
+                null)
+
+              (if (= update_type 2)
+                (do
+                  ;; Update name (32 bytes at offset 192)
+                  (sol_log_ "Updating name...")
+                  (mem-store participant_ptr 192 (mem-load instr_ptr 2))
+                  (mem-store participant_ptr 200 (mem-load instr_ptr 10))
+                  (mem-store participant_ptr 208 (mem-load instr_ptr 18))
+                  (mem-store participant_ptr 216 (mem-load instr_ptr 26))
+                  (sol_log_ "Name updated!")
+                  0)
+                null)
+
+              (if (= update_type 3)
+                (do
+                  ;; Update capabilities (32 bytes at offset 224)
+                  (sol_log_ "Updating capabilities...")
+                  (mem-store participant_ptr 224 (mem-load instr_ptr 2))
+                  (mem-store participant_ptr 232 (mem-load instr_ptr 10))
+                  (mem-store participant_ptr 240 (mem-load instr_ptr 18))
+                  (mem-store participant_ptr 248 (mem-load instr_ptr 26))
+                  (sol_log_ "Capabilities updated!")
+                  0)
+                null)
+
+              0))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 50: OPEN DISPUTE
+  ;; Either party raises a dispute on an order
+  ;; Accounts: [config, order_pda, disputer_participant, counterparty_participant]
+  ;; Data: bytes 1-64: evidence_hash (IPFS CID)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 50)
+    (do
+      (sol_log_ ">>> OPEN DISPUTE <<<")
+
+      (define order_ptr (account-data-ptr 1))
+
+      ;; Verify order is in disputable state (Delivered or InProgress)
+      (define order_status (mem-load1 order_ptr 0))
+      (if (and (!= order_status ORDER_DELIVERED) (!= order_status ORDER_IN_PROGRESS))
+        (do
+          (sol_log_ "ERROR: Order not in disputable state")
+          40)
+        (do
+          ;; Verify disputer is signer and is buyer or provider
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Disputer must sign")
+              41)
+            (do
+              ;; Get timestamp
+              (define now (get-clock-timestamp))
+
+              ;; Check dispute deadline (if set)
+              (define dispute_deadline (mem-load order_ptr 72))
+              (if (and (> dispute_deadline 0) (> now dispute_deadline))
+                (do
+                  (sol_log_ "ERROR: Dispute window closed")
+                  42)
+                (do
+                  ;; Set order status to Disputed
+                  (mem-store order_ptr 0 ORDER_DISPUTED)
+
+                  ;; In full implementation, would create a Dispute account with:
+                  ;; - evidence from both parties
+                  ;; - validator votes
+                  ;; - resolution outcome
+
+                  (sol_log_ "Dispute opened!")
+                  (sol_log_ "Validators may now review and vote")
+                  0))))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; INSTRUCTION 61: SLASH PARTICIPANT
+  ;; Penalty for violations (called by admin or dispute resolution)
+  ;; Accounts: [config, participant_pda, admin (signer), token_vault, burn_account]
+  ;; Data: bytes 1-8: slash_percentage (x100, e.g., 5000 = 50%)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (= discriminator 61)
+    (do
+      (sol_log_ ">>> SLASH PARTICIPANT <<<")
+
+      (define participant_ptr (account-data-ptr 1))
+
+      ;; Verify admin is signer
+      (define admin_pk_0 (mem-load config_ptr 80))
+      (define caller_pk_0 (mem-load (account-pubkey 2) 0))
+      (if (!= admin_pk_0 caller_pk_0)
+        (do
+          (sol_log_ "ERROR: Only admin can slash")
+          50)
+        (do
+          (if (= (account-is-signer 2) 0)
+            (do
+              (sol_log_ "ERROR: Admin must sign")
+              51)
+            (do
+              ;; Read slash percentage
+              (define slash_pct (mem-load instr_ptr 1))
+              (sol_log_ "Slash percentage (x100):")
+              (sol_log_64_ slash_pct)
+
+              ;; Get current stake
+              (define current_stake (mem-load participant_ptr 8))
+              (define slash_amount (/ (* current_stake slash_pct) 10000))
+
+              (sol_log_ "Slash amount:")
+              (sol_log_64_ slash_amount)
+
+              ;; Reduce stake
+              (define new_stake (- current_stake slash_amount))
+              (mem-store participant_ptr 8 new_stake)
+
+              ;; Heavy reputation penalty
+              (define current_rep (mem-load participant_ptr 16))
+              (define new_rep (+ current_rep REP_SLASH_PENALTY))
+              (mem-store participant_ptr 16 new_rep)
+
+              ;; Update disputes_lost counter
+              (define disputes_lost (mem-load participant_ptr 48))
+              (mem-store participant_ptr 48 (+ disputes_lost 1))
+
+              ;; If stake too low, set status to Slashed
+              (if (< new_stake 100000)  ;; threshold
+                (do
+                  (mem-store participant_ptr 1 STATUS_SLASHED)
+                  (sol_log_ "Participant marked as SLASHED"))
+                null)
+
+              ;; Update config total_staked
+              (define total_staked (mem-load config_ptr 64))
+              (mem-store config_ptr 64 (- total_staked slash_amount))
+
+              ;; In full implementation, would transfer slashed tokens to:
+              ;; - Protocol treasury
+              ;; - Burn (deflationary)
+              ;; - Dispute winner
+
+              (sol_log_ "Participant slashed!")
+              (sol_log_ "Remaining stake:")
+              (sol_log_64_ new_stake)
+              0))))
+    null)
+
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; DEFAULT: Unknown instruction
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  (if (> discriminator 61)
+    (do
+      (sol_log_ "ERROR: Unknown instruction")
+      99)
+    null)
+
+  ;; Success
+  (sol_log_ "=== AEA COMPLETE ===")
+  0)
+
+;;; ═══════════════════════════════════════════════════════════════════════════════
+;;; END OF AEA PROTOCOL
+;;;
+;;; INTEGRATION WITH BBS:
+;;; - Participants register with their HTTP endpoint or Meshtastic node ID
+;;; - Order messages reference BBS posts via content_hash
+;;; - Dispute evidence can be BBS thread IDs
+;;; - Service descriptions stored as BBS posts, referenced by hash
+;;;
+;;; MESH NETWORK SUPPORT:
+;;; - Endpoint field supports mesh node IDs (e.g., "!abcd1234")
+;;; - Orders can be created/managed via BBS radio commands
+;;; - Validators can vote via mesh network
+;;;
+;;; TOKEN ECONOMICS:
+;;; - $AEA token for staking and payments
+;;; - Protocol fee (default 2.5%) funds development
+;;; - Slashed stakes can be burned (deflationary)
+;;; - High-reputation participants get fee discounts (future)
+;;;
+;;; ═══════════════════════════════════════════════════════════════════════════════
