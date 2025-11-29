@@ -147,11 +147,11 @@ impl OvsmService {
         let mut scanner = Scanner::new(code);
         let tokens = scanner
             .scan_tokens()
-            .context("Syntax error during tokenization")?;
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        // Parse
+        // Parse - preserve the detailed error message with line/column info
         let mut parser = Parser::new(tokens);
-        parser.parse().context("Syntax error during parsing")?;
+        parser.parse().map_err(|e| anyhow::anyhow!("{}", e))?;
 
         if self.verbose {
             crate::tui_log!("✅ Syntax check passed");
