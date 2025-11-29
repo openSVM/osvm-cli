@@ -3126,6 +3126,18 @@ impl OsvmApp {
                     graph.handle_input(GraphInput::ToggleLayout);
                 }
             }
+            // Minimap toggle (M key)
+            KeyCode::Char('m') | KeyCode::Char('M') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ToggleMinimap);
+                }
+            }
+            // Heatmap toggle (H key) - switch minimap between node view and density heatmap
+            KeyCode::Char('h') | KeyCode::Char('H') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ToggleHeatmap);
+                }
+            }
             // Number keys 1-5 to select tabs
             KeyCode::Char('1') if !self.chat_input_active => {
                 self.active_tab = TabIndex::Chat;
@@ -5372,6 +5384,8 @@ impl OsvmApp {
             Line::from("   +/-          Zoom in/out"),
             Line::from("   [/]          Decrease/increase BFS exploration depth"),
             Line::from("   L            Toggle layout (Force-directed ↔ Hierarchical)"),
+            Line::from("   M            Toggle minimap (overview in corner)"),
+            Line::from("   H            Toggle minimap heatmap mode (density view)"),
             Line::from("   T            Toggle investigation trail breadcrumb"),
             Line::from("   /            Start search (ESC to cancel)"),
             Line::from("   n/N          Next/previous search result"),

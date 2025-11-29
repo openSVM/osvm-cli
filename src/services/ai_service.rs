@@ -1060,9 +1060,10 @@ impl AiService {
         available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
     ) -> Result<(String, String)> {
         // Check if minimal mode is enabled via environment variable
+        // DEFAULT: true (minimal mode) - set OSVM_MINIMAL_PROMPT=false to disable
         let use_minimal = std::env::var("OSVM_MINIMAL_PROMPT")
-            .unwrap_or_default()
-            .to_lowercase() == "true";
+            .unwrap_or_else(|_| "true".to_string())  // Default to minimal mode
+            .to_lowercase() != "false";  // Only disable if explicitly set to "false"
 
         let mut tools_context = String::new();
 

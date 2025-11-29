@@ -44,12 +44,14 @@ pub mod checker;
 pub mod bidirectional;
 pub mod bridge;
 pub mod refinement;
+pub mod verify;
 
 // Re-export TypeChecker for convenience
 pub use checker::TypeChecker;
 pub use bidirectional::BidirectionalChecker;
 pub use bridge::{TypeBridge, TypeEnvSourceExt};
-pub use refinement::{RefinementType, RefinementChecker, Predicate, PredicateExpr, CompareOp};
+pub use refinement::{RefinementType, RefinementChecker, Predicate, PredicateExpr, CompareOp, RefinementError, ProofObligation};
+pub use verify::{RefinementVerifier, VerificationResult, VerificationError};
 
 use std::collections::HashMap;
 use std::fmt;

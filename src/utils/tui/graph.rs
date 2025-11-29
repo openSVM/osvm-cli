@@ -6,6 +6,8 @@ use ratatui::{
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use arboard::Clipboard;
+use rayon::prelude::*;
+use std::sync::Arc;
 
 // Re-export forensics types for backward compatibility
 pub use super::graph_forensics::{
@@ -72,6 +74,307 @@ impl EdgeLabel {
             format!("{:.2} {}", self.amount, self.token)
         } else {
             format!("{:.4} {}", self.amount, self.token)
+        }
+    }
+}
+
+// ============================================================================
+// Barnes-Hut QuadTree for O(n log n) Force Approximation
+// ============================================================================
+//
+// The Barnes-Hut algorithm approximates N-body repulsion forces in O(n log n)
+// instead of O(n²) by treating distant groups of nodes as single point masses.
+//
+// Key parameters:
+// - theta (θ): Controls accuracy vs speed tradeoff
+//   - θ = 0.0: Exact O(n²) calculation (no approximation)
+//   - θ = 0.5: Good balance (typical value)
+//   - θ = 1.0: Very fast but less accurate
+//
+// The algorithm:
+// 1. Build a quadtree that recursively subdivides space
+// 2. For each internal node, compute center of mass of all contained points
+// 3. When computing force on a point, traverse tree:
+//    - If node is far enough (width/distance < θ), use center of mass
+//    - Otherwise, recurse into children
+
+/// Axis-aligned bounding box for QuadTree
+#[derive(Debug, Clone, Copy)]
+struct BoundingBox {
+    x: f64,      // Center X
+    y: f64,      // Center Y
+    half_w: f64, // Half-width
+    half_h: f64, // Half-height
+}
+
+impl BoundingBox {
+    fn new(x: f64, y: f64, half_w: f64, half_h: f64) -> Self {
+        Self { x, y, half_w, half_h }
+    }
+
+    fn contains(&self, px: f64, py: f64) -> bool {
+        px >= self.x - self.half_w && px <= self.x + self.half_w &&
+        py >= self.y - self.half_h && py <= self.y + self.half_h
+    }
+
+    /// Return which quadrant (0-3) a point belongs to, or None if outside
+    fn quadrant(&self, px: f64, py: f64) -> Option<usize> {
+        if !self.contains(px, py) {
+            return None;
+        }
+        let right = px >= self.x;
+        let top = py >= self.y;
+        Some(match (right, top) {
+            (false, true)  => 0, // NW
+            (true, true)   => 1, // NE
+            (false, false) => 2, // SW
+            (true, false)  => 3, // SE
+        })
+    }
+
+    fn subdivide(&self, quadrant: usize) -> Self {
+        let qw = self.half_w / 2.0;
+        let qh = self.half_h / 2.0;
+        match quadrant {
+            0 => Self::new(self.x - qw, self.y + qh, qw, qh), // NW
+            1 => Self::new(self.x + qw, self.y + qh, qw, qh), // NE
+            2 => Self::new(self.x - qw, self.y - qh, qw, qh), // SW
+            3 => Self::new(self.x + qw, self.y - qh, qw, qh), // SE
+            _ => *self,
+        }
+    }
+
+    fn width(&self) -> f64 {
+        self.half_w * 2.0
+    }
+}
+
+/// QuadTree node for Barnes-Hut algorithm
+#[derive(Debug)]
+enum QuadTreeNode {
+    /// Empty node (no points)
+    Empty,
+    /// Leaf node containing a single point (index into positions array)
+    Leaf {
+        idx: usize,
+        x: f64,
+        y: f64,
+    },
+    /// Internal node with 4 children and aggregated mass data
+    Internal {
+        children: Box<[QuadTreeNode; 4]>,
+        /// Total "mass" (number of nodes in subtree)
+        mass: f64,
+        /// Center of mass X
+        com_x: f64,
+        /// Center of mass Y
+        com_y: f64,
+    },
+}
+
+impl Default for QuadTreeNode {
+    fn default() -> Self {
+        QuadTreeNode::Empty
+    }
+}
+
+/// Barnes-Hut QuadTree for efficient N-body force calculation
+pub struct BarnesHutTree {
+    root: QuadTreeNode,
+    bounds: BoundingBox,
+    /// Theta parameter: higher = faster but less accurate (0.5 is typical)
+    pub theta: f64,
+}
+
+impl BarnesHutTree {
+    /// Build a new Barnes-Hut tree from node positions
+    pub fn build(positions: &[(f64, f64)], theta: f64) -> Self {
+        if positions.is_empty() {
+            return Self {
+                root: QuadTreeNode::Empty,
+                bounds: BoundingBox::new(0.0, 0.0, 1.0, 1.0),
+                theta,
+            };
+        }
+
+        // Compute bounding box with some padding
+        let (min_x, max_x, min_y, max_y) = positions.iter().fold(
+            (f64::MAX, f64::MIN, f64::MAX, f64::MIN),
+            |(min_x, max_x, min_y, max_y), &(x, y)| {
+                (min_x.min(x), max_x.max(x), min_y.min(y), max_y.max(y))
+            },
+        );
+
+        let cx = (min_x + max_x) / 2.0;
+        let cy = (min_y + max_y) / 2.0;
+        let half_w = ((max_x - min_x) / 2.0 + 10.0).max(10.0); // At least 10 units
+        let half_h = ((max_y - min_y) / 2.0 + 10.0).max(10.0);
+        let half_size = half_w.max(half_h); // Make it square for simplicity
+
+        let bounds = BoundingBox::new(cx, cy, half_size, half_size);
+
+        let mut tree = Self {
+            root: QuadTreeNode::Empty,
+            bounds,
+            theta,
+        };
+
+        // Insert all points
+        for (idx, &(x, y)) in positions.iter().enumerate() {
+            tree.insert(idx, x, y);
+        }
+
+        // Compute centers of mass
+        tree.compute_mass();
+
+        tree
+    }
+
+    /// Insert a point into the tree
+    fn insert(&mut self, idx: usize, x: f64, y: f64) {
+        Self::insert_into(&mut self.root, self.bounds, idx, x, y, 0);
+    }
+
+    fn insert_into(node: &mut QuadTreeNode, bounds: BoundingBox, idx: usize, x: f64, y: f64, depth: usize) {
+        // Prevent infinite recursion from numerical issues
+        if depth > 50 {
+            return;
+        }
+
+        match node {
+            QuadTreeNode::Empty => {
+                *node = QuadTreeNode::Leaf { idx, x, y };
+            }
+            QuadTreeNode::Leaf { idx: old_idx, x: old_x, y: old_y } => {
+                // Convert to internal node and reinsert both points
+                let old_idx = *old_idx;
+                let old_x = *old_x;
+                let old_y = *old_y;
+
+                *node = QuadTreeNode::Internal {
+                    children: Box::new([
+                        QuadTreeNode::Empty,
+                        QuadTreeNode::Empty,
+                        QuadTreeNode::Empty,
+                        QuadTreeNode::Empty,
+                    ]),
+                    mass: 0.0,
+                    com_x: 0.0,
+                    com_y: 0.0,
+                };
+
+                // Reinsert old point
+                Self::insert_into(node, bounds, old_idx, old_x, old_y, depth + 1);
+                // Insert new point
+                Self::insert_into(node, bounds, idx, x, y, depth + 1);
+            }
+            QuadTreeNode::Internal { children, .. } => {
+                // Find which quadrant and insert there
+                if let Some(q) = bounds.quadrant(x, y) {
+                    let child_bounds = bounds.subdivide(q);
+                    Self::insert_into(&mut children[q], child_bounds, idx, x, y, depth + 1);
+                }
+            }
+        }
+    }
+
+    /// Compute center of mass for all internal nodes (bottom-up)
+    fn compute_mass(&mut self) {
+        Self::compute_mass_recursive(&mut self.root);
+    }
+
+    fn compute_mass_recursive(node: &mut QuadTreeNode) -> (f64, f64, f64) {
+        match node {
+            QuadTreeNode::Empty => (0.0, 0.0, 0.0),
+            QuadTreeNode::Leaf { x, y, .. } => (1.0, *x, *y),
+            QuadTreeNode::Internal { children, mass, com_x, com_y } => {
+                let mut total_mass = 0.0;
+                let mut weighted_x = 0.0;
+                let mut weighted_y = 0.0;
+
+                for child in children.iter_mut() {
+                    let (m, cx, cy) = Self::compute_mass_recursive(child);
+                    total_mass += m;
+                    weighted_x += m * cx;
+                    weighted_y += m * cy;
+                }
+
+                if total_mass > 0.0 {
+                    *mass = total_mass;
+                    *com_x = weighted_x / total_mass;
+                    *com_y = weighted_y / total_mass;
+                }
+
+                (total_mass, *com_x, *com_y)
+            }
+        }
+    }
+
+    /// Calculate repulsive force on a single node using Barnes-Hut approximation
+    /// Returns (fx, fy) force vector
+    pub fn calculate_force(&self, node_idx: usize, node_x: f64, node_y: f64, k2: f64, repulsion: f64) -> (f64, f64) {
+        self.calculate_force_recursive(&self.root, self.bounds, node_idx, node_x, node_y, k2, repulsion)
+    }
+
+    fn calculate_force_recursive(
+        &self,
+        node: &QuadTreeNode,
+        bounds: BoundingBox,
+        target_idx: usize,
+        target_x: f64,
+        target_y: f64,
+        k2: f64,
+        repulsion: f64,
+    ) -> (f64, f64) {
+        match node {
+            QuadTreeNode::Empty => (0.0, 0.0),
+            QuadTreeNode::Leaf { idx, x, y } => {
+                if *idx == target_idx {
+                    return (0.0, 0.0); // Don't compute self-force
+                }
+                // Direct force calculation
+                let dx = target_x - *x;
+                let dy = target_y - *y;
+                let dist_sq = dx * dx + dy * dy;
+                let dist = dist_sq.sqrt().max(0.1);
+
+                // Repulsion: k² / d
+                let force = repulsion * k2 / dist;
+                ((dx / dist) * force, (dy / dist) * force)
+            }
+            QuadTreeNode::Internal { children, mass, com_x, com_y } => {
+                if *mass == 0.0 {
+                    return (0.0, 0.0);
+                }
+
+                // Calculate distance to center of mass
+                let dx = target_x - *com_x;
+                let dy = target_y - *com_y;
+                let dist_sq = dx * dx + dy * dy;
+                let dist = dist_sq.sqrt().max(0.1);
+
+                // Barnes-Hut criterion: width/distance < theta
+                let width = bounds.width();
+                if width / dist < self.theta {
+                    // Use center of mass approximation
+                    // Scale force by mass (number of nodes in cluster)
+                    let force = repulsion * k2 * *mass / dist;
+                    ((dx / dist) * force, (dy / dist) * force)
+                } else {
+                    // Recurse into children
+                    let mut fx = 0.0;
+                    let mut fy = 0.0;
+                    for (q, child) in children.iter().enumerate() {
+                        let child_bounds = bounds.subdivide(q);
+                        let (cfx, cfy) = self.calculate_force_recursive(
+                            child, child_bounds, target_idx, target_x, target_y, k2, repulsion
+                        );
+                        fx += cfx;
+                        fy += cfy;
+                    }
+                    (fx, fy)
+                }
+            }
         }
     }
 }
@@ -291,6 +594,15 @@ pub struct ForceDirectedPhysics {
     pub pin_target: bool,
     /// Minimum movement threshold to consider converged
     pub convergence_threshold: f64,
+    /// Barnes-Hut theta parameter (0.0=exact, 0.5=balanced, 1.0=fast)
+    /// Higher values = faster but less accurate
+    pub barnes_hut_theta: f64,
+    /// Threshold node count to enable Barnes-Hut (O(n log n) vs O(n²))
+    /// For small graphs, direct calculation is faster due to tree overhead
+    pub barnes_hut_threshold: usize,
+    /// Threshold for parallel computation (use rayon for graphs > this size)
+    /// Below this, sequential is faster due to thread spawn overhead
+    pub parallel_threshold: usize,
 }
 
 impl Default for ForceDirectedPhysics {
@@ -309,6 +621,9 @@ impl Default for ForceDirectedPhysics {
             running: true,
             pin_target: true,
             convergence_threshold: 0.1,
+            barnes_hut_theta: 0.5,     // Balanced accuracy/speed
+            barnes_hut_threshold: 100, // Use Barnes-Hut for graphs > 100 nodes
+            parallel_threshold: 200,   // Use rayon parallel for graphs > 200 nodes
         }
     }
 }
@@ -339,13 +654,38 @@ impl ForceDirectedPhysics {
     pub fn should_continue(&self) -> bool {
         self.running && self.temperature > self.convergence_threshold
     }
+
+    /// Reheat the simulation slightly for incremental updates (new nodes/edges)
+    /// This allows the graph to settle gradually without full reset
+    pub fn reheat_incremental(&mut self) {
+        // Add a small amount of heat proportional to current temperature
+        // This creates a "warm" simulation that can absorb changes
+        let heat_boost = 5.0; // Small boost for smooth settling
+        self.temperature = (self.temperature + heat_boost).min(self.initial_temp * 0.5);
+        self.running = true;
+        // Don't reset iteration count - we want continuous operation
+    }
+
+    /// Keep the simulation warm for streaming mode
+    /// Maintains minimum temperature to always allow some movement
+    pub fn maintain_warmth(&mut self, min_temp: f64) {
+        if self.temperature < min_temp {
+            self.temperature = min_temp;
+            self.running = true;
+        }
+    }
 }
 
 /// Investigation trail - breadcrumb navigation through the graph
+/// Now tracks edges between nodes for visual path rendering
 #[derive(Debug, Clone)]
 pub struct InvestigationTrail {
     pub steps: Vec<TrailStep>,
     pub current_index: usize,
+    /// Index of currently selected outgoing edge from current node (for up/down cycling)
+    pub tentative_edge_idx: Option<usize>,
+    /// Cached outgoing edges from current node for quick cycling
+    pub available_edges: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -355,6 +695,12 @@ pub struct TrailStep {
     pub risk_level: RiskLevel,
     pub timestamp: std::time::Instant,
     pub note: Option<String>,
+    /// Edge index used to reach this node from previous step (None for first step)
+    pub edge_from_prev: Option<usize>,
+    /// Amount transferred on this edge
+    pub edge_amount: Option<f64>,
+    /// Token transferred on this edge
+    pub edge_token: Option<String>,
 }
 
 impl InvestigationTrail {
@@ -366,12 +712,27 @@ impl InvestigationTrail {
                 risk_level: start_risk,
                 timestamp: std::time::Instant::now(),
                 note: Some("Investigation start".to_string()),
+                edge_from_prev: None,
+                edge_amount: None,
+                edge_token: None,
             }],
             current_index: 0,
+            tentative_edge_idx: None,
+            available_edges: Vec::new(),
         }
     }
 
-    pub fn add_step(&mut self, node_index: usize, address: String, risk: RiskLevel, note: Option<String>) {
+    /// Add a step to the trail with edge information
+    pub fn add_step_with_edge(
+        &mut self,
+        node_index: usize,
+        address: String,
+        risk: RiskLevel,
+        note: Option<String>,
+        edge_idx: Option<usize>,
+        edge_amount: Option<f64>,
+        edge_token: Option<String>,
+    ) {
         // If we're not at the end of the trail, truncate forward history
         if self.current_index < self.steps.len() - 1 {
             self.steps.truncate(self.current_index + 1);
@@ -383,19 +744,34 @@ impl InvestigationTrail {
             risk_level: risk,
             timestamp: std::time::Instant::now(),
             note,
+            edge_from_prev: edge_idx,
+            edge_amount,
+            edge_token,
         });
         self.current_index = self.steps.len() - 1;
+        // Reset tentative edge when we finalize a step
+        self.tentative_edge_idx = None;
     }
 
+    /// Legacy add_step for backward compatibility
+    pub fn add_step(&mut self, node_index: usize, address: String, risk: RiskLevel, note: Option<String>) {
+        self.add_step_with_edge(node_index, address, risk, note, None, None, None);
+    }
+
+    /// Go back one step (LEFT arrow) - removes the last step and returns to previous node
     pub fn go_back(&mut self) -> Option<usize> {
         if self.current_index > 0 {
+            // Remove the current step (we're retracting)
+            self.steps.truncate(self.current_index);
             self.current_index -= 1;
+            self.tentative_edge_idx = None;
             Some(self.steps[self.current_index].node_index)
         } else {
             None
         }
     }
 
+    /// Go forward in existing trail history (if we went back)
     pub fn go_forward(&mut self) -> Option<usize> {
         if self.current_index < self.steps.len() - 1 {
             self.current_index += 1;
@@ -405,8 +781,86 @@ impl InvestigationTrail {
         }
     }
 
+    /// Set available edges for current node (for up/down cycling)
+    pub fn set_available_edges(&mut self, edges: Vec<usize>) {
+        self.available_edges = edges;
+        if !self.available_edges.is_empty() && self.tentative_edge_idx.is_none() {
+            self.tentative_edge_idx = Some(0); // Select first edge by default
+        }
+    }
+
+    /// Cycle to previous edge (UP arrow)
+    pub fn cycle_edge_up(&mut self) -> Option<usize> {
+        if self.available_edges.is_empty() {
+            return None;
+        }
+        if let Some(idx) = self.tentative_edge_idx {
+            if idx > 0 {
+                self.tentative_edge_idx = Some(idx - 1);
+            } else {
+                // Wrap to end
+                self.tentative_edge_idx = Some(self.available_edges.len() - 1);
+            }
+        } else {
+            self.tentative_edge_idx = Some(self.available_edges.len() - 1);
+        }
+        self.tentative_edge_idx.map(|i| self.available_edges[i])
+    }
+
+    /// Cycle to next edge (DOWN arrow)
+    pub fn cycle_edge_down(&mut self) -> Option<usize> {
+        if self.available_edges.is_empty() {
+            return None;
+        }
+        if let Some(idx) = self.tentative_edge_idx {
+            if idx + 1 < self.available_edges.len() {
+                self.tentative_edge_idx = Some(idx + 1);
+            } else {
+                // Wrap to beginning
+                self.tentative_edge_idx = Some(0);
+            }
+        } else {
+            self.tentative_edge_idx = Some(0);
+        }
+        self.tentative_edge_idx.map(|i| self.available_edges[i])
+    }
+
+    /// Get the currently tentative edge index
+    pub fn get_tentative_edge(&self) -> Option<usize> {
+        self.tentative_edge_idx.and_then(|i| self.available_edges.get(i).copied())
+    }
+
     pub fn current_step(&self) -> &TrailStep {
         &self.steps[self.current_index]
+    }
+
+    /// Get all edge indices in the trail (for rendering)
+    pub fn trail_edges(&self) -> Vec<usize> {
+        self.steps.iter()
+            .filter_map(|s| s.edge_from_prev)
+            .collect()
+    }
+
+    /// Get all node indices in the trail (for rendering)
+    pub fn trail_nodes(&self) -> Vec<usize> {
+        self.steps.iter().map(|s| s.node_index).collect()
+    }
+
+    /// Calculate total SOL equivalent in trail (sum of edge amounts)
+    pub fn total_amount(&self) -> f64 {
+        self.steps.iter()
+            .filter_map(|s| s.edge_amount)
+            .sum()
+    }
+
+    /// Get unique tokens in trail
+    pub fn unique_tokens(&self) -> Vec<String> {
+        let mut tokens: Vec<String> = self.steps.iter()
+            .filter_map(|s| s.edge_token.clone())
+            .collect();
+        tokens.sort();
+        tokens.dedup();
+        tokens
     }
 
     pub fn export_summary(&self) -> String {
@@ -419,11 +873,17 @@ impl InvestigationTrail {
                 RiskLevel::Medium => "🟡",
                 RiskLevel::Low => "🟢",
             };
+            let edge_info = if let Some(amt) = step.edge_amount {
+                format!(" [{:.2} {}]", amt, step.edge_token.as_deref().unwrap_or("?"))
+            } else {
+                String::new()
+            };
             summary.push_str(&format!(
-                "{} {} {} - {:?} {}\n",
+                "{} {} {}{} - {:?} {}\n",
                 marker,
                 risk_icon,
                 step.wallet_address,
+                edge_info,
                 step.risk_level,
                 step.note.as_ref().map(|n| format!("({})", n)).unwrap_or_default()
             ));
@@ -468,8 +928,12 @@ pub struct WalletGraph {
     pub investigation_trail: Option<InvestigationTrail>,
     /// Show minimap in corner
     pub show_minimap: bool,
+    /// Minimap heatmap mode (true = density heatmap, false = normal node view)
+    pub minimap_heatmap: bool,
     /// Show investigation trail at bottom
     pub show_trail: bool,
+    /// Trail navigation mode active (arrow keys navigate trail instead of normal selection)
+    pub trail_mode: bool,
     /// Detail panel scroll position
     pub detail_scroll: usize,
     /// Filtered nodes (nodes with only 1 inflow OR 1 outflow - hidden from display)
@@ -724,6 +1188,14 @@ pub enum GraphInput {
     FilterDeselectAll,
     // Layout controls
     ToggleLayout,  // 'L' key - switch between force-directed and hierarchical
+    ToggleMinimap, // 'M' key - toggle minimap visibility
+    ToggleHeatmap, // 'H' key - toggle minimap heatmap mode
+    // Trail navigation (arrow keys when trail mode is active)
+    TrailExtend,   // RIGHT arrow - add tentative edge to trail and move to next node
+    TrailRetract,  // LEFT arrow - remove last step from trail
+    TrailEdgeUp,   // UP arrow - cycle to previous available edge
+    TrailEdgeDown, // DOWN arrow - cycle to next available edge
+    ToggleTrailMode, // 'T' key - toggle trail navigation mode
 }
 
 impl WalletGraph {
@@ -768,7 +1240,9 @@ impl WalletGraph {
             wallet_to_cluster: HashMap::new(),
             investigation_trail: Some(InvestigationTrail::new(0, target_wallet, RiskLevel::Low)),
             show_minimap: true,
+            minimap_heatmap: false,  // Start in normal node view
             show_trail: true,
+            trail_mode: true,  // Trail mode on by default - arrow keys navigate trail
             detail_scroll: 0,
             filtered_nodes: std::collections::HashSet::new(),
             folded_groups: HashMap::new(),
@@ -897,7 +1371,12 @@ impl WalletGraph {
     pub fn handle_input(&mut self, input: GraphInput) -> Option<String> {
         match input {
             // EDGE-AWARE NAVIGATION (follows transaction flows)
+            // In trail mode: Up/Down cycle edges, Left/Right extend/retract trail
             GraphInput::Up => {
+                if self.trail_mode {
+                    // Trail mode: cycle to previous available edge
+                    return self.handle_input(GraphInput::TrailEdgeUp);
+                }
                 match &self.selection {
                     SelectionMode::Node(node_idx) => {
                         // When on node, up/down just moves in list (fallback)
@@ -927,6 +1406,10 @@ impl WalletGraph {
                 None
             }
             GraphInput::Down => {
+                if self.trail_mode {
+                    // Trail mode: cycle to next available edge
+                    return self.handle_input(GraphInput::TrailEdgeDown);
+                }
                 match &self.selection {
                     SelectionMode::Node(node_idx) => {
                         if node_idx + 1 < self.nodes.len() {
@@ -955,6 +1438,10 @@ impl WalletGraph {
                 None
             }
             GraphInput::Left => {
+                if self.trail_mode {
+                    // Trail mode: retract trail (go back one step)
+                    return self.handle_input(GraphInput::TrailRetract);
+                }
                 match &self.selection {
                     SelectionMode::Node(node_idx) => {
                         // LEFT from node → select incoming edge
@@ -1193,6 +1680,153 @@ impl WalletGraph {
             GraphInput::ToggleLayout => {
                 self.toggle_layout_mode();
                 None
+            }
+            GraphInput::ToggleMinimap => {
+                self.show_minimap = !self.show_minimap;
+                self.show_toast(format!("Minimap: {}", if self.show_minimap { "ON" } else { "OFF" }));
+                None
+            }
+            GraphInput::ToggleHeatmap => {
+                self.minimap_heatmap = !self.minimap_heatmap;
+                self.show_toast(format!("Minimap mode: {}", if self.minimap_heatmap { "Heatmap 🔥" } else { "Nodes 🔵" }));
+                None
+            }
+            GraphInput::ToggleTrailMode => {
+                self.trail_mode = !self.trail_mode;
+                if self.trail_mode {
+                    // Initialize available edges for current node when entering trail mode
+                    self.refresh_trail_available_edges();
+                }
+                self.show_toast(format!("Trail mode: {} [←→↑↓]", if self.trail_mode { "ON 🔍" } else { "OFF" }));
+                None
+            }
+            GraphInput::TrailEdgeUp => {
+                if !self.trail_mode {
+                    return None;
+                }
+                if let Some(ref mut trail) = self.investigation_trail {
+                    if let Some(edge_idx) = trail.cycle_edge_up() {
+                        // Update selection to show the tentative edge
+                        if let Some((from, to, _)) = self.connections.get(edge_idx) {
+                            self.selection = SelectionMode::Edge {
+                                edge_idx,
+                                from_node: *from,
+                                to_node: *to,
+                            };
+                            self.center_camera_on_selection();
+                        }
+                    }
+                }
+                None
+            }
+            GraphInput::TrailEdgeDown => {
+                if !self.trail_mode {
+                    return None;
+                }
+                if let Some(ref mut trail) = self.investigation_trail {
+                    if let Some(edge_idx) = trail.cycle_edge_down() {
+                        // Update selection to show the tentative edge
+                        if let Some((from, to, _)) = self.connections.get(edge_idx) {
+                            self.selection = SelectionMode::Edge {
+                                edge_idx,
+                                from_node: *from,
+                                to_node: *to,
+                            };
+                            self.center_camera_on_selection();
+                        }
+                    }
+                }
+                None
+            }
+            GraphInput::TrailExtend => {
+                if !self.trail_mode {
+                    return None;
+                }
+                // Get the tentative edge and finalize it
+                let edge_info = if let Some(ref trail) = self.investigation_trail {
+                    trail.get_tentative_edge().and_then(|edge_idx| {
+                        self.connections.get(edge_idx).map(|(_, to, label)| {
+                            (*to, edge_idx, label.amount, label.token.clone())
+                        })
+                    })
+                } else {
+                    None
+                };
+
+                if let Some((to_node, edge_idx, amount, token)) = edge_info {
+                    // Get node info
+                    let address = self.nodes.get(to_node).map(|(a, _)| a.clone()).unwrap_or_default();
+                    let risk_level = self.calculate_node_risk_level(to_node);
+
+                    // Generate contextual note
+                    let note = if to_node < self.nodes.len() {
+                        if matches!(self.nodes[to_node].1.node_type, WalletNodeType::Mixer) {
+                            Some("Mixer detected".to_string())
+                        } else if let Some(cluster) = self.get_wallet_cluster(&address) {
+                            Some(format!("Cluster #{}", cluster.cluster_id))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Add step to trail with edge info
+                    if let Some(ref mut trail) = self.investigation_trail {
+                        trail.add_step_with_edge(
+                            to_node,
+                            address.clone(),
+                            risk_level,
+                            note,
+                            Some(edge_idx),
+                            Some(amount),
+                            Some(token),
+                        );
+                    }
+
+                    // Update selection to the new node
+                    self.selection = SelectionMode::Node(to_node);
+                    self.center_camera_on_selection();
+
+                    // Refresh available edges for the new node
+                    self.refresh_trail_available_edges();
+
+                    self.show_toast(format!("Trail → {}", &address[..8.min(address.len())]));
+                }
+                None
+            }
+            GraphInput::TrailRetract => {
+                if !self.trail_mode {
+                    return None;
+                }
+                // Go back one step in the trail
+                if let Some(ref mut trail) = self.investigation_trail {
+                    if let Some(prev_node) = trail.go_back() {
+                        self.selection = SelectionMode::Node(prev_node);
+                        self.center_camera_on_selection();
+                        self.refresh_trail_available_edges();
+                        self.show_toast("Trail ← back".to_string());
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    /// Refresh available edges for trail navigation from current trail node
+    fn refresh_trail_available_edges(&mut self) {
+        // First get the current node from trail (immutable borrow)
+        let current_node = self.investigation_trail
+            .as_ref()
+            .map(|t| t.current_step().node_index);
+
+        if let Some(node_idx) = current_node {
+            // Now compute outgoing edges (still immutable)
+            let outgoing = self.outgoing_edges(node_idx);
+
+            // Finally update the trail (mutable borrow)
+            if let Some(ref mut trail) = self.investigation_trail {
+                trail.set_available_edges(outgoing);
             }
         }
     }
@@ -1517,9 +2151,17 @@ impl WalletGraph {
             },
         ));
 
-        // Add node with layered circular layout
+        // Add node with appropriate positioning based on mode
         let idx = self.nodes.len() - 1;
-        self.position_node_in_layer(idx);
+
+        if self.streaming_mode && matches!(self.layout_mode, LayoutMode::ForceDirected) {
+            // In streaming mode with force-directed layout:
+            // Position near neighbor and let physics settle it
+            self.position_new_node_near_neighbor(idx, None);
+        } else {
+            // Standard mode: use layered circular layout
+            self.position_node_in_layer(idx);
+        }
 
         // During bootstrap (no connections), add new nodes to connected set
         if self.connections.is_empty() {
@@ -1563,6 +2205,76 @@ impl WalletGraph {
         ));
         // Also add velocity for force-directed physics
         self.node_velocities.push((0.0, 0.0));
+    }
+
+    /// Position a new node near its connected neighbor (for incremental force-directed)
+    /// This finds the best connected neighbor and places the new node nearby with some offset
+    /// Returns the position and a suggested initial velocity toward neighbors
+    fn position_new_node_near_neighbor(&mut self, idx: usize, connected_to: Option<usize>) {
+        // Default fallback: place at random position if no neighbor known
+        let default_radius = self.physics.ideal_length * 2.0;
+        let default_angle = (idx as f64 * 2.399) % (2.0 * std::f64::consts::PI); // Golden angle
+
+        let (neighbor_pos, has_neighbor) = if let Some(neighbor_idx) = connected_to {
+            if let Some(&pos) = self.node_positions.get(neighbor_idx) {
+                (pos, true)
+            } else {
+                ((0.0, 0.0), false)
+            }
+        } else {
+            // Try to find any neighbor from existing connections
+            let mut found_neighbor: Option<(f64, f64)> = None;
+            for (from, to, _) in &self.connections {
+                if *from == idx && *to < self.node_positions.len() {
+                    found_neighbor = Some(self.node_positions[*to]);
+                    break;
+                }
+                if *to == idx && *from < self.node_positions.len() {
+                    found_neighbor = Some(self.node_positions[*from]);
+                    break;
+                }
+            }
+            match found_neighbor {
+                Some(pos) => (pos, true),
+                None => ((0.0, 0.0), false),
+            }
+        };
+
+        let (x, y) = if has_neighbor {
+            // Place near neighbor with random offset
+            let offset_dist = self.physics.ideal_length;
+            let offset_angle = (idx as f64 * 2.399) % (2.0 * std::f64::consts::PI);
+            (
+                neighbor_pos.0 + offset_dist * offset_angle.cos(),
+                neighbor_pos.1 + offset_dist * offset_angle.sin(),
+            )
+        } else {
+            // No neighbor found, use default circular position
+            (
+                default_radius * default_angle.cos(),
+                default_radius * default_angle.sin(),
+            )
+        };
+
+        // Add position
+        self.node_positions.push((x, y));
+
+        // Give new node initial velocity toward center (helps it settle into the graph)
+        let vel_to_center = if has_neighbor {
+            // Velocity toward neighbor to help attraction
+            let dx = neighbor_pos.0 - x;
+            let dy = neighbor_pos.1 - y;
+            let dist = (dx * dx + dy * dy).sqrt().max(1.0);
+            (dx / dist * 2.0, dy / dist * 2.0)
+        } else {
+            // Velocity toward center
+            let dist = (x * x + y * y).sqrt().max(1.0);
+            (-x / dist * 2.0, -y / dist * 2.0)
+        };
+        self.node_velocities.push(vel_to_center);
+
+        // Reheat physics slightly to allow settling
+        self.physics.reheat_incremental();
     }
 
     /// Calculate node layer using cached BFS distances
@@ -1652,6 +2364,12 @@ impl WalletGraph {
             // In streaming mode, use incremental updates instead of full relayout
             if self.streaming_mode {
                 self.incremental_updates_pending += 1;
+
+                // For force-directed mode: reheat physics to let new edge settle naturally
+                if matches!(self.layout_mode, LayoutMode::ForceDirected) {
+                    self.physics.reheat_incremental();
+                }
+
                 // Only trigger full relayout after threshold is reached
                 if self.incremental_updates_pending >= self.incremental_relayout_threshold {
                     self.layout_dirty = true;
@@ -1857,27 +2575,93 @@ impl WalletGraph {
         // Calculate forces for each node
         let mut forces: Vec<(f64, f64)> = vec![(0.0, 0.0); n];
 
-        // 1. Repulsive forces: all nodes repel each other (O(n²))
-        for i in 0..n {
-            let (xi, yi) = self.node_positions[i];
+        // 1. Repulsive forces: Use Barnes-Hut O(n log n) for large graphs, O(n²) for small
+        let use_barnes_hut = n >= self.physics.barnes_hut_threshold;
+        let use_parallel = n >= self.physics.parallel_threshold;
 
-            for j in (i + 1)..n {
-                let (xj, yj) = self.node_positions[j];
+        if use_barnes_hut {
+            // Build Barnes-Hut quadtree for efficient force approximation
+            let tree = Arc::new(BarnesHutTree::build(&self.node_positions, self.physics.barnes_hut_theta));
+            let positions = &self.node_positions;
 
-                let dx = xi - xj;
-                let dy = yi - yj;
-                let dist_sq = dx * dx + dy * dy;
-                let dist = dist_sq.sqrt().max(0.1);  // Avoid division by zero
+            if use_parallel {
+                // Parallel Barnes-Hut: O(n log n) with multicore speedup
+                let parallel_forces: Vec<(f64, f64)> = (0..n)
+                    .into_par_iter()
+                    .map(|i| {
+                        let (xi, yi) = positions[i];
+                        tree.calculate_force(i, xi, yi, k2, repulsion)
+                    })
+                    .collect();
 
-                // Repulsion: k² / d
-                let force = repulsion * k2 / dist;
-                let fx = (dx / dist) * force;
-                let fy = (dy / dist) * force;
+                for (i, (fx, fy)) in parallel_forces.into_iter().enumerate() {
+                    forces[i].0 += fx;
+                    forces[i].1 += fy;
+                }
+            } else {
+                // Sequential Barnes-Hut: O(n log n)
+                for i in 0..n {
+                    let (xi, yi) = self.node_positions[i];
+                    let (fx, fy) = tree.calculate_force(i, xi, yi, k2, repulsion);
+                    forces[i].0 += fx;
+                    forces[i].1 += fy;
+                }
+            }
+        } else if use_parallel {
+            // Parallel direct calculation for medium graphs (100-200 nodes)
+            // Note: For O(n²) we compute per-node forces independently
+            let positions = &self.node_positions;
+            let parallel_forces: Vec<(f64, f64)> = (0..n)
+                .into_par_iter()
+                .map(|i| {
+                    let (xi, yi) = positions[i];
+                    let mut fx = 0.0;
+                    let mut fy = 0.0;
 
+                    for j in 0..n {
+                        if i == j { continue; }
+                        let (xj, yj) = positions[j];
+
+                        let dx = xi - xj;
+                        let dy = yi - yj;
+                        let dist_sq = dx * dx + dy * dy;
+                        let dist = dist_sq.sqrt().max(0.1);
+
+                        let force = repulsion * k2 / dist;
+                        fx += (dx / dist) * force;
+                        fy += (dy / dist) * force;
+                    }
+                    (fx, fy)
+                })
+                .collect();
+
+            for (i, (fx, fy)) in parallel_forces.into_iter().enumerate() {
                 forces[i].0 += fx;
                 forces[i].1 += fy;
-                forces[j].0 -= fx;
-                forces[j].1 -= fy;
+            }
+        } else {
+            // Sequential direct O(n²) calculation for small graphs (faster due to no overhead)
+            for i in 0..n {
+                let (xi, yi) = self.node_positions[i];
+
+                for j in (i + 1)..n {
+                    let (xj, yj) = self.node_positions[j];
+
+                    let dx = xi - xj;
+                    let dy = yi - yj;
+                    let dist_sq = dx * dx + dy * dy;
+                    let dist = dist_sq.sqrt().max(0.1);  // Avoid division by zero
+
+                    // Repulsion: k² / d
+                    let force = repulsion * k2 / dist;
+                    let fx = (dx / dist) * force;
+                    let fy = (dy / dist) * force;
+
+                    forces[i].0 += fx;
+                    forces[i].1 += fy;
+                    forces[j].0 -= fx;
+                    forces[j].1 -= fy;
+                }
             }
         }
 
@@ -2296,10 +3080,17 @@ impl WalletGraph {
         // Run force-directed physics simulation (incremental per frame)
         // Only active in ForceDirected mode
         // This is O(n² + e) but only runs while simulation is active
-        if self.physics.should_continue() && !self.nodes.is_empty() {
-            // Run a few iterations per frame for smoother animation
-            for _ in 0..3 {
-                self.step_force_directed_layout();
+        if matches!(self.layout_mode, LayoutMode::ForceDirected) && !self.nodes.is_empty() {
+            // In streaming mode, maintain minimum warmth for continuous settling
+            if self.streaming_mode {
+                self.physics.maintain_warmth(2.0);  // Keep a low simmer
+            }
+
+            if self.physics.should_continue() {
+                // Run a few iterations per frame for smoother animation
+                for _ in 0..3 {
+                    self.step_force_directed_layout();
+                }
             }
         }
 
@@ -2374,6 +3165,16 @@ impl WalletGraph {
                     Vec::new()
                 };
 
+                // Collect trail edges and nodes for highlighting
+                let (trail_edges, trail_nodes, tentative_edge) = if let Some(ref trail) = self.investigation_trail {
+                    let edges: std::collections::HashSet<usize> = trail.trail_edges().into_iter().collect();
+                    let nodes: std::collections::HashSet<usize> = trail.trail_nodes().into_iter().collect();
+                    let tentative = trail.get_tentative_edge();
+                    (edges, nodes, tentative)
+                } else {
+                    (std::collections::HashSet::new(), std::collections::HashSet::new(), None)
+                };
+
                 // Draw ALL edges (even to off-screen nodes) with improved visual encoding
                 // This includes edges where one or both endpoints are outside the visible viewport
                 for (edge_idx, (from_idx, to_idx, edge_label)) in self.connections.iter().enumerate() {
@@ -2387,8 +3188,18 @@ impl WalletGraph {
                         let amount = edge_label.amount;
 
                         // Determine edge color and thickness based on state and amount
-                        let (edge_color, thickness) = if Some(edge_idx) == selected_edge_idx {
+                        // Priority: tentative > selected > trail > highlighted_path > normal
+                        let is_trail_edge = trail_edges.contains(&edge_idx);
+                        let is_tentative = tentative_edge == Some(edge_idx);
+
+                        let (edge_color, thickness) = if is_tentative {
+                            // Tentative edge - cyan (#44ccff) for "preview" before confirming
+                            (Color::Rgb(68, 204, 255), 4)  // Cyan, extra thick
+                        } else if Some(edge_idx) == selected_edge_idx {
                             (Color::Yellow, 3)  // Selected edge - bright and thick
+                        } else if is_trail_edge {
+                            // Trail edge - thick yellow line (finalized path)
+                            (Color::Yellow, 4)  // Yellow, thick
                         } else if highlighted_path.contains(&edge_idx) {
                             (Color::LightYellow, 2)  // Related flow - medium
                         } else {
@@ -2496,9 +3307,15 @@ impl WalletGraph {
                             else { 2.0 + (total_degree as f64).sqrt() * 0.5 };
                         let radius = base_radius.min(6.0); // Cap maximum size
 
-                        // Color determination with cluster support
+                        // Check if this node is on the trail
+                        let is_trail_node = trail_nodes.contains(&idx);
+
+                        // Color determination with cluster support and trail highlighting
+                        // Priority: selected > trail > mixer > search_match > target > cluster > flow-based
                         let color = if is_selected {
                             Color::White  // Selected node
+                        } else if is_trail_node {
+                            Color::Rgb(30, 144, 255)  // Dodger Blue for trail nodes
                         } else if is_mixer {
                             Color::Red  // MIXER - highlight in RED
                         } else if is_search_match {
@@ -2537,12 +3354,14 @@ impl WalletGraph {
                             });
                         }
 
-                        // Add halo for selected/important nodes
-                        if is_selected || idx == 0 {
+                        // Add halo for selected/important/trail nodes
+                        if is_selected || idx == 0 || is_trail_node {
                             ctx.draw(&Circle {
                                 x, y,
                                 radius: radius + 2.0,
-                                color: if is_selected { Color::Yellow } else { Color::Magenta },
+                                color: if is_selected { Color::Yellow }
+                                    else if is_trail_node { Color::Rgb(100, 180, 255) }  // Light blue halo for trail
+                                    else { Color::Magenta },
                             });
                         }
 
@@ -2680,8 +3499,212 @@ impl WalletGraph {
 
             f.render_widget(toast_widget, toast_area);
         }
+
+        // Render minimap in bottom-right corner
+        if self.show_minimap && !self.node_positions.is_empty() {
+            self.render_minimap(f, graph_area);
+        }
     }
 
+    /// Render a minimap in the bottom-right corner showing full graph extent with viewport indicator
+    /// Supports two modes: normal (node dots) and heatmap (density grid)
+    fn render_minimap(&self, f: &mut Frame, area: Rect) {
+        use ratatui::widgets::{Paragraph, canvas::Canvas};
+        use ratatui::text::Span;
+
+        // Minimap dimensions (fixed size overlay)
+        let minimap_width = 22u16;
+        let minimap_height = 14u16;
+
+        // Position in bottom-right corner with padding
+        let minimap_rect = Rect {
+            x: area.x + area.width.saturating_sub(minimap_width + 2),
+            y: area.y + area.height.saturating_sub(minimap_height + 2),
+            width: minimap_width,
+            height: minimap_height,
+        };
+
+        // Calculate graph bounding box
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+        for (x, y) in &self.node_positions {
+            min_x = min_x.min(*x);
+            max_x = max_x.max(*x);
+            min_y = min_y.min(*y);
+            max_y = max_y.max(*y);
+        }
+
+        // Add padding to bounds
+        let padding = 10.0;
+        min_x -= padding;
+        max_x += padding;
+        min_y -= padding;
+        max_y += padding;
+
+        // Get current viewport bounds
+        let (cx, cy, zoom) = self.viewport;
+        let view_half_w = 80.0 / zoom;
+        let view_half_h = 100.0 / zoom;
+        let view_min_x = cx - view_half_w;
+        let view_max_x = cx + view_half_w;
+        let view_min_y = cy - view_half_h;
+        let view_max_y = cy + view_half_h;
+
+        // Get selected node index for highlighting
+        let selected_idx = self.selected_node();
+
+        // Calculate heatmap grid if in heatmap mode
+        let grid_size = 8; // 8x8 grid
+        let range_x = max_x - min_x;
+        let range_y = max_y - min_y;
+        let cell_w = range_x / grid_size as f64;
+        let cell_h = range_y / grid_size as f64;
+
+        // Count nodes per cell (for heatmap mode)
+        let mut density_grid: [[usize; 8]; 8] = [[0; 8]; 8];
+        let mut max_density = 1usize;
+
+        if self.minimap_heatmap {
+            for (x, y) in &self.node_positions {
+                let gx = ((x - min_x) / cell_w).floor() as usize;
+                let gy = ((y - min_y) / cell_h).floor() as usize;
+                let gx = gx.min(grid_size - 1);
+                let gy = gy.min(grid_size - 1);
+                density_grid[gy][gx] += 1;
+                max_density = max_density.max(density_grid[gy][gx]);
+            }
+        }
+
+        // Title shows mode indicator
+        let title = if self.minimap_heatmap {
+            Span::styled(" 🔥 Heat ", Style::default().fg(Color::Red))
+        } else {
+            Span::styled(" 🗺 Map ", Style::default().fg(Color::Cyan))
+        };
+
+        let minimap = Canvas::default()
+            .block(Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(Color::DarkGray)))
+            .x_bounds([min_x, max_x])
+            .y_bounds([min_y, max_y])
+            .paint(|ctx| {
+                if self.minimap_heatmap {
+                    // HEATMAP MODE: Draw density grid cells
+                    for gy in 0..grid_size {
+                        for gx in 0..grid_size {
+                            let count = density_grid[gy][gx];
+                            if count > 0 {
+                                // Color based on density (blue → green → yellow → red)
+                                let intensity = count as f64 / max_density as f64;
+                                let color = if intensity > 0.75 {
+                                    Color::Red  // Hot spot
+                                } else if intensity > 0.5 {
+                                    Color::LightRed
+                                } else if intensity > 0.25 {
+                                    Color::Yellow
+                                } else if intensity > 0.1 {
+                                    Color::Green
+                                } else {
+                                    Color::DarkGray
+                                };
+
+                                // Draw filled rectangle for this cell
+                                let x1 = min_x + gx as f64 * cell_w;
+                                let y1 = min_y + gy as f64 * cell_h;
+                                let x2 = x1 + cell_w;
+                                let y2 = y1 + cell_h;
+
+                                // Draw rectangle outline
+                                ctx.draw(&Rectangle {
+                                    x: x1,
+                                    y: y1,
+                                    width: cell_w,
+                                    height: cell_h,
+                                    color,
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    // NORMAL MODE: Draw edges and nodes
+                    // Draw all edges as thin lines (simplified for minimap)
+                    for (from_idx, to_idx, _) in &self.connections {
+                        if *from_idx < self.node_positions.len() && *to_idx < self.node_positions.len() {
+                            let (x1, y1) = self.node_positions[*from_idx];
+                            let (x2, y2) = self.node_positions[*to_idx];
+                            ctx.draw(&CanvasLine {
+                                x1, y1, x2, y2,
+                                color: Color::DarkGray,
+                            });
+                        }
+                    }
+
+                    // Draw all nodes as dots with selection highlighting
+                    for (idx, (x, y)) in self.node_positions.iter().enumerate() {
+                        let is_selected = Some(idx) == selected_idx;
+
+                        // Determine base color
+                        let color = if is_selected {
+                            Color::White  // Selected - bright white
+                        } else if idx == 0 {
+                            Color::Magenta  // Target
+                        } else if self.cached_mixer_nodes.contains(&idx) {
+                            Color::Red  // Mixer
+                        } else {
+                            Color::Green  // Normal
+                        };
+
+                        // Draw selection halo first (larger circle behind)
+                        if is_selected {
+                            ctx.draw(&Circle {
+                                x: *x,
+                                y: *y,
+                                radius: 3.0,
+                                color: Color::Yellow,
+                            });
+                        }
+
+                        // Draw the node
+                        ctx.draw(&Circle {
+                            x: *x,
+                            y: *y,
+                            radius: if is_selected { 2.0 } else { 1.0 },
+                            color,
+                        });
+                    }
+                }
+
+                // Draw viewport rectangle (both modes)
+                // Top edge
+                ctx.draw(&CanvasLine {
+                    x1: view_min_x, y1: view_max_y,
+                    x2: view_max_x, y2: view_max_y,
+                    color: Color::Yellow,
+                });
+                // Bottom edge
+                ctx.draw(&CanvasLine {
+                    x1: view_min_x, y1: view_min_y,
+                    x2: view_max_x, y2: view_min_y,
+                    color: Color::Yellow,
+                });
+                // Left edge
+                ctx.draw(&CanvasLine {
+                    x1: view_min_x, y1: view_min_y,
+                    x2: view_min_x, y2: view_max_y,
+                    color: Color::Yellow,
+                });
+                // Right edge
+                ctx.draw(&CanvasLine {
+                    x1: view_max_x, y1: view_min_y,
+                    x2: view_max_x, y2: view_max_y,
+                    color: Color::Yellow,
+                });
+            });
+
+        f.render_widget(minimap, minimap_rect);
+    }
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()
@@ -3193,34 +4216,47 @@ impl WalletGraph {
         }
     }
 
-    /// Render investigation trail breadcrumb bar
+    /// Render investigation trail breadcrumb bar with statistics
     fn render_investigation_trail(&self, f: &mut Frame, area: Rect) {
         use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+        use ratatui::layout::{Layout, Constraint, Direction};
 
         let Some(ref trail) = self.investigation_trail else {
             return;
         };
 
-        let block = Block::default()
-            .title(format!(" 🔍 Trail (step {}/{}) ", trail.current_index + 1, trail.steps.len()))
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Blue));
+        // Split area: trail on left (70%), stats on right (30%)
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(70),
+                Constraint::Percentage(30),
+            ])
+            .split(area);
 
-        let inner = block.inner(area);
-        f.render_widget(block, area);
+        let trail_area = chunks[0];
+        let stats_area = chunks[1];
+
+        // === Trail Breadcrumb (Left Panel) ===
+        let trail_mode_indicator = if self.trail_mode { "🔍" } else { "📍" };
+        let trail_block = Block::default()
+            .title(format!(" {} Trail ({}/{}) [T]=toggle [←→↑↓]=nav ",
+                trail_mode_indicator, trail.current_index + 1, trail.steps.len()))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(if self.trail_mode { Color::Rgb(30, 144, 255) } else { Color::Blue }));
+
+        let trail_inner = trail_block.inner(trail_area);
+        f.render_widget(trail_block, trail_area);
 
         // Smart truncation: show only last N steps that fit in available width
-        // Each step is ~15 chars (icon + 4...3 address + arrow)
-        // Leave 10 char safety margin for emoji width variance
-        let available_width = (inner.width as usize).saturating_sub(10);
+        let available_width = (trail_inner.width as usize).saturating_sub(10);
         let chars_per_step = 15;
-        let max_visible_steps = (available_width / chars_per_step).max(2).min(20); // Min 2, max 20
+        let max_visible_steps = (available_width / chars_per_step).max(2).min(20);
 
         // Build breadcrumb line
         let mut spans = Vec::new();
 
-        // Show ellipsis if we're hiding steps
         let start_idx = if trail.steps.len() > max_visible_steps {
             spans.push(Span::styled("... → ", Style::default().fg(Color::DarkGray)));
             trail.steps.len() - max_visible_steps
@@ -3231,7 +4267,6 @@ impl WalletGraph {
         for (i, step) in trail.steps.iter().enumerate().skip(start_idx) {
             let is_current = i == trail.current_index;
 
-            // Risk icon
             let icon = match step.risk_level {
                 RiskLevel::Critical => "🔴",
                 RiskLevel::High => "🟠",
@@ -3239,14 +4274,12 @@ impl WalletGraph {
                 RiskLevel::Low => "🟢",
             };
 
-            // Abbreviated address
             let addr = if step.wallet_address.len() > 10 {
                 format!("{}...{}", &step.wallet_address[..4], &step.wallet_address[step.wallet_address.len().saturating_sub(3)..])
             } else {
                 step.wallet_address.clone()
             };
 
-            // Style
             let style = if is_current {
                 Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
             } else {
@@ -3255,16 +4288,70 @@ impl WalletGraph {
 
             spans.push(Span::styled(format!("{} {}", icon, addr), style));
 
-            // Arrow separator
             if i < trail.steps.len() - 1 {
                 spans.push(Span::styled(" → ", Style::default().fg(Color::DarkGray)));
             }
         }
 
-        let line = Line::from(spans);
-        let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
+        let trail_line = Line::from(spans);
+        let trail_para = Paragraph::new(trail_line).wrap(Wrap { trim: true });
+        f.render_widget(trail_para, trail_inner);
 
-        f.render_widget(paragraph, inner);
+        // === Statistics Panel (Right) ===
+        let stats_block = Block::default()
+            .title(" 📊 Stats ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan));
+
+        let stats_inner = stats_block.inner(stats_area);
+        f.render_widget(stats_block, stats_area);
+
+        // Calculate trail statistics
+        let trail_total = trail.total_amount();
+        let trail_tokens = trail.unique_tokens();
+        let trail_transfers = trail.steps.len().saturating_sub(1); // Edges = nodes - 1
+
+        // Calculate graph-wide statistics
+        let graph_total: f64 = self.connections.iter().map(|(_, _, l)| l.amount).sum();
+        let graph_nodes = self.nodes.len();
+        let graph_edges = self.connections.len();
+
+        // Build statistics display
+        let mut stats_spans = vec![];
+
+        // Trail stats (compact format)
+        stats_spans.push(Span::styled("Trail: ", Style::default().fg(Color::Yellow)));
+        stats_spans.push(Span::styled(
+            format!("{:.1} ", if trail_total > 1000.0 { format!("{:.1}K", trail_total / 1000.0) } else { format!("{:.1}", trail_total) }),
+            Style::default().fg(Color::White)
+        ));
+        stats_spans.push(Span::styled(
+            format!("{}tx ", trail_transfers),
+            Style::default().fg(Color::Green)
+        ));
+
+        // Token list (abbreviated)
+        let token_str = if trail_tokens.is_empty() {
+            "".to_string()
+        } else if trail_tokens.len() <= 2 {
+            trail_tokens.join(",")
+        } else {
+            format!("{}+{}", trail_tokens[0], trail_tokens.len() - 1)
+        };
+        if !token_str.is_empty() {
+            stats_spans.push(Span::styled(format!("[{}] ", token_str), Style::default().fg(Color::Magenta)));
+        }
+
+        // Graph stats (second line if space permits)
+        stats_spans.push(Span::styled("│ Graph: ", Style::default().fg(Color::DarkGray)));
+        stats_spans.push(Span::styled(
+            format!("{}w {}e", graph_nodes, graph_edges),
+            Style::default().fg(Color::DarkGray)
+        ));
+
+        let stats_line = Line::from(stats_spans);
+        let stats_para = Paragraph::new(stats_line).wrap(Wrap { trim: true });
+        f.render_widget(stats_para, stats_inner);
     }
 
 }

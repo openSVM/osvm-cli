@@ -4736,7 +4736,7 @@ dependencies = [
 
 [[package]]
 name = "osvm"
-version = "0.9.7"
+version = "0.9.8"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "ovsm"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4878,7 +4878,7 @@ dependencies = [
 
 [[package]]
 name = "ovsm-lsp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dashmap",
  "dirs 5.0.1",
