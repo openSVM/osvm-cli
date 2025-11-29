@@ -11,6 +11,7 @@ pub mod posts;
 pub mod queued_messages;
 pub mod moderators;
 pub mod federated;
+pub mod mesh_messages;
 
 use crate::utils::bbs::db_path;
 
@@ -184,6 +185,32 @@ pub fn initialize_database(conn: &mut SqliteConnection) -> Result<()> {
     )
     .execute(conn)?;
 
+    // Create mesh_messages table (for Meshtastic radio messages)
+    diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS mesh_messages (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            from_node_id BIGINT NOT NULL,
+            from_name TEXT,
+            to_node_id BIGINT,
+            channel INTEGER NOT NULL DEFAULT 0,
+            body TEXT NOT NULL,
+            is_command BOOLEAN NOT NULL DEFAULT FALSE,
+            received_at_us BIGINT NOT NULL,
+            response TEXT,
+            responded_at_us BIGINT
+        )"#,
+    )
+    .execute(conn)?;
+
+    // Create index on mesh_messages for efficient queries
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_mesh_messages_received ON mesh_messages(received_at_us)"
+    ).execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_mesh_messages_from_node ON mesh_messages(from_node_id)"
+    ).execute(conn)?;
+
     Ok(())
 }
 
@@ -214,6 +241,31 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<()> {
             last_active BIGINT NOT NULL,
             created_at BIGINT NOT NULL
         )"#
+    ).execute(conn);
+
+    // Create mesh_messages table if it doesn't exist (migration for existing DBs)
+    let _ = diesel::sql_query(
+        r#"CREATE TABLE IF NOT EXISTS mesh_messages (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            from_node_id BIGINT NOT NULL,
+            from_name TEXT,
+            to_node_id BIGINT,
+            channel INTEGER NOT NULL DEFAULT 0,
+            body TEXT NOT NULL,
+            is_command BOOLEAN NOT NULL DEFAULT FALSE,
+            received_at_us BIGINT NOT NULL,
+            response TEXT,
+            responded_at_us BIGINT
+        )"#
+    ).execute(conn);
+
+    // Create indexes for mesh_messages
+    let _ = diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_mesh_messages_received ON mesh_messages(received_at_us)"
+    ).execute(conn);
+
+    let _ = diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_mesh_messages_from_node ON mesh_messages(from_node_id)"
     ).execute(conn);
 
     Ok(())

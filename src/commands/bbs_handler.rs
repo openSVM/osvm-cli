@@ -756,6 +756,8 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
     use ratatui::{backend::CrosstermBackend, Terminal};
     use std::io;
     use std::time::Duration;
+    use tokio::sync::mpsc;
+    use crate::utils::bbs::meshtastic::{MeshtasticClient, MeshtasticPacket};
 
     let initial_board = matches.get_one::<String>("board").unwrap();
     let mesh_address = matches.get_one::<String>("mesh");
@@ -769,9 +771,29 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
     }
 
     // Try to connect to Meshtastic if --mesh flag provided
+    let mut mesh_rx: Option<mpsc::UnboundedReceiver<MeshtasticPacket>> = None;
     if let Some(addr) = mesh_address {
         println!("📻 Connecting to Meshtastic @ {}...", addr);
-        bbs_state.try_connect_meshtastic(Some(addr));
+
+        // Try async connection
+        if let Some(mut client) = MeshtasticClient::from_address(addr) {
+            match client.connect_and_run().await {
+                Ok(rx) => {
+                    bbs_state.agent_status.meshtastic_connected = true;
+                    bbs_state.agent_status.meshtastic_node_id = Some(format!("!{:08x}", client.our_node_id()));
+                    bbs_state.status_message = format!("📻 Connected to mesh @ {}", addr);
+                    mesh_rx = Some(rx);
+                    println!("✅ Meshtastic connected!");
+                }
+                Err(e) => {
+                    println!("⚠️  Meshtastic connection failed: {}", e);
+                    // Fall back to sync wrapper for status display only
+                    bbs_state.try_connect_meshtastic(Some(addr));
+                }
+            }
+        } else {
+            bbs_state.try_connect_meshtastic(Some(addr));
+        }
     }
 
     // Find and select the initial board
@@ -789,8 +811,8 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Main event loop
-    let result = run_bbs_tui(&mut terminal, &mut bbs_state);
+    // Main event loop with async mesh support
+    let result = run_bbs_tui_async(&mut terminal, &mut bbs_state, mesh_rx).await;
 
     // Restore terminal
     disable_raw_mode()?;
@@ -891,6 +913,137 @@ fn run_bbs_tui<B: ratatui::backend::Backend>(
                 }
             }
         }
+    }
+}
+
+/// Async BBS TUI event loop with Meshtastic support
+async fn run_bbs_tui_async<B: ratatui::backend::Backend>(
+    terminal: &mut ratatui::Terminal<B>,
+    state: &mut crate::utils::bbs::tui_widgets::BBSTuiState,
+    mut mesh_rx: Option<tokio::sync::mpsc::UnboundedReceiver<crate::utils::bbs::meshtastic::MeshtasticPacket>>,
+) -> Result<()> {
+    use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+    use std::time::Duration;
+    use crate::utils::bbs::meshtastic::{MeshtasticPacket, BBSCommandRouter};
+
+    loop {
+        // Draw UI
+        terminal.draw(|f| {
+            crate::utils::bbs::tui_widgets::render_bbs_tab(f, f.area(), state);
+        })?;
+
+        // Check for mesh messages (non-blocking)
+        if let Some(ref mut rx) = mesh_rx {
+            // Try to receive without blocking
+            while let Ok(packet) = rx.try_recv() {
+                match packet {
+                    MeshtasticPacket::TextMessage { from, message, .. } => {
+                        // Check if it's a BBS command
+                        let is_command = message.trim().starts_with('/');
+
+                        // Add to mesh messages
+                        state.add_mesh_message(from, message.clone(), is_command);
+
+                        // If it's a command, process it
+                        if is_command {
+                            if let Some(cmd) = BBSCommandRouter::parse_command(&message) {
+                                state.status_message = format!("📻 Cmd from !{:08x}: {:?}", from, cmd);
+                            }
+                        } else {
+                            state.status_message = format!("📻 Msg from !{:08x}: {}", from,
+                                if message.len() > 30 { format!("{}...", &message[..30]) } else { message });
+                        }
+                    }
+                    MeshtasticPacket::NodeInfo { node_id, short_name, long_name } => {
+                        state.update_mesh_node(node_id, short_name.clone());
+                        state.status_message = format!("📻 Node: !{:08x} = {}", node_id, short_name);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Handle keyboard input (with timeout for responsiveness)
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                // Handle input mode first (when input is active, capture all chars)
+                if state.input_active {
+                    match key.code {
+                        KeyCode::Enter => {
+                            if !state.input_buffer.trim().is_empty() {
+                                if let Err(e) = state.post_message(&state.input_buffer.clone()) {
+                                    state.status_message = format!("Error: {}", e);
+                                } else {
+                                    state.status_message = "Message posted!".to_string();
+                                    let _ = state.load_posts();
+                                }
+                                state.input_buffer.clear();
+                            }
+                            state.input_active = false;
+                        }
+                        KeyCode::Esc => {
+                            state.input_buffer.clear();
+                            state.input_active = false;
+                        }
+                        KeyCode::Backspace => {
+                            state.input_buffer.pop();
+                        }
+                        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            state.input_buffer.push(c);
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
+                // Not in input mode - handle navigation
+                match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        return Ok(());
+                    }
+                    KeyCode::Char('i') => {
+                        state.input_active = true;
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        state.scroll_offset = state.scroll_offset.saturating_add(1);
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        state.scroll_offset = state.scroll_offset.saturating_sub(1);
+                    }
+                    KeyCode::Char('r') => {
+                        let _ = state.refresh_boards();
+                        let _ = state.refresh_agents();
+                        if state.current_board.is_some() {
+                            let _ = state.load_posts();
+                        }
+                        state.status_message = "Refreshed".to_string();
+                    }
+                    KeyCode::Char('m') => {
+                        // Toggle showing mesh messages in posts view (future feature)
+                        state.status_message = format!("📻 {} mesh messages", state.mesh_messages.len());
+                    }
+                    KeyCode::Char(c @ '1'..='9') => {
+                        let board_idx = c.to_digit(10).unwrap() as usize - 1;
+                        if board_idx < state.boards.len() {
+                            let board_id = state.boards[board_idx].id;
+                            let board_name = state.boards[board_idx].name.clone();
+                            state.current_board = Some(board_id);
+                            state.selected_board_index = Some(board_idx);
+                            let _ = state.load_posts();
+                            state.scroll_offset = 0;
+                            state.status_message = format!("Switched to: {}", board_name);
+                        }
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Small yield to allow mesh receiver to process
+        tokio::task::yield_now().await;
     }
 }
 

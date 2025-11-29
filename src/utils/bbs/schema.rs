@@ -96,6 +96,21 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    mesh_messages (id) {
+        id -> Integer,
+        from_node_id -> BigInt,      // Meshtastic node ID (u32 stored as i64)
+        from_name -> Nullable<Text>, // Sender's display name (if known)
+        to_node_id -> Nullable<BigInt>,  // Destination (null = broadcast)
+        channel -> Integer,          // Meshtastic channel
+        body -> Text,                // Message content
+        is_command -> Bool,          // Was this a /command message?
+        received_at_us -> BigInt,    // When we received this (microseconds)
+        response -> Nullable<Text>,  // Our response (if any)
+        responded_at_us -> Nullable<BigInt>, // When we responded
+    }
+}
+
 diesel::joinable!(board_states -> boards (board_id));
 diesel::joinable!(board_states -> users (user_id));
 diesel::joinable!(posts -> boards (board_id));
@@ -112,4 +127,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     moderators,
     federated_messages,
     known_peers,
+    mesh_messages,
 );

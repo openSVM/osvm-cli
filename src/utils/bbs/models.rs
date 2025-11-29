@@ -1,5 +1,5 @@
 use chrono::{Local, MappedLocalTime, TimeZone};
-use super::schema::{board_states, boards, posts, queued_messages, users, moderators, federated_messages, known_peers};
+use super::schema::{board_states, boards, posts, queued_messages, users, moderators, federated_messages, known_peers, mesh_messages};
 use crate::utils::bbs::hex_id_to_num;
 use diesel::prelude::*;
 use regex::Regex;
@@ -319,4 +319,59 @@ pub struct NewKnownPeer<'a> {
     pub last_seen: Option<i64>,
     pub failure_count: i32,
     pub is_bootstrap: bool,
+}
+
+// ============================================
+// MeshMessage - for Meshtastic radio messages
+// ============================================
+
+#[derive(Debug, Queryable, Selectable, Clone)]
+#[diesel(table_name = crate::utils::bbs::schema::mesh_messages)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct MeshMessageDb {
+    pub id: i32,
+    pub from_node_id: i64,       // Meshtastic node ID (u32 stored as i64)
+    pub from_name: Option<String>, // Sender's display name
+    pub to_node_id: Option<i64>, // Destination (null = broadcast)
+    pub channel: i32,            // Meshtastic channel
+    pub body: String,            // Message content
+    pub is_command: bool,        // Was this a /command message?
+    pub received_at_us: i64,     // When we received this (microseconds)
+    pub response: Option<String>, // Our response (if any)
+    pub responded_at_us: Option<i64>, // When we responded
+}
+
+impl MeshMessageDb {
+    pub fn received_at(&self) -> String {
+        formatted_useconds(self.received_at_us)
+    }
+
+    pub fn from_node_hex(&self) -> String {
+        format!("!{:08x}", self.from_node_id as u32)
+    }
+
+    pub fn to_node_hex(&self) -> Option<String> {
+        self.to_node_id.map(|id| format!("!{:08x}", id as u32))
+    }
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = mesh_messages)]
+pub struct NewMeshMessage<'a> {
+    pub from_node_id: i64,
+    pub from_name: Option<&'a str>,
+    pub to_node_id: Option<i64>,
+    pub channel: i32,
+    pub body: &'a str,
+    pub is_command: bool,
+    pub received_at_us: i64,
+    pub response: Option<&'a str>,
+    pub responded_at_us: Option<i64>,
+}
+
+#[derive(AsChangeset)]
+#[diesel(table_name = mesh_messages)]
+pub struct MeshMessageUpdate {
+    pub response: Option<String>,
+    pub responded_at_us: Option<i64>,
 }

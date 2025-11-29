@@ -8,6 +8,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
+use crate::services::ai_service::AiService;
 
 /// Meshtastic default TCP port
 pub const DEFAULT_TCP_PORT: u16 = 4403;
@@ -378,12 +379,24 @@ impl MeshtasticClient {
 /// BBS Command Router - routes Meshtastic messages to BBS commands
 pub struct BBSCommandRouter {
     radio: Arc<Mutex<MeshtasticRadio>>,
+    ai_service: Option<Arc<AiService>>,
 }
 
 impl BBSCommandRouter {
     /// Create a new command router
     pub fn new(radio: Arc<Mutex<MeshtasticRadio>>) -> Self {
-        Self { radio }
+        Self {
+            radio,
+            ai_service: None,
+        }
+    }
+
+    /// Create command router with AI service for /agent commands
+    pub fn with_ai_service(radio: Arc<Mutex<MeshtasticRadio>>, ai_service: Arc<AiService>) -> Self {
+        Self {
+            radio,
+            ai_service: Some(ai_service),
+        }
     }
 
     /// Parse a BBS command from a message
@@ -438,17 +451,30 @@ impl BBSCommandRouter {
         }
     }
 
-    /// Process an incoming message
-    pub fn process_message(&self, from_node: u32, message: &str) -> Option<String> {
+    /// Process an incoming message (sync version for non-AI commands)
+    pub fn process_message_sync(&self, from_node: u32, message: &str) -> Option<String> {
         if let Some(cmd) = Self::parse_command(message) {
-            Some(self.execute_command(from_node, cmd))
+            // For AI queries, return a pending message
+            if matches!(cmd, BBSCommand::AgentQuery(_)) {
+                return Some("🤖 Processing AI query...".to_string());
+            }
+            Some(self.execute_command_sync(from_node, cmd))
         } else {
             None // Not a command, ignore
         }
     }
 
-    /// Execute a BBS command and return response
-    fn execute_command(&self, _from_node: u32, cmd: BBSCommand) -> String {
+    /// Process an incoming message (async version - handles AI queries)
+    pub async fn process_message(&self, from_node: u32, message: &str) -> Option<String> {
+        if let Some(cmd) = Self::parse_command(message) {
+            Some(self.execute_command(from_node, cmd).await)
+        } else {
+            None // Not a command, ignore
+        }
+    }
+
+    /// Execute a BBS command synchronously (for non-AI commands)
+    fn execute_command_sync(&self, _from_node: u32, cmd: BBSCommand) -> String {
         match cmd {
             BBSCommand::ListBoards => {
                 "BBS Boards:\n• GENERAL\n• ALERTS\n• TRADES\n• RESEARCH\n• HELP\n\nUse /read <board> to view".to_string()
@@ -476,8 +502,56 @@ impl BBSCommandRouter {
             BBSCommand::Register(name) => {
                 format!("Registered as: {}\n(DB integration pending)", name)
             }
+            BBSCommand::AgentQuery(_) => {
+                "🤖 AI queries require async processing".to_string()
+            }
+        }
+    }
+
+    /// Execute a BBS command and return response (async for AI support)
+    async fn execute_command(&self, from_node: u32, cmd: BBSCommand) -> String {
+        match cmd {
             BBSCommand::AgentQuery(query) => {
-                format!("🤖 AI Query: {}\n(Agent integration pending)", query)
+                self.handle_agent_query(from_node, &query).await
+            }
+            // All other commands use sync execution
+            _ => self.execute_command_sync(from_node, cmd),
+        }
+    }
+
+    /// Handle /agent query with AI service
+    async fn handle_agent_query(&self, from_node: u32, query: &str) -> String {
+        // Check if AI service is available
+        let ai_service = match &self.ai_service {
+            Some(service) => service.clone(),
+            None => {
+                return "🤖 AI service not configured. Set OPENAI_URL and OPENAI_KEY.".to_string();
+            }
+        };
+
+        // Build a system prompt for mesh/BBS context
+        let context_prompt = format!(
+            "You are an AI assistant responding via a Meshtastic LoRa mesh network BBS. \
+            Keep responses VERY SHORT (under 200 chars) due to radio message limits. \
+            Be concise and helpful. The user's node ID is !{:08x}. \
+            Query: {}",
+            from_node, query
+        );
+
+        // Query the AI
+        match ai_service.query(&context_prompt).await {
+            Ok(response) => {
+                // Truncate response to fit Meshtastic message limit
+                let truncated = if response.len() > MAX_MESSAGE_SIZE - 10 {
+                    format!("{}...", &response[..MAX_MESSAGE_SIZE - 13])
+                } else {
+                    response
+                };
+                format!("🤖 {}", truncated)
+            }
+            Err(e) => {
+                log::error!("AI query failed: {}", e);
+                format!("🤖 Error: {}", e.to_string().chars().take(100).collect::<String>())
             }
         }
     }

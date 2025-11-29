@@ -13,6 +13,16 @@ use std::sync::{Arc, Mutex};
 use crate::utils::bbs::{db, models::{Board, Post, User}};
 use diesel::sqlite::SqliteConnection;
 
+/// A mesh message received over LoRa radio
+#[derive(Clone, Debug)]
+pub struct MeshMessage {
+    pub from_node: u32,
+    pub from_name: Option<String>,
+    pub message: String,
+    pub timestamp: chrono::DateTime<chrono::Local>,
+    pub is_command: bool,
+}
+
 /// BBS TUI state
 pub struct BBSTuiState {
     pub conn: Arc<Mutex<Option<SqliteConnection>>>,
@@ -31,6 +41,10 @@ pub struct BBSTuiState {
     pub agent_status: AgentStatus,  // Current agent listening status
     /// Cache of user_id -> User for displaying post authors
     pub user_cache: std::collections::HashMap<i32, User>,
+    /// Recent mesh messages (ring buffer, max 50)
+    pub mesh_messages: Vec<MeshMessage>,
+    /// Node name cache from mesh network
+    pub mesh_nodes: std::collections::HashMap<u32, String>,
 }
 
 /// Agent listening status for the BBS
@@ -60,7 +74,73 @@ impl BBSTuiState {
             agents: Vec::new(),
             agent_status: AgentStatus::default(),
             user_cache: std::collections::HashMap::new(),
+            mesh_messages: Vec::new(),
+            mesh_nodes: std::collections::HashMap::new(),
         }
+    }
+
+    /// Add a mesh message (keeps max 50 in memory, also saves to database)
+    pub fn add_mesh_message(&mut self, from: u32, message: String, is_command: bool) -> Option<i32> {
+        let from_name = self.mesh_nodes.get(&from).cloned();
+        let now = chrono::Local::now();
+        let msg = MeshMessage {
+            from_node: from,
+            from_name: from_name.clone(),
+            message: message.clone(),
+            timestamp: now,
+            is_command,
+        };
+        self.mesh_messages.push(msg);
+
+        // Keep only last 50 in memory
+        if self.mesh_messages.len() > 50 {
+            self.mesh_messages.remove(0);
+        }
+
+        // Save to database
+        let mut message_id = None;
+        if let Ok(mut guard) = self.conn.lock() {
+            if let Some(ref mut conn) = *guard {
+                let received_at_us = now.timestamp_micros();
+                match db::mesh_messages::create(
+                    conn,
+                    from,
+                    from_name.as_deref(),
+                    None, // broadcast
+                    0,    // channel 0
+                    &message,
+                    is_command,
+                    received_at_us,
+                ) {
+                    Ok(msg_db) => {
+                        message_id = Some(msg_db.id);
+                        log::debug!("Saved mesh message {} to database", msg_db.id);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to save mesh message to database: {}", e);
+                    }
+                }
+            }
+        }
+
+        message_id
+    }
+
+    /// Add a response to a mesh message in the database
+    pub fn add_mesh_response(&mut self, message_id: i32, response: &str) {
+        if let Ok(mut guard) = self.conn.lock() {
+            if let Some(ref mut conn) = *guard {
+                let responded_at_us = chrono::Local::now().timestamp_micros();
+                if let Err(e) = db::mesh_messages::add_response(conn, message_id, response, responded_at_us) {
+                    log::error!("Failed to save mesh response to database: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Update node name cache
+    pub fn update_mesh_node(&mut self, node_id: u32, name: String) {
+        self.mesh_nodes.insert(node_id, name);
     }
 
     /// Check if a user is an AI agent based on naming conventions
@@ -660,11 +740,48 @@ mod tests {
         assert!(!state.connected);
         assert!(!state.input_active);
         assert_eq!(state.selected_board_index, Some(0));
-        // New agent-related fields
+        // Agent-related fields
         assert!(state.agents.is_empty());
         assert_eq!(state.agent_status.agents_listening, 0);
         assert!(!state.agent_status.osvm_agent_online);
         assert!(state.user_cache.is_empty());
+        // Mesh-related fields
+        assert!(state.mesh_messages.is_empty());
+        assert!(state.mesh_nodes.is_empty());
+    }
+
+    #[test]
+    fn test_mesh_message_buffer() {
+        let mut state = BBSTuiState::new();
+
+        // Add messages
+        state.add_mesh_message(0x12345678, "Hello mesh!".to_string(), false);
+        assert_eq!(state.mesh_messages.len(), 1);
+        assert_eq!(state.mesh_messages[0].message, "Hello mesh!");
+        assert!(!state.mesh_messages[0].is_command);
+
+        // Add a command
+        state.add_mesh_message(0x12345678, "/boards".to_string(), true);
+        assert_eq!(state.mesh_messages.len(), 2);
+        assert!(state.mesh_messages[1].is_command);
+
+        // Test ring buffer (max 50)
+        for i in 0..60 {
+            state.add_mesh_message(0x11111111, format!("Msg {}", i), false);
+        }
+        assert_eq!(state.mesh_messages.len(), 50, "Should cap at 50 messages");
+    }
+
+    #[test]
+    fn test_mesh_node_cache() {
+        let mut state = BBSTuiState::new();
+
+        state.update_mesh_node(0x12345678, "NODE1".to_string());
+        assert_eq!(state.mesh_nodes.get(&0x12345678), Some(&"NODE1".to_string()));
+
+        // Add message after node is known
+        state.add_mesh_message(0x12345678, "Hello".to_string(), false);
+        assert_eq!(state.mesh_messages[0].from_name, Some("NODE1".to_string()));
     }
 
     #[test]
