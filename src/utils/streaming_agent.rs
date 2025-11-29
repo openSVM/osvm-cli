@@ -590,12 +590,15 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
             }
 
             // Validate it looks like LISP code
+            // Note: Check for both "(do " (space) and "(do\n" (newline) since AI often formats with newlines
             let is_lisp = extracted.contains("(define ")
                 || extracted.contains("(const ")
                 || extracted.contains("(while ")
                 || extracted.contains("(for ")
                 || extracted.contains("(if ")
                 || extracted.contains("(do ")
+                || extracted.contains("(do\n")
+                || extracted.starts_with("(do")
                 || extracted.contains("(set! ");
 
             if is_lisp {
@@ -647,12 +650,15 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
             }
 
             // Only consider blocks that look like LISP code
+            // Note: Check for both "(do " (space) and "(do\n" (newline) since AI often formats with newlines
             let is_lisp = extracted.contains("(define ")
                 || extracted.contains("(const ")
                 || extracted.contains("(while ")
                 || extracted.contains("(for ")
                 || extracted.contains("(if ")
                 || extracted.contains("(do ")
+                || extracted.contains("(do\n")
+                || extracted.starts_with("(do")
                 || extracted.contains("(set! ");
 
             if get_verbosity() >= VerbosityLevel::Verbose {
@@ -722,11 +728,15 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
             let ovsm_code = code_start[..min_end].trim();
 
             // Validate it looks like LISP code
+            // Note: Check for both "(do " (space) and "(do\n" (newline) since AI often formats with newlines
             if ovsm_code.contains("(define ")
                 || ovsm_code.contains("(const ")
                 || ovsm_code.contains("(while ")
                 || ovsm_code.contains("(for ")
                 || ovsm_code.contains("(if ")
+                || ovsm_code.contains("(do ")
+                || ovsm_code.contains("(do\n")
+                || ovsm_code.starts_with("(do")
                 || ovsm_code.contains("(set! ")
             {
                 return Some(fix_ovsm_syntax(ovsm_code));

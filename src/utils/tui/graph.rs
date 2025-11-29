@@ -7,7 +7,8 @@ use ratatui::{
 use std::collections::{HashMap, HashSet, VecDeque};
 use arboard::Clipboard;
 use rayon::prelude::*;
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicBool, AtomicU64, Ordering}};
+use std::thread::{self, JoinHandle};
 
 // Re-export forensics types for backward compatibility
 pub use super::graph_forensics::{
@@ -1125,6 +1126,24 @@ pub struct WalletGraph {
     physics: ForceDirectedPhysics,
     /// Current layout algorithm mode (toggle with 'L' key)
     pub layout_mode: LayoutMode,
+    // ============================================================================
+    // Double-Buffer + Physics Thread Decoupling
+    // ============================================================================
+    // The render thread reads from `render_positions` (never blocks)
+    // The physics thread writes to `node_positions` then copies to `render_positions`
+    // This completely decouples physics from rendering for smooth 60fps
+    /// Render buffer - positions used by render() (read-only during render)
+    /// Physics thread copies here after each simulation step
+    render_positions: Vec<(f64, f64)>,
+    /// Frame counter - incremented when render_positions is updated
+    /// Render can check if new data is available
+    physics_frame: Arc<AtomicU64>,
+    /// Last frame rendered - compare to physics_frame to detect updates
+    last_rendered_frame: u64,
+    /// Signal to stop physics thread (set true on drop)
+    physics_stop_signal: Arc<AtomicBool>,
+    /// Physics thread dirty flag - set when node_positions changed
+    physics_dirty: Arc<AtomicBool>,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -1423,6 +1442,12 @@ impl WalletGraph {
             node_velocities: vec![(0.0, 0.0)],  // Target wallet starts at rest
             physics: ForceDirectedPhysics::default(),
             layout_mode: LayoutMode::default(),  // Force-directed by default
+            // Double-buffer initialization
+            render_positions: vec![(0.0, 0.0)],  // Copy of node_positions for rendering
+            physics_frame: Arc::new(AtomicU64::new(0)),
+            last_rendered_frame: 0,
+            physics_stop_signal: Arc::new(AtomicBool::new(false)),
+            physics_dirty: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -1448,6 +1473,88 @@ impl WalletGraph {
     /// Check if in streaming mode
     pub fn is_streaming_mode(&self) -> bool {
         self.streaming_mode
+    }
+
+    // ============================================================================
+    // Double-Buffer Physics Decoupling API
+    // ============================================================================
+
+    /// Sync physics positions to render buffer
+    /// Call this after physics updates to make new positions visible to render
+    /// This is a fast O(n) copy operation
+    pub fn sync_render_buffer(&mut self) {
+        if self.node_positions.len() != self.render_positions.len() {
+            self.render_positions.resize(self.node_positions.len(), (0.0, 0.0));
+        }
+        self.render_positions.clone_from(&self.node_positions);
+        self.physics_frame.fetch_add(1, Ordering::Release);
+        self.physics_dirty.store(false, Ordering::Release);
+    }
+
+    /// Run physics tick and sync to render buffer if dirty
+    /// This is the public API for external physics loop
+    /// Returns true if physics is still running (should call again next tick)
+    pub fn tick_physics(&mut self) -> bool {
+        if !matches!(self.layout_mode, LayoutMode::ForceDirected) {
+            return false;
+        }
+
+        if self.nodes.is_empty() {
+            return false;
+        }
+
+        // Maintain warmth in streaming mode
+        if self.streaming_mode {
+            self.physics.maintain_warmth(2.0);
+        }
+
+        if !self.physics.should_continue() {
+            return false;
+        }
+
+        // Run physics steps based on graph size
+        let n = self.nodes.len();
+        let iterations = if n < 100 { 3 } else if n < 500 { 2 } else { 1 };
+
+        for _ in 0..iterations {
+            self.step_force_directed_layout();
+        }
+
+        // Sync to render buffer after physics update
+        self.sync_render_buffer();
+
+        self.physics.should_continue()
+    }
+
+    /// Check if physics has new positions ready for render
+    pub fn has_new_frame(&self) -> bool {
+        let current = self.physics_frame.load(Ordering::Acquire);
+        current > self.last_rendered_frame
+    }
+
+    /// Mark current frame as rendered (call after render completes)
+    pub fn mark_frame_rendered(&mut self) {
+        self.last_rendered_frame = self.physics_frame.load(Ordering::Acquire);
+    }
+
+    /// Get read-only access to render positions
+    /// Use this in render() instead of node_positions
+    pub fn get_render_positions(&self) -> &[(f64, f64)] {
+        &self.render_positions
+    }
+
+    /// Get signals for physics thread control (for external physics loop)
+    pub fn get_physics_signals(&self) -> (Arc<AtomicBool>, Arc<AtomicBool>, Arc<AtomicU64>) {
+        (
+            Arc::clone(&self.physics_stop_signal),
+            Arc::clone(&self.physics_dirty),
+            Arc::clone(&self.physics_frame),
+        )
+    }
+
+    /// Signal physics thread to stop (call before dropping graph)
+    pub fn stop_physics(&self) {
+        self.physics_stop_signal.store(true, Ordering::Release);
     }
 
     /// Get selected node index (for backward compatibility)
@@ -2627,12 +2734,14 @@ impl WalletGraph {
         let radius = 15.0 * (layer as f64 + 1.0); // Each layer 15 units apart
         let angle = (position_in_layer as f64) * 2.0 * std::f64::consts::PI / (nodes_in_layer as f64 + 1.0).max(6.0);
 
-        self.node_positions.push((
-            radius * angle.cos(),
-            radius * angle.sin(),
-        ));
+        let pos = (radius * angle.cos(), radius * angle.sin());
+        self.node_positions.push(pos);
+        // Also add to render buffer for double-buffering
+        self.render_positions.push(pos);
         // Also add velocity for force-directed physics
         self.node_velocities.push((0.0, 0.0));
+        // Mark physics as dirty for sync
+        self.physics_dirty.store(true, Ordering::Release);
     }
 
     /// Position a new node near its connected neighbor (for incremental force-directed)
@@ -2684,8 +2793,9 @@ impl WalletGraph {
             )
         };
 
-        // Add position
+        // Add position to both physics and render buffers
         self.node_positions.push((x, y));
+        self.render_positions.push((x, y));
 
         // Give new node initial velocity toward center (helps it settle into the graph)
         let vel_to_center = if has_neighbor {
@@ -2703,6 +2813,8 @@ impl WalletGraph {
 
         // Reheat physics slightly to allow settling
         self.physics.reheat_incremental();
+        // Mark physics as dirty for sync
+        self.physics_dirty.store(true, Ordering::Release);
     }
 
     /// Calculate node layer using cached BFS distances
@@ -2896,9 +3008,11 @@ impl WalletGraph {
             group.nodes.push(*node_idx);
         }
 
-        // Clear and rebuild positions
+        // Clear and rebuild positions (both physics and render buffers)
         self.node_positions.clear();
         self.node_positions.resize(self.nodes.len(), (0.0, 0.0));
+        self.render_positions.clear();
+        self.render_positions.resize(self.nodes.len(), (0.0, 0.0));
 
         // Position center node at (0, 0)
         self.node_positions[center_idx] = (0.0, 0.0);
@@ -2944,6 +3058,10 @@ impl WalletGraph {
                 edge_count += 1;
             }
         }
+
+        // Sync to render buffer (hierarchical layout is instant, no physics)
+        self.render_positions.clone_from(&self.node_positions);
+        self.physics_dirty.store(true, Ordering::Release);
     }
 
     /// Initialize force-directed layout with random positions around center
@@ -2954,8 +3072,9 @@ impl WalletGraph {
         let n = self.nodes.len();
         if n == 0 { return; }
 
-        // Ensure vectors are sized correctly
+        // Ensure vectors are sized correctly (both physics and render buffers)
         self.node_positions.resize(n, (0.0, 0.0));
+        self.render_positions.resize(n, (0.0, 0.0));
         self.node_velocities.resize(n, (0.0, 0.0));
 
         // Reset physics simulation
@@ -2977,6 +3096,10 @@ impl WalletGraph {
             self.node_positions[i] = (r * a.cos(), r * a.sin());
             self.node_velocities[i] = (0.0, 0.0);
         }
+
+        // Sync initial positions to render buffer
+        self.render_positions.clone_from(&self.node_positions);
+        self.physics_dirty.store(true, Ordering::Release);
     }
 
     /// Run one iteration of Fruchterman-Reingold force-directed layout
@@ -3205,6 +3328,12 @@ impl WalletGraph {
 
         // Rebuild connected nodes after adding transfer
         self.rebuild_connected_nodes();
+
+        // Refresh trail available edges if we're in trail mode and new edges might affect current node
+        // This ensures arrow keys work immediately when new edges stream in
+        if self.trail_mode {
+            self.refresh_trail_available_edges();
+        }
     }
 
     /// Rebuild the set of path-connected nodes using BFS from target wallet
@@ -3467,7 +3596,21 @@ impl WalletGraph {
         use ratatui::widgets::{Paragraph, canvas::Canvas};
         use ratatui::text::{Line, Span};
 
-        // Split area for trail if enabled
+        // Split area: [main area | stats panel (if trail mode)]
+        let (main_area, stats_area) = if self.trail_mode && self.investigation_trail.is_some() {
+            let h_chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Horizontal)
+                .constraints([
+                    ratatui::layout::Constraint::Min(40),
+                    ratatui::layout::Constraint::Length(30),  // Stats panel width
+                ])
+                .split(area);
+            (h_chunks[0], Some(h_chunks[1]))
+        } else {
+            (area, None)
+        };
+
+        // Split main area for trail breadcrumb if enabled
         let (graph_area, trail_area) = if self.show_trail && self.investigation_trail.is_some() {
             let chunks = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
@@ -3475,11 +3618,16 @@ impl WalletGraph {
                     ratatui::layout::Constraint::Min(10),
                     ratatui::layout::Constraint::Length(5),  // Increased from 3 to 5 for better visibility
                 ])
-                .split(area);
+                .split(main_area);
             (chunks[0], Some(chunks[1]))
         } else {
-            (area, None)
+            (main_area, None)
         };
+
+        // Render stats panel if trail mode active
+        if let Some(stats_rect) = stats_area {
+            self.render_trail_stats(f, stats_rect);
+        }
 
         // Only recompute layout and cached data when graph structure changes
         // This is O(n²) and should NOT run every frame
@@ -3505,22 +3653,10 @@ impl WalletGraph {
             self.layout_dirty = false;
         }
 
-        // Run force-directed physics simulation (incremental per frame)
-        // Only active in ForceDirected mode
-        // This is O(n² + e) but only runs while simulation is active
-        if matches!(self.layout_mode, LayoutMode::ForceDirected) && !self.nodes.is_empty() {
-            // In streaming mode, maintain minimum warmth for continuous settling
-            if self.streaming_mode {
-                self.physics.maintain_warmth(2.0);  // Keep a low simmer
-            }
-
-            if self.physics.should_continue() {
-                // Run a few iterations per frame for smoother animation
-                for _ in 0..3 {
-                    self.step_force_directed_layout();
-                }
-            }
-        }
+        // Run physics tick (runs simulation + syncs to render buffer)
+        // This uses the decoupled tick_physics() API which handles all the complexity
+        // Physics runs with adaptive iterations based on graph size and syncs to render buffer
+        self.tick_physics();
 
         if self.nodes.is_empty() {
             let widget = Paragraph::new("  Waiting for transfer data...")
@@ -3576,6 +3712,9 @@ impl WalletGraph {
             .x_bounds([cx - 80.0 / zoom, cx + 80.0 / zoom])   // Narrower horizontal (nodes stack horizontally)
             .y_bounds([cy - 100.0 / zoom, cy + 100.0 / zoom]) // Taller vertical (flows top-to-bottom)
             .paint(|ctx| {
+                // Use render_positions for drawing (double-buffered, never blocks)
+                let positions = &self.render_positions;
+
                 // Collect selected edge info for path highlighting
                 let selected_edge_idx = match &self.selection {
                     SelectionMode::Edge { edge_idx, .. } => Some(*edge_idx),
@@ -3607,9 +3746,9 @@ impl WalletGraph {
                 // This includes edges where one or both endpoints are outside the visible viewport
                 for (edge_idx, (from_idx, to_idx, edge_label)) in self.connections.iter().enumerate() {
                     // Only check if positions exist, NOT if nodes are visible/filtered
-                    if *from_idx < self.node_positions.len() && *to_idx < self.node_positions.len() {
-                        let (x1, y1) = self.node_positions[*from_idx];
-                        let (x2, y2) = self.node_positions[*to_idx];
+                    if *from_idx < positions.len() && *to_idx < positions.len() {
+                        let (x1, y1) = positions[*from_idx];
+                        let (x2, y2) = positions[*to_idx];
 
                         // Calculate edge metrics
                         let edge_length = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
@@ -3714,8 +3853,8 @@ impl WalletGraph {
                         continue;
                     }
 
-                    if idx < self.node_positions.len() {
-                        let (x, y) = self.node_positions[idx];
+                    if idx < positions.len() {
+                        let (x, y) = positions[idx];
 
                         // Check if this is a mixer node (using cached HashSet for O(1) lookup)
                         let is_mixer = self.cached_mixer_nodes.contains(&idx);
@@ -3824,11 +3963,11 @@ impl WalletGraph {
                 let mut row_groups: HashMap<i32, Vec<usize>> = HashMap::new();
 
                 for &filtered_idx in &self.filtered_nodes {
-                    if filtered_idx >= self.node_positions.len() {
+                    if filtered_idx >= positions.len() {
                         continue;
                     }
 
-                    let (_, y) = self.node_positions[filtered_idx];
+                    let (_, y) = positions[filtered_idx];
                     // Determine row based on Y position (now using Y for rows)
                     let row = (y / 60.0).round() as i32;
                     row_groups.entry(row).or_insert_with(Vec::new).push(filtered_idx);
@@ -3843,7 +3982,7 @@ impl WalletGraph {
                     let count = nodes_in_row.len();
                     // Calculate average X position for this group (horizontal now)
                     let avg_x: f64 = nodes_in_row.iter()
-                        .filter_map(|&idx| self.node_positions.get(idx).map(|(x, _)| x))
+                        .filter_map(|&idx| positions.get(idx).map(|(x, _)| x))
                         .sum::<f64>() / count as f64;
 
                     let fold_x = avg_x;
@@ -3929,7 +4068,7 @@ impl WalletGraph {
         }
 
         // Render minimap in bottom-right corner
-        if self.show_minimap && !self.node_positions.is_empty() {
+        if self.show_minimap && !self.render_positions.is_empty() {
             self.render_minimap(f, graph_area);
         }
     }
@@ -3952,9 +4091,9 @@ impl WalletGraph {
             height: minimap_height,
         };
 
-        // Calculate graph bounding box
+        // Calculate graph bounding box (use render_positions for minimap)
         let (mut min_x, mut max_x, mut min_y, mut max_y) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
-        for (x, y) in &self.node_positions {
+        for (x, y) in &self.render_positions {
             min_x = min_x.min(*x);
             max_x = max_x.max(*x);
             min_y = min_y.min(*y);
@@ -4780,6 +4919,154 @@ impl WalletGraph {
         let stats_line = Line::from(stats_spans);
         let stats_para = Paragraph::new(stats_line).wrap(Wrap { trim: true });
         f.render_widget(stats_para, stats_inner);
+    }
+
+    /// Render detailed trail statistics panel (right side when trail mode active)
+    fn render_trail_stats(&self, f: &mut Frame, area: Rect) {
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+        use ratatui::layout::{Layout, Constraint, Direction};
+
+        let Some(ref trail) = self.investigation_trail else {
+            return;
+        };
+
+        // Main stats block
+        let block = Block::default()
+            .title(" 📊 Trail Stats ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(30, 144, 255)));
+
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        // Split into sections
+        let sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(6),  // Trail summary (5 lines + 1 padding)
+                Constraint::Length(6),  // Graph summary
+                Constraint::Min(4),     // Navigation hint
+            ])
+            .split(inner);
+
+        // === TRAIL SECTION ===
+        let trail_total = trail.total_amount();
+        let trail_tokens = trail.unique_tokens();
+        let trail_transfers = trail.steps.len().saturating_sub(1);
+        let critical_count = trail.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::Critical)).count();
+        let high_count = trail.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::High)).count();
+
+        // Format token list
+        let token_str = if trail_tokens.is_empty() {
+            "-".to_string()
+        } else if trail_tokens.len() <= 2 {
+            trail_tokens.join(", ")
+        } else {
+            format!("{} +{}", trail_tokens[0], trail_tokens.len() - 1)
+        };
+
+        let trail_lines = vec![
+            Line::from(vec![
+                Span::styled("🔗 Trail ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("'{}'", trail.branch_name), Style::default().fg(Color::Cyan)),
+            ]),
+            Line::from(vec![
+                Span::raw("  Steps: "),
+                Span::styled(format!("{}", trail.steps.len()), Style::default().fg(Color::White)),
+                Span::raw(" │ Txs: "),
+                Span::styled(format!("{}", trail_transfers), Style::default().fg(Color::Green)),
+            ]),
+            Line::from(vec![
+                Span::raw("  Flow: "),
+                Span::styled(
+                    if trail_total > 1000.0 { format!("{:.1}K", trail_total / 1000.0) }
+                    else { format!("{:.2}", trail_total) },
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("  Tokens: "),
+                Span::styled(token_str, Style::default().fg(Color::Magenta)),
+            ]),
+            Line::from(vec![
+                Span::raw("  Risk: "),
+                Span::styled(format!("{}🔴", critical_count), Style::default().fg(Color::Red)),
+                Span::raw(" "),
+                Span::styled(format!("{}🟠", high_count), Style::default().fg(Color::Yellow)),
+            ]),
+        ];
+
+        let trail_para = Paragraph::new(trail_lines);
+        f.render_widget(trail_para, sections[0]);
+
+        // === GRAPH SECTION ===
+        let graph_total: f64 = self.connections.iter().map(|(_, _, l)| l.amount).sum();
+        let graph_nodes = self.nodes.len();
+        let graph_edges = self.connections.len();
+        let mixer_count = self.cached_mixer_nodes.len();
+
+        // Get available edges for current node
+        let available_edge_count = trail.available_edges.len();
+        let current_edge_idx = trail.tentative_edge_idx.unwrap_or(0);
+
+        let graph_lines = vec![
+            Line::from(vec![
+                Span::styled("📈 Graph", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::raw("  Wallets: "),
+                Span::styled(format!("{}", graph_nodes), Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::raw("  Edges: "),
+                Span::styled(format!("{}", graph_edges), Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::raw("  Total: "),
+                Span::styled(
+                    if graph_total > 1000000.0 { format!("{:.1}M", graph_total / 1000000.0) }
+                    else if graph_total > 1000.0 { format!("{:.1}K", graph_total / 1000.0) }
+                    else { format!("{:.0}", graph_total) },
+                    Style::default().fg(Color::Green)
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("  Mixers: "),
+                Span::styled(format!("{}", mixer_count), Style::default().fg(if mixer_count > 0 { Color::Red } else { Color::Green })),
+            ]),
+        ];
+
+        let graph_para = Paragraph::new(graph_lines);
+        f.render_widget(graph_para, sections[1]);
+
+        // === NAVIGATION HINT ===
+        let nav_lines = vec![
+            Line::from(vec![
+                Span::styled("━━━ Navigate ━━━", Style::default().fg(Color::DarkGray)),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    format!("Edge {}/{}", current_edge_idx + 1, available_edge_count.max(1)),
+                    Style::default().fg(Color::Rgb(68, 204, 255))
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("↑↓", Style::default().fg(Color::Yellow)),
+                Span::raw(" cycle edges"),
+            ]),
+            Line::from(vec![
+                Span::styled("→", Style::default().fg(Color::Yellow)),
+                Span::raw(" extend trail"),
+            ]),
+            Line::from(vec![
+                Span::styled("←", Style::default().fg(Color::Yellow)),
+                Span::raw(" retract trail"),
+            ]),
+        ];
+
+        let nav_para = Paragraph::new(nav_lines);
+        f.render_widget(nav_para, sections[2]);
     }
 
 }
