@@ -19,13 +19,29 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
         .get_one::<String>("wallet")
         .context("Wallet address is required")?;
 
-    // Check if user wants simple OVSM analysis (default) or complex agent-based research
+    // Check flags
+    let use_web = matches.get_flag("web");
     let use_agent = matches.get_flag("agent");
     let use_tui = matches.get_flag("tui");
     let use_auto = matches.get_flag("auto");
 
+    // Route based on flag combinations:
+    // --tui (with or without --web) -> handle_tui_research (handles web streaming internally)
+    // --auto or --agent (without --tui) -> handle_agent_research
+    // --web alone (no --tui, no --auto) -> handle_web_research (CLI streaming to web)
+
+    if use_tui {
+        // TUI mode - handles --web internally for dual output
+        return handle_tui_research(matches, wallet).await;
+    }
+
+    if use_web && !use_auto {
+        // Web-only mode (CLI output to browser, no TUI)
+        return handle_web_research(matches, wallet).await;
+    }
+
     // --auto implies agent mode (shortcut so users don't need --agent --auto)
-    if use_agent || use_tui || use_auto {
+    if use_agent || use_auto {
         // Use the complex multi-iteration research agent
         return handle_agent_research(matches, wallet).await;
     }
@@ -516,6 +532,58 @@ Aggregated Transfer Summary (JSON):
 async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     use crate::utils::tui::OsvmApp;
     use crate::utils::tui::graph::TransferData;
+    use crate::utils::web_terminal::WebTerminal;
+
+    // Check if web streaming is enabled
+    let use_web = matches.get_flag("web");
+    let web_port: u16 = matches
+        .get_one::<String>("web-port")
+        .map(|s| s.parse().unwrap_or(13370))
+        .unwrap_or(13370);
+
+    // Start web server if --web flag is present
+    let web_sender = if use_web {
+        use colored::Colorize;
+        println!();
+        println!(
+            "{}",
+            "╔══════════════════════════════════════════════════════════════════════════════╗"
+                .bright_cyan()
+        );
+        println!(
+            "{} {} {}",
+            "║".bright_cyan(),
+            "🌐 OSVM TUI + WEB STREAMING".bold().white(),
+            "                                        ║".bright_cyan()
+        );
+        println!(
+            "{}",
+            "╚══════════════════════════════════════════════════════════════════════════════╝"
+                .bright_cyan()
+        );
+        println!();
+
+        let (_handle, sender, input_rx) = WebTerminal::start(web_port).await?;
+
+        println!(
+            "{} {}",
+            "🚀 Web terminal started at:".bright_green(),
+            format!("http://localhost:{}", web_port).bright_cyan().underline()
+        );
+        println!(
+            "{}",
+            "   Open this URL in your browser to control the TUI!".dimmed()
+        );
+        println!(
+            "{}",
+            "   ⌨️  Keyboard input from browser is enabled".bright_yellow()
+        );
+        println!();
+
+        Some((sender, input_rx))
+    } else {
+        None
+    };
 
     // Set OSVM_QUIET to suppress all console output during TUI mode
     std::env::set_var("OSVM_QUIET", "1");
@@ -744,7 +812,12 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     });
 
     // Run the TUI in the main thread (blocking)
-    app.run()?;
+    // Use web streaming if --web flag was provided
+    if let Some((sender, input_rx)) = web_sender {
+        app.run_with_web(sender, input_rx, |app| app.tick())?;
+    } else {
+        app.run()?;
+    }
 
     // Wait for agent to finish
     let _ = agent_handle.join();
@@ -771,6 +844,7 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     let output_path = matches.get_one::<String>("output").cloned();
     let save_report = matches.get_flag("save") || output_path.is_some();
     let token_filter = matches.get_one::<String>("token").cloned();
+    let use_ai_chart = matches.get_flag("ai-chart");
 
     // Print banner
     println!();
@@ -1041,7 +1115,70 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     } else {
         // Show token summary before graph (helps users discover which tokens to trace)
         render_token_summary(&all_transfers);
-        render_ascii_graph(wallet, &all_transfers);
+
+        // Use AI-generated chart if --ai-chart flag is set
+        if use_ai_chart {
+            println!("{}", "🤖 Generating AI-powered flow chart...".dimmed());
+
+            // Prepare inflows and outflows for AI
+            let mut inflows: Vec<(String, String, f64)> = Vec::new();
+            let mut outflows: Vec<(String, String, f64)> = Vec::new();
+
+            for tx in &all_transfers {
+                if tx.direction == "IN" {
+                    inflows.push((tx.from.clone(), tx.token.clone(), tx.amount));
+                } else {
+                    outflows.push((tx.to.clone(), tx.token.clone(), tx.amount));
+                }
+            }
+
+            // Aggregate by counterparty
+            let mut inflow_map: std::collections::HashMap<String, (String, f64)> = std::collections::HashMap::new();
+            for (addr, token, amount) in &inflows {
+                let entry = inflow_map.entry(addr.clone()).or_insert((token.clone(), 0.0));
+                entry.1 += amount;
+            }
+            let aggregated_inflows: Vec<(String, String, f64)> = inflow_map.into_iter()
+                .map(|(addr, (token, amount))| (addr, token, amount))
+                .collect();
+
+            let mut outflow_map: std::collections::HashMap<String, (String, f64)> = std::collections::HashMap::new();
+            for (addr, token, amount) in &outflows {
+                let entry = outflow_map.entry(addr.clone()).or_insert((token.clone(), 0.0));
+                entry.1 += amount;
+            }
+            let aggregated_outflows: Vec<(String, String, f64)> = outflow_map.into_iter()
+                .map(|(addr, (token, amount))| (addr, token, amount))
+                .collect();
+
+            // Get entity clusters for the AI chart
+            let entity_clusters = detect_wallet_entities(&all_transfers);
+            let cluster_data: Vec<(String, Vec<String>, f64)> = entity_clusters.iter()
+                .map(|c| (c.entity_type.clone(), c.wallets.clone(), c.confidence))
+                .collect();
+
+            // Call AI service to generate chart
+            let ai_service = AiService::new();
+            match ai_service.generate_ascii_flow_chart(
+                wallet,
+                &aggregated_inflows,
+                &aggregated_outflows,
+                if cluster_data.is_empty() { None } else { Some(&cluster_data) },
+                None, // swaps - could be enhanced later
+            ).await {
+                Ok(chart) => {
+                    println!();
+                    println!("{}", chart);
+                    println!();
+                }
+                Err(e) => {
+                    println!("{}", format!("⚠️  AI chart generation failed: {}. Falling back to standard chart.", e).yellow());
+                    render_ascii_graph(wallet, &all_transfers);
+                }
+            }
+        } else {
+            render_ascii_graph(wallet, &all_transfers);
+        }
     }
 
     // Print findings
@@ -1132,6 +1269,102 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
 
         if entity_clusters.len() > 5 {
             println!("  {} {} more clusters...", "...".dimmed(), entity_clusters.len() - 5);
+            println!();
+        }
+    }
+
+    // Cross-token swaps (DEX trades)
+    let cross_token_swaps = detect_cross_token_swaps(&all_transfers);
+    let high_conf_swaps: Vec<_> = cross_token_swaps.iter().filter(|s| s.confidence >= 0.75).collect();
+    if !high_conf_swaps.is_empty() {
+        println!();
+        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".magenta());
+        println!("🔄 {} {}", "CROSS-TOKEN SWAPS".bold().magenta(),
+            format!("({} DEX trades detected)", high_conf_swaps.len()).dimmed());
+        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".magenta());
+        println!();
+
+        // Group by swap type
+        let atomic_count = high_conf_swaps.iter().filter(|s| s.swap_type == "Atomic Swap").count();
+        let dex_count = high_conf_swaps.iter().filter(|s| s.swap_type == "DEX Swap").count();
+
+        if atomic_count > 0 || dex_count > 0 {
+            println!("  {} {} atomic, {} DEX, {} other",
+                "Summary:".bold(),
+                atomic_count,
+                dex_count,
+                high_conf_swaps.len() - atomic_count - dex_count);
+            println!();
+        }
+
+        // Show top swaps
+        for swap in high_conf_swaps.iter().take(10) {
+            let type_icon = match swap.swap_type.as_str() {
+                "Atomic Swap" => "⚡",
+                "DEX Swap" => "🔄",
+                "Multi-hop" => "🔀",
+                _ => "💱",
+            };
+
+            let confidence_bar = "█".repeat((swap.confidence * 10.0) as usize);
+            let empty_bar = "░".repeat(10 - (swap.confidence * 10.0) as usize);
+
+            // Format amounts nicely
+            let fmt_in = if swap.amount_in >= 1_000_000.0 {
+                format!("{:.2}M", swap.amount_in / 1_000_000.0)
+            } else if swap.amount_in >= 1_000.0 {
+                format!("{:.2}K", swap.amount_in / 1_000.0)
+            } else {
+                format!("{:.4}", swap.amount_in)
+            };
+
+            let fmt_out = if swap.amount_out >= 1_000_000.0 {
+                format!("{:.2}M", swap.amount_out / 1_000_000.0)
+            } else if swap.amount_out >= 1_000.0 {
+                format!("{:.2}K", swap.amount_out / 1_000.0)
+            } else {
+                format!("{:.4}", swap.amount_out)
+            };
+
+            // Resolve token symbols (e.g., USDC, JUP, BONK instead of mint addresses)
+            let token_in = resolve_token_symbol(&swap.token_in);
+            let token_out = resolve_token_symbol(&swap.token_out);
+
+            // Display DEX name if identified
+            let dex_label = swap.dex_name.as_ref()
+                .map(|d| format!(" via {}", d.bright_blue()))
+                .unwrap_or_default();
+
+            println!("  {} {} ({}) [{}{}] {:.0}%{}",
+                type_icon,
+                swap.swap_type.bright_magenta(),
+                truncate_address(&swap.wallet),
+                confidence_bar.bright_green(),
+                empty_bar.dimmed(),
+                swap.confidence * 100.0,
+                dex_label);
+            println!("      {} {} → {} {}",
+                fmt_in.bright_yellow(),
+                token_in.dimmed(),
+                fmt_out.bright_cyan(),
+                token_out.dimmed());
+
+            // Time info
+            let time_str = if swap.time_diff_secs == 0 {
+                "same block".to_string()
+            } else if swap.time_diff_secs <= 5 {
+                format!("{}s apart", swap.time_diff_secs)
+            } else if swap.time_diff_secs <= 60 {
+                format!("{}s apart", swap.time_diff_secs)
+            } else {
+                format!("{:.1}m apart", swap.time_diff_secs as f64 / 60.0)
+            };
+            println!("      {} {}", "⏱".dimmed(), time_str.dimmed());
+            println!();
+        }
+
+        if high_conf_swaps.len() > 10 {
+            println!("  {} {} more swaps...", "...".dimmed(), high_conf_swaps.len() - 10);
             println!();
         }
     }
@@ -1455,136 +1688,96 @@ fn render_ascii_graph(target: &str, transfers: &[TransferRecord]) {
 
     let target_short = truncate_address(target);
 
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
-    println!("{}", "🕸️  WALLET FLOW GRAPH".bold().cyan());
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
-    println!();
+    // Enhanced ASCII box diagram style flow graph
+    println!("┌─────────────────────────────────────────────────────────────────────────────────┐");
+    println!("│                          {} WALLET FLOW GRAPH                          │", "🕸️".cyan());
+    println!("├─────────────────────────────────────────────────────────────────────────────────┤");
 
-    // Header with legend
-    println!("    {}                                              {}",
-        "◀── INFLOWS".bright_green().bold(),
-        "OUTFLOWS ──▶".bright_red().bold()
-    );
-    println!();
-
-    // Print each flow pair
-    let max_lines = top_inflows.len().max(top_outflows.len()).max(1);
-
-    for i in 0..max_lines {
-        // Build left side (inflows)
-        let left_line = if i < top_inflows.len() {
-            let (addr, (amount, tokens)) = &top_inflows[i];
-            let addr_short = truncate_address(addr);
-
-            // Get main token (highest amount)
-            let main_token = tokens.iter()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(t, _)| t.as_str())
-                .unwrap_or("?");
-
-            // Format token name (show full if short, truncate if long)
-            let token_display = if main_token.len() <= 6 {
-                main_token.to_string()
-            } else if main_token == "SOL" || main_token == "USDC" || main_token == "USDT" {
-                main_token.to_string()
-            } else {
-                format!("{}…", &main_token[..4])
-            };
-
-            let extra = if tokens.len() > 1 { format!("+{}", tokens.len() - 1) } else { String::new() };
-            let arrow = get_arrow_style(*amount, max_inflow);
-            let amount_str = format_amount(*amount);
-
-            format!("{} {} {}",
-                addr_short.bright_green(),
-                format!("[{}{} {}]", token_display, extra, amount_str).dimmed(),
-                arrow.green()
-            )
-        } else {
-            " ".repeat(45)
-        };
-
-        // Build right side (outflows)
-        let right_line = if i < top_outflows.len() {
-            let (addr, (amount, tokens)) = &top_outflows[i];
-            let addr_short = truncate_address(addr);
-
-            // Get main token
-            let main_token = tokens.iter()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(t, _)| t.as_str())
-                .unwrap_or("?");
-
-            let token_display = if main_token.len() <= 6 {
-                main_token.to_string()
-            } else if main_token == "SOL" || main_token == "USDC" || main_token == "USDT" {
-                main_token.to_string()
-            } else {
-                format!("{}…", &main_token[..4])
-            };
-
-            let extra = if tokens.len() > 1 { format!("+{}", tokens.len() - 1) } else { String::new() };
-            let arrow = get_arrow_style(*amount, max_outflow);
-            let amount_str = format_amount(*amount);
-
-            // Reverse arrow for outflows
-            let arrow_rev = match arrow {
-                "━━━▶" => "▶━━━",
-                "──▶" => "▶──",
-                _ => "▶─",
-            };
-
-            format!("{} {} {}",
-                arrow_rev.red(),
-                format!("[{}{} {}]", token_display, extra, amount_str).dimmed(),
-                addr_short.bright_red()
-            )
-        } else {
-            String::new()
-        };
-
-        // Center box (only on middle rows)
-        let center = if max_lines <= 3 {
-            if i == 0 {
-                format!("┌{}┐", "─".repeat(14))
-            } else if i == max_lines / 2 || (max_lines == 1 && i == 0) {
-                if max_lines == 1 {
-                    format!("│ {} │", target_short)
-                } else {
-                    format!("│ {} │", target_short)
-                }
-            } else if i == max_lines - 1 || (max_lines == 2 && i == 1) {
-                format!("└{}┘", "─".repeat(14))
-            } else {
-                format!("│{}│", " ".repeat(14))
-            }
-        } else {
-            let mid = max_lines / 2;
-            if i == mid - 1 {
-                format!("┌{}┐", "─".repeat(14))
-            } else if i == mid {
-                format!("│ {} │", target_short)
-            } else if i == mid + 1 {
-                format!("└{}┘", "─".repeat(14))
-            } else {
-                format!("│{}│", " ".repeat(14))
-            }
-        };
-
-        println!("  {}  {}  {}", left_line, center.bright_yellow(), right_line);
+    // Build inflow entries
+    let mut inflow_lines: Vec<String> = Vec::new();
+    for (addr, (amount, tokens)) in &top_inflows {
+        let addr_short = truncate_address(addr);
+        let main_token = tokens.iter()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(t, _)| resolve_token_symbol(t))
+            .unwrap_or_else(|| "?".to_string());
+        let amount_str = format_amount(*amount);
+        let extra = if tokens.len() > 1 { format!("+{}", tokens.len() - 1) } else { String::new() };
+        inflow_lines.push(format!("{} [{}{} {}]", addr_short, main_token, extra, amount_str));
     }
 
-    println!();
+    // Build outflow entries
+    let mut outflow_lines: Vec<String> = Vec::new();
+    for (addr, (amount, tokens)) in &top_outflows {
+        let addr_short = truncate_address(addr);
+        let main_token = tokens.iter()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(t, _)| resolve_token_symbol(t))
+            .unwrap_or_else(|| "?".to_string());
+        let amount_str = format_amount(*amount);
+        let extra = if tokens.len() > 1 { format!("+{}", tokens.len() - 1) } else { String::new() };
+        outflow_lines.push(format!("[{}{} {}] {}", main_token, extra, amount_str, addr_short));
+    }
 
-    // Summary with totals
-    println!("  {}",
-        format!("  {} sources ({} total)    ═══════════════    {} destinations ({} total)",
-            top_inflows.len(),
-            format_amount(total_inflow),
-            top_outflows.len(),
-            format_amount(total_outflow)
-        ).dimmed()
+    // Determine the number of rows needed
+    let max_flows = inflow_lines.len().max(outflow_lines.len()).max(1);
+
+    // Print the inflow header
+    println!("│  ┌──────────────────────────────┐      ┌──────────────────┐      ┌──────────────────────────────┐  │");
+    println!("│  │       {} INFLOWS ({})        │      │  {} TARGET WALLET │      │       {} OUTFLOWS ({})       │  │",
+        "◀".bright_green(),
+        top_inflows.len().to_string().bright_green(),
+        "◉".bright_yellow(),
+        "▶".bright_red(),
+        top_outflows.len().to_string().bright_red()
     );
+    println!("│  ├──────────────────────────────┤      ├──────────────────┤      ├──────────────────────────────┤  │");
+
+    // Print the central target wallet
+    println!("│  │                              │──────▶│ {} │◀──────│                              │  │",
+        target_short.bright_yellow().bold());
+    println!("│  │                              │      └────────┬─────────┘      │                              │  │");
+    println!("│  │                              │               │                │                              │  │");
+
+    // Print flow entries
+    for i in 0..max_flows {
+        let left = inflow_lines.get(i)
+            .map(|s| format!("{:<30}", s))
+            .unwrap_or_else(|| " ".repeat(30));
+        let right = outflow_lines.get(i)
+            .map(|s| format!("{:>30}", s))
+            .unwrap_or_else(|| " ".repeat(30));
+
+        // Arrow style based on row
+        let (left_arrow, right_arrow) = if i == 0 {
+            ("─────────────▶", "◀─────────────")
+        } else if i < max_flows / 2 {
+            ("──────────┐  │", "│  ┌──────────")
+        } else {
+            ("──────────┘  │", "│  └──────────")
+        };
+
+        if i < max_flows {
+            println!("│  │ {} │{}│               │{}│ {} │  │",
+                left.bright_green(),
+                left_arrow.green(),
+                right_arrow.red(),
+                right.bright_red()
+            );
+        }
+    }
+
+    println!("│  └──────────────────────────────┘               │                └──────────────────────────────┘  │");
+    println!("│                                                 ▼                                                  │");
+    println!("│  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐  │");
+    println!("│  │  {} ({})  ══════════════════════════════════════════════════  {} ({})  │  │",
+        format!("📥 Inflows: {}", top_inflows.len()).bright_green(),
+        format_amount(total_inflow).bright_green(),
+        format!("📤 Outflows: {}", top_outflows.len()).bright_red(),
+        format_amount(total_outflow).bright_red()
+    );
+    println!("│  └─────────────────────────────────────────────────────────────────────────────────────────────┘  │");
+    println!("└─────────────────────────────────────────────────────────────────────────────────────────────────────┘");
     println!();
 }
 
@@ -1618,17 +1811,18 @@ fn render_token_summary(transfers: &[TransferRecord]) {
     // Show top 10 tokens
     let show_count = sorted.len().min(10);
     for (i, (token, (count, total))) in sorted.iter().take(show_count).enumerate() {
-        // Display token name (truncate if too long, highlight if known stablecoin)
-        let token_display = if token.len() > 12 {
-            format!("{}…", &token[..11])
+        // Resolve token symbol (e.g., USDC instead of EPjFWdd5...)
+        let resolved = resolve_token_symbol(token);
+        let token_display = if resolved.len() > 12 {
+            format!("{}…", &resolved[..11])
         } else {
-            (*token).to_string()
+            resolved
         };
 
-        let is_stablecoin = matches!(*token, "USDC" | "USDT" | "BUSD" | "DAI" | "TUSD");
+        let is_stablecoin = matches!(token_display.as_str(), "USDC" | "USDT" | "BUSD" | "DAI" | "TUSD" | "USDH");
         let token_colored = if is_stablecoin {
             token_display.bright_green().bold()
-        } else if *token == "SOL" {
+        } else if token_display == "SOL" || token_display == "wSOL" {
             token_display.bright_magenta().bold()
         } else {
             token_display.bright_cyan()
@@ -2743,6 +2937,326 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
     patterns
 }
 
+/// Detected cross-token swap (DEX trade)
+#[derive(Debug, Clone)]
+struct CrossTokenSwap {
+    wallet: String,
+    token_in: String,
+    token_out: String,
+    amount_in: f64,
+    amount_out: f64,
+    timestamp: String,
+    time_diff_secs: i64,
+    confidence: f64,  // 0.0 - 1.0
+    swap_type: String,  // "DEX Swap", "Atomic Swap", "Multi-hop", "Probable Swap"
+    dex_name: Option<String>,  // "Jupiter", "Raydium", "Orca", etc.
+}
+
+/// Identify DEX from wallet address
+fn identify_dex(address: &str) -> Option<&'static str> {
+    // Jupiter variants (most common aggregator)
+    if address.starts_with("JUP") { return Some("Jupiter"); }
+    if address == "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" { return Some("Jupiter"); }
+    if address == "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" { return Some("Jupiter v4"); }
+    if address == "JUP6i4ozu5ydDCnLiMogSckDPpbtr7BJ4FtzYWkb5Rk" { return Some("Jupiter v6"); }
+    if address == "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo" { return Some("Jupiter v2"); }
+    if address == "JUP3c2Uh3WA4Ng34tw6kPd2G4C5BB21Xo36Je1s32Ph" { return Some("Jupiter v3"); }
+
+    // Raydium variants (largest Solana AMM)
+    if address == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" { return Some("Raydium AMM"); }
+    if address == "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" { return Some("Raydium CLMM"); }
+    if address == "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS" { return Some("Raydium Router"); }
+    if address == "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h" { return Some("Raydium"); }
+    if address == "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" { return Some("Raydium v4"); }
+    if address == "RVKd61ztZW9GUwhRbbLoYVRE5Xf1B2tVscKqwZqXgEr" { return Some("Raydium CPMM"); }
+    if address.starts_with("Rayd") { return Some("Raydium"); }
+
+    // Orca (second largest DEX)
+    if address == "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" { return Some("Orca Whirlpool"); }
+    if address == "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP" { return Some("Orca Legacy"); }
+    if address == "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1" { return Some("Orca v1"); }
+    if address.starts_with("Orca") { return Some("Orca"); }
+
+    // Meteora (dynamic pools)
+    if address == "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" { return Some("Meteora DLMM"); }
+    if address == "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" { return Some("Meteora Vault"); }
+    if address == "24Uqj9JCLxUeoC3hGfh5W3s9FM9uCHDS2SG3LYwBpyTi" { return Some("Meteora Pool"); }
+    if address.starts_with("Meteo") { return Some("Meteora"); }
+
+    // Phoenix (order book DEX)
+    if address == "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" { return Some("Phoenix"); }
+    if address == "phnxNHfGNVjpVVuHkceK3MgwZ1bW25ijfWACKhF1mk1" { return Some("Phoenix v2"); }
+
+    // OpenBook/Serum (order book)
+    if address == "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX" { return Some("Serum DEX"); }
+    if address == "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb" { return Some("OpenBook"); }
+    if address == "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin" { return Some("Serum v3"); }
+    if address.starts_with("opnb") { return Some("OpenBook"); }
+
+    // Lifinity (proactive market maker)
+    if address == "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S" { return Some("Lifinity v1"); }
+    if address == "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" { return Some("Lifinity v2"); }
+    if address.starts_with("Lifi") { return Some("Lifinity"); }
+
+    // Aldrin DEX
+    if address == "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6" { return Some("Aldrin"); }
+    if address == "CURVGoZn8zycx6FXwwevgBTB2gVvdbGTEpvMJDbgs2t4" { return Some("Aldrin v2"); }
+
+    // Saber (stablecoin swaps)
+    if address == "SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ" { return Some("Saber"); }
+    if address == "Crt7UoUR6QgrFrN7j8rmSQpUTNWNSitSwWvWqGZNXTSK" { return Some("Saber Quarry"); }
+    if address == "DecZY86MU5Gj7kppfUCEmd4LbXXuyZH1yHaP2NTqdiZB" { return Some("Saber Decimal"); }
+
+    // Crema Finance
+    if address == "CLMM9tUoggJu2wagPkkqs9eFG4BWhVBZWkP1qv3Sp7tR" { return Some("Crema"); }
+
+    // Step Finance (DEX aggregator)
+    if address == "SSwpMgqNDsyV7mAgN9ady4bDVu5ySjmmXejXvy2vLt1" { return Some("Step Finance"); }
+
+    // GooseFX
+    if address == "GFXsSL5sSaDfNFQUYsHekbWBW1TsFdjDYzACh62tEHxn" { return Some("GooseFX"); }
+    if address == "7WduLbRfYhTJktjLw5FDEyrqoEv61aTTCuGAetgLjzN5" { return Some("GooseFX SSL"); }
+
+    // Cykura (concentrated liquidity)
+    if address == "cysPXAjehMpVKUapzbMCCnpFxUFFryEWEaLgnb9NLR8" { return Some("Cykura"); }
+
+    // Invariant (concentrated liquidity)
+    if address == "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXZcEbRaJutt" { return Some("Invariant"); }
+
+    // Sanctum (LST aggregator)
+    if address == "5ocnV1qiCgaQR8Jb8xWnVbApfaygJ8tNoZfgPwsgx9kx" { return Some("Sanctum Router"); }
+    if address == "stkitrT1Uoy18Dk1fTrgPw8W6MVzoCfYoAFT4MLsmhq" { return Some("Sanctum Stake"); }
+
+    // Marinade (liquid staking, shows as swap)
+    if address == "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD" { return Some("Marinade"); }
+    if address == "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" { return Some("Marinade mSOL"); }
+
+    // Jito (MEV/staking)
+    if address == "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb" { return Some("Jito"); }
+    if address == "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" { return Some("Jito jitoSOL"); }
+
+    // Tensor (NFT marketplace - trades show as swaps)
+    if address == "TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hAsbdwmHbN" { return Some("Tensor"); }
+    if address == "TCMPhJdwDryooaGtiocG1u3xcYbRpiJzb283XfCZsDp" { return Some("Tensor cNFT"); }
+
+    // Magic Eden (NFT marketplace)
+    if address == "M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K" { return Some("Magic Eden v2"); }
+    if address == "CMZYPASGWeTz7RNGHaRJfCq2XQ5pYK6nDvVQxzkH51zb" { return Some("Magic Eden AMM"); }
+
+    // Pump.fun bonding curve program
+    if address == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" { return Some("Pump.fun"); }
+    if address == "Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1" { return Some("Pump.fun"); } // Migration
+
+    // Moonshot (token launchpad)
+    if address == "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG" { return Some("Moonshot"); }
+
+    // FluxBeam (aggregator)
+    if address == "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X" { return Some("FluxBeam"); }
+
+    // 1Sol (aggregator)
+    if address == "1So1vRKV2PvhVjLBxUAMXqTHUQm9ZCJwDmrX2DPhMfk" { return Some("1Sol"); }
+
+    None
+}
+
+/// Resolve token mint address to human-readable symbol
+/// Returns the symbol if known, otherwise returns a truncated address
+fn resolve_token_symbol(mint: &str) -> String {
+    // Check if it's already a symbol (short, no numbers after first char)
+    if mint.len() <= 10 && !mint.chars().skip(1).any(|c| c.is_ascii_digit()) {
+        return mint.to_string();
+    }
+
+    // Common stablecoins
+    if mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" { return "USDC".to_string(); }
+    if mint == "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" { return "USDT".to_string(); }
+    if mint == "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX" { return "USDH".to_string(); }
+    if mint == "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj" { return "stSOL".to_string(); }
+    if mint == "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" { return "mSOL".to_string(); }
+    if mint == "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" { return "jitoSOL".to_string(); }
+    if mint == "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1" { return "bSOL".to_string(); }
+    if mint == "5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm" { return "INF".to_string(); }
+
+    // Major tokens
+    if mint == "So11111111111111111111111111111111111111112" { return "wSOL".to_string(); }
+    if mint == "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN" { return "JUP".to_string(); }
+    if mint == "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" { return "BONK".to_string(); }
+    if mint == "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm" { return "WIF".to_string(); }
+    if mint == "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3" { return "PYTH".to_string(); }
+    if mint == "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof" { return "RENDER".to_string(); }
+    if mint == "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux" { return "HNT".to_string(); }
+    if mint == "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R" { return "RAY".to_string(); }
+    if mint == "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE" { return "ORCA".to_string(); }
+    if mint == "SRMuApVNdxXokk5GT7XD5cUUgXMBCoAz2LHeuAoKWRt" { return "SRM".to_string(); }
+    if mint == "MNDEFzGvMt87ueuHvVU9VcTqsAP5b3fTGPsHuuPA5ey" { return "MNDE".to_string(); }
+    if mint == "kinXdEcpDQeHPEuQnqmUgtYykqKGVFq6CeVX5iAHJq6" { return "KIN".to_string(); }
+    if mint == "SHDWyBxihqiCj6YekG2GUr7wqKLeLAMK1gHZck9pL6y" { return "SHDW".to_string(); }
+    if mint == "AFbX8oGjGpmVFywbVouvhQSRmiW2aR1mohfahi4Y2AdB" { return "GST".to_string(); }
+    if mint == "7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx" { return "GMT".to_string(); }
+    if mint == "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" { return "BAT".to_string(); }
+
+    // Popular memecoins
+    if mint == "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5" { return "MEW".to_string(); }
+    if mint == "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump" { return "PNUT".to_string(); }
+    if mint == "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82" { return "BOME".to_string(); }
+    if mint == "CzLSujWBLFsSjncfkh59rUFqvafWcY5tzedWJSuypump" { return "GOAT".to_string(); }
+    if mint == "ED5nyyWEzpPPiWimP8vYm7sD7TD3LAt3Q3gRTWHzPJBY" { return "MOODENG".to_string(); }
+    if mint == "GJAFwWjJ3vnTsrQVabjBVK2TYB1YtRCQXRDfDgUnpump" { return "ACT".to_string(); }
+
+    // DeFi tokens
+    if mint == "METAewgxyPbgwsseH8T16a39CQ5VyVxZi9zXiDPY18m" { return "MPLX".to_string(); }
+    if mint == "SLNDpmoWTVADgEdndyvWzroNL7zSi1dF9PC3xHGtPwp" { return "SLND".to_string(); }
+    if mint == "HxhWkVpk5NS4Ltg5nij2G671CKXFRKPK8vy271Ub4uEK" { return "HXRO".to_string(); }
+    if mint == "StepAscQoEioFxxWGnh2sLBDFp9d8rvKz2Yp39iDpyT" { return "STEP".to_string(); }
+    if mint == "SAMUmmSvrE87wreT4SqwHq6FLMKnBdEhMpNx17tr1oS" { return "SAMO".to_string(); }
+    if mint == "FoXyMu5xwXre7zEoSvzViRk3nGawHUp9kUh97y2NDhcq" { return "FOXY".to_string(); }
+    if mint == "nosXBVoaCTtYdLvKY6Csb4AC8JCdQKKAaWYtx2ZMoo7" { return "NOS".to_string(); }
+    if mint == "TNSRxcUxoT9xBG3de7PiJyTDYu7kskLqcpddxnEJAS6" { return "TNSR".to_string(); }
+    if mint == "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL" { return "JTO".to_string(); }
+    if mint == "WENWENvqqNya429ubCdR81ZmD69brwQaaBYY6p3LCpk" { return "WEN".to_string(); }
+    if mint == "DriFtupJYLTosbwoN8koMbEYSx54aFAVLddWsbksjwg7" { return "DRIFT".to_string(); }
+    if mint == "BLZEEuZUBVqFhj8adcCFPJvPVCiCyVmh3hkJMrU8KuJA" { return "BLZE".to_string(); }
+    if mint == "MEANeD3XDdUmNMsRGjASkSWdC8prLYsoRJ61pPeHctD" { return "MEAN".to_string(); }
+
+    // Gaming/NFT tokens
+    if mint == "DUSTawucrTsGU8hcqRdHDCbuYhCPADMLM2VcCb8VnFnQ" { return "DUST".to_string(); }
+    if mint == "FLAMEp11rqGUSBv7LvfpnXqS6rPLqgVfT2LTNyGEk34" { return "FLAME".to_string(); }
+    if mint == "PRSMNsEPqhGVCH1TtWiJqPjJyh2cKrLostPZTNy1o5x" { return "PRISM".to_string(); }
+    if mint == "AURYydfxJib1ZkTir1Jn1J9ECYUtjb6rKQVmtYaixWPP" { return "AURY".to_string(); }
+    if mint == "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx" { return "ATLAS".to_string(); }
+    if mint == "poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk" { return "POLIS".to_string(); }
+
+    // Bridged tokens
+    if mint == "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E" { return "BTC".to_string(); }
+    if mint == "2FPyTwcZLUg1MDrwsyoP4D6s1tM7hAkHYRjkNb5w6Pxk" { return "ETH".to_string(); }
+    if mint == "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs" { return "wETH".to_string(); }
+
+    // AI tokens
+    if mint == "GRIFCchW6BTqgGq7XshRXhQPn6hbTcJL47S4HF4zopv" { return "GRIFFAIN".to_string(); }
+    if mint == "ai16z" { return "AI16Z".to_string(); }
+    if mint == "ENL66P8y8d8LXkM5JFZaJTDZ8jh4YKdJjTNDmoon39ye" { return "ZEREBRO".to_string(); }
+
+    // If not found, return truncated address
+    if mint.len() > 10 {
+        format!("{}…", &mint[..6])
+    } else {
+        mint.to_string()
+    }
+}
+
+/// Detect cross-token swaps (DEX trades)
+/// Identifies correlated token movements within short time windows
+fn detect_cross_token_swaps(transfers: &[TransferRecord]) -> Vec<CrossTokenSwap> {
+    use std::collections::HashMap;
+
+    let mut swaps = Vec::new();
+
+    // Group transfers by wallet
+    let mut wallet_transfers: HashMap<&str, Vec<&TransferRecord>> = HashMap::new();
+    for tx in transfers {
+        wallet_transfers.entry(&tx.from).or_default().push(tx);
+        wallet_transfers.entry(&tx.to).or_default().push(tx);
+    }
+
+    // For each wallet, look for paired opposite-direction transfers
+    for (wallet, txs) in &wallet_transfers {
+        if txs.len() < 2 { continue; }
+
+        // Separate inflows and outflows for this wallet
+        let inflows: Vec<_> = txs.iter().filter(|tx| tx.to == *wallet).collect();
+        let outflows: Vec<_> = txs.iter().filter(|tx| tx.from == *wallet).collect();
+
+        // Look for correlated in/out pairs (different tokens, close in time)
+        for inflow in &inflows {
+            for outflow in &outflows {
+                // Skip if same token
+                if inflow.token == outflow.token { continue; }
+
+                // Parse timestamps (Option<String>)
+                let in_ts = inflow.timestamp.as_ref()
+                    .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+                    .map(|dt| dt.timestamp())
+                    .unwrap_or(0);
+                let out_ts = outflow.timestamp.as_ref()
+                    .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+                    .map(|dt| dt.timestamp())
+                    .unwrap_or(0);
+
+                let time_diff = (in_ts - out_ts).abs();
+
+                // Check if transfers are close in time (likely a swap)
+                // Different confidence thresholds based on timing
+                let (is_swap, confidence, swap_type) = if time_diff == 0 {
+                    // Same block = atomic swap
+                    (true, 0.95, "Atomic Swap")
+                } else if time_diff <= 5 {
+                    // Within 5 seconds = very likely DEX
+                    (true, 0.90, "DEX Swap")
+                } else if time_diff <= 30 {
+                    // Within 30 seconds = probable swap
+                    (true, 0.75, "DEX Swap")
+                } else if time_diff <= 120 {
+                    // Within 2 minutes = possible multi-hop or delayed
+                    (true, 0.50, "Multi-hop")
+                } else if time_diff <= 300 {
+                    // Within 5 minutes = weak correlation
+                    (true, 0.30, "Probable Swap")
+                } else {
+                    (false, 0.0, "")
+                };
+
+                if is_swap && confidence >= 0.30 {
+                    // Get the earlier timestamp as the swap time
+                    let timestamp = if in_ts < out_ts {
+                        inflow.timestamp.clone().unwrap_or_default()
+                    } else {
+                        outflow.timestamp.clone().unwrap_or_default()
+                    };
+
+                    // Try to identify DEX from counterparties
+                    // Inflow comes FROM somewhere (likely DEX pool), outflow goes TO somewhere
+                    let dex_name = identify_dex(&inflow.from)
+                        .or_else(|| identify_dex(&outflow.to))
+                        .map(|s| s.to_string());
+
+                    swaps.push(CrossTokenSwap {
+                        wallet: wallet.to_string(),
+                        token_in: inflow.token.clone(),
+                        token_out: outflow.token.clone(),
+                        amount_in: inflow.amount,
+                        amount_out: outflow.amount,
+                        timestamp,
+                        time_diff_secs: time_diff,
+                        confidence,
+                        swap_type: swap_type.to_string(),
+                        dex_name,
+                    });
+                }
+            }
+        }
+    }
+
+    // Deduplicate - keep highest confidence for each wallet/token_in/token_out combo
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut deduped = Vec::new();
+
+    // Sort by confidence descending
+    swaps.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+
+    for swap in swaps {
+        let key = format!("{}:{}:{}", swap.wallet, swap.token_in, swap.token_out);
+        if !seen.contains_key(&key) {
+            seen.insert(key, deduped.len());
+            deduped.push(swap);
+        }
+    }
+
+    // Sort by timestamp
+    deduped.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+    deduped
+}
+
 /// Entity cluster representing a group of wallets likely controlled by same entity
 #[derive(Debug, Clone)]
 struct EntityCluster {
@@ -3502,41 +4016,81 @@ fn generate_auto_report(
         }
     }
 
-    // Cross-token correlation (basic swap detection)
-    let mut token_timing: HashMap<&str, Vec<(&str, f64, &str)>> = HashMap::new(); // token -> [(wallet, amount, direction)]
-    for tx in transfers {
-        token_timing.entry(&tx.token).or_default().push((&tx.from, tx.amount, &tx.direction));
-    }
+    // Cross-token correlation (improved swap detection)
+    let cross_token_swaps = detect_cross_token_swaps(transfers);
+    let high_conf_swaps: Vec<_> = cross_token_swaps.iter().filter(|s| s.confidence >= 0.50).collect();
 
-    // Find potential swaps (SOL out, other token in at similar amounts)
-    let mut potential_swaps: Vec<(String, String, f64, f64)> = Vec::new();
-    if let Some(sol_txs) = token_timing.get("SOL") {
-        for (other_token, other_txs) in &token_timing {
-            if *other_token == "SOL" { continue; }
-            for (sol_wallet, sol_amount, sol_dir) in sol_txs {
-                if *sol_dir != "OUT" { continue; }
-                for (other_wallet, other_amount, other_dir) in other_txs {
-                    if *other_dir == "IN" && sol_wallet == other_wallet {
-                        potential_swaps.push((
-                            truncate_address(sol_wallet),
-                            other_token.to_string(),
-                            *sol_amount,
-                            *other_amount,
-                        ));
-                    }
-                }
-            }
+    if !high_conf_swaps.is_empty() {
+        report.push_str("## Cross-Token Swaps (DEX Trades)\n\n");
+        report.push_str("🔄 Correlated token movements indicating DEX swaps or token exchanges.\n\n");
+
+        // Summary counts
+        let atomic_count = high_conf_swaps.iter().filter(|s| s.swap_type == "Atomic Swap").count();
+        let dex_count = high_conf_swaps.iter().filter(|s| s.swap_type == "DEX Swap").count();
+        let multihop_count = high_conf_swaps.iter().filter(|s| s.swap_type == "Multi-hop").count();
+
+        report.push_str(&format!("**Summary:** {} swaps detected ({} atomic, {} DEX, {} multi-hop)\n\n",
+            high_conf_swaps.len(), atomic_count, dex_count, multihop_count));
+
+        report.push_str("| Type | DEX | Wallet | Token In | Token Out | Confidence | Timing |\n");
+        report.push_str("|------|-----|--------|----------|-----------|------------|--------|\n");
+
+        for swap in high_conf_swaps.iter().take(15) {
+            let type_icon = match swap.swap_type.as_str() {
+                "Atomic Swap" => "⚡",
+                "DEX Swap" => "🔄",
+                "Multi-hop" => "🔀",
+                _ => "💱",
+            };
+
+            // Format amounts
+            let fmt_in = if swap.amount_in >= 1_000_000.0 {
+                format!("{:.2}M", swap.amount_in / 1_000_000.0)
+            } else if swap.amount_in >= 1_000.0 {
+                format!("{:.2}K", swap.amount_in / 1_000.0)
+            } else {
+                format!("{:.4}", swap.amount_in)
+            };
+
+            let fmt_out = if swap.amount_out >= 1_000_000.0 {
+                format!("{:.2}M", swap.amount_out / 1_000_000.0)
+            } else if swap.amount_out >= 1_000.0 {
+                format!("{:.2}K", swap.amount_out / 1_000.0)
+            } else {
+                format!("{:.4}", swap.amount_out)
+            };
+
+            // Resolve token symbols for readability
+            let token_in = resolve_token_symbol(&swap.token_in);
+            let token_out = resolve_token_symbol(&swap.token_out);
+
+            // Time string
+            let time_str = if swap.time_diff_secs == 0 {
+                "same block".to_string()
+            } else if swap.time_diff_secs <= 60 {
+                format!("{}s", swap.time_diff_secs)
+            } else {
+                format!("{:.1}m", swap.time_diff_secs as f64 / 60.0)
+            };
+
+            // DEX name (or unknown)
+            let dex_name = swap.dex_name.as_ref().map(|s| s.as_str()).unwrap_or("-");
+
+            report.push_str(&format!("| {} {} | {} | `{}` | {} {} | {} {} | {:.0}% | {} |\n",
+                type_icon,
+                swap.swap_type,
+                dex_name,
+                truncate_address(&swap.wallet),
+                fmt_in,
+                token_in,
+                fmt_out,
+                token_out,
+                swap.confidence * 100.0,
+                time_str));
         }
-    }
 
-    if !potential_swaps.is_empty() {
-        report.push_str("## Potential DEX Swaps\n\n");
-        report.push_str("| Wallet | SOL Out | Token In | Amount |\n");
-        report.push_str("|--------|---------|----------|--------|\n");
-        for (wallet_addr, token, sol_out, token_in) in potential_swaps.iter().take(10) {
-            let token_display = if token.len() > 10 { format!("{}…", &token[..9]) } else { token.clone() };
-            report.push_str(&format!("| {} | {:.4} | {} | {:.2} |\n",
-                wallet_addr, sol_out, token_display, token_in));
+        if high_conf_swaps.len() > 15 {
+            report.push_str(&format!("\n*...and {} more swaps detected*\n", high_conf_swaps.len() - 15));
         }
         report.push_str("\n");
     }
@@ -3607,6 +4161,663 @@ pub async fn run_research_demo() -> Result<()> {
 
     crate::tui_log!("\n📝 Demo Report Preview:");
     crate::tui_log!("{}", &report[..report.len().min(1000)]);
+
+    Ok(())
+}
+
+/// Handle research with web streaming (browser-based terminal at localhost:13370)
+async fn handle_web_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
+    use crate::utils::web_terminal::WebTerminal;
+    use colored::Colorize;
+    use std::io::Write;
+
+    // Parse port
+    let port: u16 = matches
+        .get_one::<String>("web-port")
+        .map(|s| s.parse().unwrap_or(13370))
+        .unwrap_or(13370);
+
+    // Start web server
+    println!();
+    println!(
+        "{}",
+        "╔══════════════════════════════════════════════════════════════════════════════╗"
+            .bright_cyan()
+    );
+    println!(
+        "{} {} {}",
+        "║".bright_cyan(),
+        "🌐 OSVM WEB TERMINAL STREAMING".bold().white(),
+        "                                     ║".bright_cyan()
+    );
+    println!(
+        "{}",
+        "╚══════════════════════════════════════════════════════════════════════════════╝"
+            .bright_cyan()
+    );
+    println!();
+
+    let (_server_handle, sender, _input_rx) = WebTerminal::start(port).await?;
+
+    println!(
+        "{} {}",
+        "🚀 Web terminal started at:".bright_green(),
+        format!("http://localhost:{}", port).bright_cyan().underline()
+    );
+    println!(
+        "{}",
+        "   Open this URL in your browser to view the research output".dimmed()
+    );
+    println!();
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            .cyan()
+    );
+    println!();
+
+    // Send startup message to web
+    sender.println("\x1b[38;5;33m╔══════════════════════════════════════════════════════════════╗\x1b[0m");
+    sender.println("\x1b[38;5;33m║\x1b[0m  \x1b[1;36m🔍 OSVM RESEARCH SESSION STARTED\x1b[0m                              \x1b[38;5;33m║\x1b[0m");
+    sender.println(&format!(
+        "\x1b[38;5;33m║\x1b[0m  \x1b[90mTarget: {}\x1b[0m{}",
+        &wallet[..wallet.len().min(44)],
+        if wallet.len() > 44 { "..." } else { "" }.to_string() + &" ".repeat(56 - wallet.len().min(44)) + "\x1b[38;5;33m║\x1b[0m"
+    ));
+    sender.println("\x1b[38;5;33m╚══════════════════════════════════════════════════════════════╝\x1b[0m");
+    sender.println("");
+
+    // Create a writer that outputs to both stdout and web stream
+    let web_sender = sender.clone();
+
+    // Check if --auto mode
+    let use_auto = matches.get_flag("auto");
+
+    if use_auto {
+        // Run auto research with web streaming
+        run_auto_research_with_web(matches, wallet, web_sender).await
+    } else {
+        // Run regular agent research with web streaming
+        run_agent_research_with_web(matches, wallet, web_sender).await
+    }
+}
+
+/// Run autonomous research with output streamed to web terminal
+async fn run_auto_research_with_web(
+    matches: &ArgMatches,
+    wallet: &str,
+    sender: crate::utils::web_terminal::WebTerminalSender,
+) -> Result<()> {
+    use colored::Colorize;
+    use std::collections::{HashSet, VecDeque};
+    use std::io::Write;
+    use crate::services::opensvm_api::OpenSvmApi;
+
+    // Macro to print to both console and web
+    macro_rules! web_println {
+        ($sender:expr, $($arg:tt)*) => {{
+            let msg = format!($($arg)*);
+            println!("{}", msg);
+            // Strip ANSI for web? No, xterm.js handles ANSI codes!
+            $sender.println(&msg);
+        }};
+    }
+
+    // Parse options
+    let depth: usize = matches
+        .get_one::<String>("depth")
+        .map(|s| s.parse().unwrap_or(5))
+        .unwrap_or(5);
+    let max_wallets: usize = matches
+        .get_one::<String>("max-wallets")
+        .map(|s| s.parse().unwrap_or(50))
+        .unwrap_or(50);
+    let query = matches.get_one::<String>("query").map(|s| s.as_str());
+    let output_path = matches.get_one::<String>("output").cloned();
+    let save_report = matches.get_flag("save") || output_path.is_some();
+    let token_filter = matches.get_one::<String>("token").cloned();
+
+    // Print banner
+    web_println!(sender, "");
+    web_println!(
+        sender,
+        "{}",
+        "╔══════════════════════════════════════════════════════════════════════════════╗"
+            .cyan()
+    );
+    web_println!(
+        sender,
+        "{} {} {}",
+        "║".cyan(),
+        "🔍 OSVM AUTONOMOUS INVESTIGATION".bold().white(),
+        "                                      ║".cyan()
+    );
+    web_println!(
+        sender,
+        "{}",
+        "╚══════════════════════════════════════════════════════════════════════════════╝"
+            .cyan()
+    );
+    web_println!(sender, "");
+
+    // Print configuration
+    web_println!(
+        sender,
+        "{} {}",
+        "Target Wallet:".bright_yellow(),
+        wallet.white()
+    );
+    web_println!(
+        sender,
+        "{} {}",
+        "Max Depth:".bright_yellow(),
+        depth.to_string().white()
+    );
+    web_println!(
+        sender,
+        "{} {}",
+        "Max Wallets:".bright_yellow(),
+        max_wallets.to_string().white()
+    );
+    if let Some(q) = query {
+        web_println!(
+            sender,
+            "{} {}",
+            "Query/Hypothesis:".bright_yellow(),
+            q.bright_magenta()
+        );
+    }
+    if let Some(ref token) = token_filter {
+        web_println!(
+            sender,
+            "{} {} {}",
+            "Token Filter:".bright_yellow(),
+            token.bright_cyan(),
+            "(tracing specific token flow)".dimmed()
+        );
+    }
+    web_println!(sender, "");
+
+    // Initialize MCP pool with dynamic scaling
+    web_println!(
+        sender,
+        "{}",
+        "⏳ Initializing MCP pool (dynamic scaling)...".dimmed()
+    );
+    std::io::stdout().flush()?;
+
+    let pool_config = McpPoolConfig {
+        min_instances: 5,
+        max_instances: 6,
+        idle_timeout: std::time::Duration::from_secs(30),
+        debug: false,
+    };
+
+    let mcp_pool = match McpPool::with_config(pool_config).await {
+        Ok(pool) => Arc::new(pool),
+        Err(e) => {
+            web_println!(sender, "{} {}", "❌ MCP pool failed:".red(), e);
+            return Err(e);
+        }
+    };
+
+    // Get tool count from first instance
+    let tool_count = {
+        let guard = mcp_pool.acquire().await?;
+        let svc = guard.service().await;
+        let servers: Vec<String> = svc
+            .list_servers()
+            .iter()
+            .map(|(id, _)| (*id).clone())
+            .collect();
+        let mut count = 0;
+        for server_id in &servers {
+            if let Ok(tools) = svc.list_tools(server_id).await {
+                count += tools.len();
+            }
+        }
+        count
+    };
+    web_println!(
+        sender,
+        "{} {} tools, pool ready (1-6 instances)",
+        "✅ MCP pool:".green(),
+        tool_count
+    );
+
+    // Initialize OpenSVM API for address labels
+    let opensvm_api = OpenSvmApi::new();
+
+    // BFS exploration state
+    let mut discovered: HashSet<String> = HashSet::new();
+    let mut fetched_count: usize = 0;
+    let mut queue: VecDeque<(String, usize)> = VecDeque::new();
+    let mut all_transfers: Vec<TransferRecord> = Vec::new();
+    let mut findings: Vec<Finding> = Vec::new();
+
+    queue.push_back((wallet.to_string(), 0));
+    discovered.insert(wallet.to_string());
+
+    web_println!(sender, "");
+    web_println!(
+        sender,
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            .cyan()
+    );
+    web_println!(
+        sender,
+        "{}",
+        "📡 PHASE 1: BFS GRAPH EXPLORATION".bold().cyan()
+    );
+    web_println!(
+        sender,
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            .cyan()
+    );
+    web_println!(sender, "");
+
+    let start_time = std::time::Instant::now();
+    const BATCH_SIZE: usize = 5;
+
+    // BFS exploration loop with parallel batching via MCP pool
+    while !queue.is_empty() && fetched_count < max_wallets {
+        // Pop up to BATCH_SIZE wallets from queue
+        let mut batch: Vec<(String, usize)> = Vec::with_capacity(BATCH_SIZE);
+        while batch.len() < BATCH_SIZE && !queue.is_empty() {
+            if let Some((w, d)) = queue.pop_front() {
+                if d < depth {
+                    batch.push((w, d));
+                }
+            }
+        }
+
+        if batch.is_empty() {
+            break;
+        }
+
+        // Show pool scaling status
+        let stats = mcp_pool.stats().await;
+        web_println!(
+            sender,
+            "  {} batch of {}: {} [pool: {}]",
+            "⚡ Fetching".bright_blue(),
+            batch.len(),
+            batch
+                .iter()
+                .map(|(w, _)| truncate_address(w))
+                .collect::<Vec<_>>()
+                .join(", "),
+            stats
+        );
+
+        // Fetch wallets in parallel via MCP pool
+        let fetch_futures: Vec<_> = batch
+            .iter()
+            .map(|(wallet, _)| {
+                let pool = Arc::clone(&mcp_pool);
+                let w = wallet.clone();
+                async move {
+                    let result = fetch_wallet_via_pool(&pool, &w).await;
+                    (w, result)
+                }
+            })
+            .collect();
+
+        let results = futures::future::join_all(fetch_futures).await;
+
+        // Process results
+        for ((wallet_addr, current_depth), (_, result)) in
+            batch.into_iter().zip(results.into_iter())
+        {
+            fetched_count += 1;
+
+            // Get annotation (quick lookup, cached)
+            let annotation = opensvm_api
+                .get_annotation(&wallet_addr)
+                .await
+                .ok()
+                .flatten();
+            let label = annotation.as_ref().map(|a| a.label.as_str()).unwrap_or("");
+            let risk = annotation.as_ref().and_then(|a| a.risk.as_deref());
+
+            let wallet_display = if label.is_empty() {
+                truncate_address(&wallet_addr)
+            } else {
+                format!("{} ({})", label, truncate_address(&wallet_addr))
+            };
+
+            let risk_indicator = match risk {
+                Some("malicious") => "🚨",
+                Some("suspicious") => "⚠️",
+                Some("safe") => "✅",
+                _ => "❓",
+            };
+
+            match result {
+                Ok(txs) => {
+                    let new_wallets = txs
+                        .iter()
+                        .filter(|tx| {
+                            let connected =
+                                if tx.direction == "IN" { &tx.from } else { &tx.to };
+                            !discovered.contains(connected) && current_depth + 1 < depth
+                        })
+                        .count();
+
+                    web_println!(
+                        sender,
+                        "  {} [{}/{}] {} {} d={} → {} txs, +{} wallets",
+                        "→".bright_blue(),
+                        fetched_count,
+                        max_wallets,
+                        wallet_display.green(),
+                        risk_indicator,
+                        current_depth,
+                        txs.len().to_string().bright_white(),
+                        new_wallets.to_string().cyan()
+                    );
+
+                    // Process transfers
+                    for tx in &txs {
+                        // Apply token filter if specified
+                        if let Some(ref filter) = token_filter {
+                            let filter_lower = filter.to_lowercase();
+                            let token_lower = tx.token.to_lowercase();
+                            if !token_lower.contains(&filter_lower)
+                                && !tx.token.contains(filter)
+                            {
+                                continue;
+                            }
+                        }
+
+                        all_transfers.push(tx.clone());
+
+                        // Queue connected wallets
+                        let connected =
+                            if tx.direction == "IN" { &tx.from } else { &tx.to };
+                        if !discovered.contains(connected) && current_depth + 1 < depth {
+                            discovered.insert(connected.clone());
+                            queue.push_back((connected.clone(), current_depth + 1));
+                        }
+                    }
+                }
+                Err(e) => {
+                    web_println!(
+                        sender,
+                        "  {} [{}/{}] {} {}",
+                        "✗".red(),
+                        fetched_count,
+                        max_wallets,
+                        wallet_display.red(),
+                        format!("({})", e).dimmed()
+                    );
+                }
+            }
+        }
+    }
+
+    let elapsed = start_time.elapsed();
+    web_println!(sender, "");
+    web_println!(
+        sender,
+        "{} Explored {} wallets in {:.2}s ({} transfers found)",
+        "✅".green(),
+        fetched_count,
+        elapsed.as_secs_f64(),
+        all_transfers.len()
+    );
+
+    // Generate summary
+    web_println!(sender, "");
+    web_println!(
+        sender,
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            .cyan()
+    );
+    web_println!(sender, "{}", "📊 INVESTIGATION SUMMARY".bold().cyan());
+    web_println!(
+        sender,
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            .cyan()
+    );
+    web_println!(sender, "");
+    web_println!(
+        sender,
+        "  {} {}",
+        "Wallets explored:".bright_yellow(),
+        fetched_count.to_string().white()
+    );
+    web_println!(
+        sender,
+        "  {} {}",
+        "Total transfers:".bright_yellow(),
+        all_transfers.len().to_string().white()
+    );
+    web_println!(
+        sender,
+        "  {} {}",
+        "Unique wallets discovered:".bright_yellow(),
+        discovered.len().to_string().white()
+    );
+    web_println!(
+        sender,
+        "  {} {:.2}s",
+        "Time elapsed:".bright_yellow(),
+        elapsed.as_secs_f64()
+    );
+    web_println!(sender, "");
+
+    // Save report if requested
+    if save_report {
+        let report_path = output_path.unwrap_or_else(|| {
+            let reports_dir = dirs::home_dir()
+                .map(|h| h.join(".osvm").join("reports"))
+                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+            let _ = std::fs::create_dir_all(&reports_dir);
+            reports_dir
+                .join(format!(
+                    "research_{}_{}.txt",
+                    &wallet[..wallet.len().min(8)],
+                    chrono::Local::now().format("%Y%m%d_%H%M%S")
+                ))
+                .to_string_lossy()
+                .to_string()
+        });
+
+        let mut report = String::new();
+        report.push_str(&format!("OSVM Research Report\n"));
+        report.push_str(&format!("Target: {}\n", wallet));
+        report.push_str(&format!("Date: {}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+        report.push_str(&format!("Wallets explored: {}\n", fetched_count));
+        report.push_str(&format!("Transfers found: {}\n\n", all_transfers.len()));
+
+        for tx in &all_transfers {
+            report.push_str(&format!(
+                "{} {} -> {} : {} {}\n",
+                tx.timestamp.as_deref().unwrap_or("unknown"), tx.from, tx.to, tx.amount, tx.token
+            ));
+        }
+
+        if let Err(e) = std::fs::write(&report_path, &report) {
+            web_println!(sender, "{} {}", "❌ Failed to save report:".red(), e);
+        } else {
+            web_println!(
+                sender,
+                "{} {}",
+                "📄 Report saved to:".green(),
+                report_path.bright_cyan()
+            );
+        }
+    }
+
+    web_println!(sender, "");
+    web_println!(sender, "{}", "✅ Investigation complete!".green().bold());
+    web_println!(
+        sender,
+        "{}",
+        "(Web terminal will remain active for viewing)".dimmed()
+    );
+
+    // Keep server running so user can view results
+    // Wait for Ctrl+C
+    println!();
+    println!(
+        "{}",
+        "Press Ctrl+C to stop the web server and exit...".dimmed()
+    );
+    tokio::signal::ctrl_c().await?;
+
+    Ok(())
+}
+
+/// Run agent research with output streamed to web terminal
+async fn run_agent_research_with_web(
+    matches: &ArgMatches,
+    wallet: &str,
+    sender: crate::utils::web_terminal::WebTerminalSender,
+) -> Result<()> {
+    use colored::Colorize;
+
+    // Macro to print to both console and web
+    macro_rules! web_println {
+        ($sender:expr, $($arg:tt)*) => {{
+            let msg = format!($($arg)*);
+            println!("{}", msg);
+            $sender.println(&msg);
+        }};
+    }
+
+    web_println!(
+        sender,
+        "{}",
+        "🚀 Starting Intelligent Wallet Research...".bold().cyan()
+    );
+    web_println!(sender, "{} {}", "Target:".bright_yellow(), wallet.white());
+    web_println!(sender, "");
+
+    // Initialize services
+    let ai_service = Arc::new(Mutex::new(AiService::new()));
+
+    web_println!(
+        sender,
+        "{}",
+        "🔧 Initializing OVSM with MCP tools...".dimmed()
+    );
+
+    let mut registry = {
+        use crate::utils::rpc_bridge::create_rpc_registry;
+        create_rpc_registry()
+    };
+
+    // Load MCP service
+    let mut mcp_service = McpService::new_with_debug(false);
+    let _ = mcp_service.load_config();
+    let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+
+    // Discover and register MCP tools
+    {
+        let mut svc = mcp_arc.lock().await;
+        let servers: Vec<String> = svc
+            .list_servers()
+            .iter()
+            .map(|(id, _)| (*id).clone())
+            .collect();
+
+        for server_id in servers {
+            if svc.initialize_server(&server_id).await.is_err() {
+                continue;
+            }
+
+            if let Ok(tools) = svc.list_tools(&server_id).await {
+                drop(svc);
+                for tool in tools {
+                    registry.register(McpBridgeTool::new(&tool.name, Arc::clone(&mcp_arc)));
+                }
+                svc = mcp_arc.lock().await;
+            }
+        }
+    }
+
+    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(registry, false, false)));
+    web_println!(sender, "{}", "✅ OVSM initialized".green());
+
+    // Create research agent
+    let agent = ResearchAgent::new(
+        ai_service,
+        ovsm_service,
+        Arc::clone(&mcp_arc),
+        wallet.to_string(),
+    );
+
+    web_println!(sender, "");
+    web_println!(
+        sender,
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            .cyan()
+    );
+    web_println!(
+        sender,
+        "{}",
+        "🔍 RUNNING INVESTIGATION...".bold().cyan()
+    );
+    web_println!(
+        sender,
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            .cyan()
+    );
+    web_println!(sender, "");
+
+    // Run investigation
+    match agent.investigate().await {
+        Ok(report) => {
+            web_println!(sender, "");
+            web_println!(
+                sender,
+                "{}",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    .cyan()
+            );
+            web_println!(sender, "{}", "📊 INVESTIGATION REPORT".bold().cyan());
+            web_println!(
+                sender,
+                "{}",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    .cyan()
+            );
+            web_println!(sender, "");
+
+            // Print report lines
+            for line in report.lines() {
+                web_println!(sender, "{}", line);
+            }
+
+            web_println!(sender, "");
+            web_println!(sender, "{}", "✅ Investigation complete!".green().bold());
+        }
+        Err(e) => {
+            web_println!(sender, "{} {}", "❌ Investigation failed:".red(), e);
+        }
+    }
+
+    web_println!(
+        sender,
+        "{}",
+        "(Web terminal will remain active for viewing)".dimmed()
+    );
+
+    // Keep server running
+    println!();
+    println!(
+        "{}",
+        "Press Ctrl+C to stop the web server and exit...".dimmed()
+    );
+    tokio::signal::ctrl_c().await?;
 
     Ok(())
 }

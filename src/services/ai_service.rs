@@ -2643,6 +2643,147 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
             }
         }
     }
+
+    /// Generate an ASCII flow chart diagram using AI
+    ///
+    /// This method sends wallet flow data to the AI and asks it to generate
+    /// a professional ASCII diagram showing the fund flows.
+    ///
+    /// # Arguments
+    /// * `target_wallet` - The main wallet being analyzed
+    /// * `inflows` - List of (address, token, amount) tuples for incoming flows
+    /// * `outflows` - List of (address, token, amount) tuples for outgoing flows
+    /// * `entity_clusters` - Optional entity clustering information
+    /// * `swaps` - Optional detected swap information
+    ///
+    /// # Returns
+    /// A String containing the AI-generated ASCII diagram
+    pub async fn generate_ascii_flow_chart(
+        &self,
+        target_wallet: &str,
+        inflows: &[(String, String, f64)],
+        outflows: &[(String, String, f64)],
+        entity_clusters: Option<&[(String, Vec<String>, f64)]>, // (name, wallets, confidence)
+        swaps: Option<&[(String, String, f64, f64)]>, // (token_in, token_out, amount_in, amount_out)
+    ) -> Result<String> {
+        // Build the data summary for AI
+        let mut data_summary = String::new();
+
+        // Target wallet
+        data_summary.push_str(&format!("TARGET WALLET: {}\n\n", target_wallet));
+
+        // Inflows
+        data_summary.push_str("INFLOWS:\n");
+        for (addr, token, amount) in inflows.iter().take(10) {
+            data_summary.push_str(&format!("  {} → TARGET: {} {}\n", addr, amount, token));
+        }
+        if inflows.len() > 10 {
+            data_summary.push_str(&format!("  ... and {} more inflows\n", inflows.len() - 10));
+        }
+
+        // Outflows
+        data_summary.push_str("\nOUTFLOWS:\n");
+        for (addr, token, amount) in outflows.iter().take(10) {
+            data_summary.push_str(&format!("  TARGET → {}: {} {}\n", addr, amount, token));
+        }
+        if outflows.len() > 10 {
+            data_summary.push_str(&format!("  ... and {} more outflows\n", outflows.len() - 10));
+        }
+
+        // Entity clusters if provided
+        if let Some(clusters) = entity_clusters {
+            if !clusters.is_empty() {
+                data_summary.push_str("\nENTITY CLUSTERS:\n");
+                for (name, wallets, confidence) in clusters.iter().take(3) {
+                    data_summary.push_str(&format!(
+                        "  {} ({:.0}% confidence): {} wallets linked\n",
+                        name,
+                        confidence * 100.0,
+                        wallets.len()
+                    ));
+                }
+            }
+        }
+
+        // Swaps if provided
+        if let Some(swap_list) = swaps {
+            if !swap_list.is_empty() {
+                data_summary.push_str("\nDEX SWAPS:\n");
+                for (token_in, token_out, amt_in, amt_out) in swap_list.iter().take(5) {
+                    data_summary.push_str(&format!(
+                        "  {} {} → {} {}\n",
+                        amt_in, token_in, amt_out, token_out
+                    ));
+                }
+            }
+        }
+
+        // System prompt for ASCII diagram generation
+        let system_prompt = r#"You are an expert at creating professional ASCII flow diagrams for blockchain wallet analysis.
+
+Create a visually appealing ASCII diagram showing fund flows using Unicode box-drawing characters (┌ ┐ └ ┘ ─ │ ├ ┤ ┬ ┴ ┼ ═ ║ ╔ ╗ ╚ ╝ ► ◄ ▲ ▼).
+
+Rules:
+1. Use proper box-drawing characters for clean lines
+2. Show the TARGET wallet as a central box
+3. Inflows should come from the LEFT
+4. Outflows should go to the RIGHT
+5. Use arrows (►, ◄, ▶, ◀, →, ←) to show direction
+6. Include token symbols and amounts on flow lines
+7. If entity clusters exist, group related wallets visually
+8. Keep width under 100 characters
+9. Abbreviate wallet addresses (first 6...last 4 chars)
+10. Return ONLY the ASCII diagram, no explanations
+
+Example structure:
+┌──────────────────┐                              ┌──────────────────┐
+│  Source Wallet   │──── 100 USDC ───►┌────────┐  │   Dest Wallet    │
+└──────────────────┘                  │ TARGET │──►└──────────────────┘
+┌──────────────────┐                  │ WALLET │  ┌──────────────────┐
+│  Source Wallet 2 │──── 50 SOL ────►│        │──►│   Dest Wallet 2  │
+└──────────────────┘                  └────────┘  └──────────────────┘"#;
+
+        let user_prompt = format!(
+            "Create an ASCII flow diagram for this wallet analysis data:\n\n{}",
+            data_summary
+        );
+
+        // Use the OpenAI endpoint with higher token limit for diagram generation
+        let response = self
+            .query_openai_with_system(&user_prompt, Some(system_prompt), false)
+            .await;
+
+        match response {
+            Ok(diagram) => {
+                // Clean up the response - remove markdown code blocks if present
+                let cleaned = diagram
+                    .trim()
+                    .trim_start_matches("```")
+                    .trim_start_matches("ascii")
+                    .trim_start_matches("text")
+                    .trim_start_matches('\n')
+                    .trim_end_matches("```")
+                    .trim()
+                    .to_string();
+                Ok(cleaned)
+            }
+            Err(e) => {
+                // Return a simple fallback diagram on error
+                Ok(format!(
+                    "┌──────────────────────────────────────────────────────────────┐\n\
+                     │  AI Diagram Generation Unavailable                          │\n\
+                     │  Error: {:<53} │\n\
+                     │                                                              │\n\
+                     │  {} inflows → [{}] → {} outflows       │\n\
+                     └──────────────────────────────────────────────────────────────┘",
+                    &e.to_string()[..e.to_string().len().min(53)],
+                    inflows.len(),
+                    &target_wallet[..target_wallet.len().min(12)],
+                    outflows.len()
+                ))
+            }
+        }
+    }
 }
 
 /// Enhanced tool plan structure for better planning

@@ -460,6 +460,191 @@ pub async fn handle_ovsm_command(
             println!("\n⚠️  AI script generation coming soon!");
             println!("This feature will use the AI service to generate OVSM scripts.");
         }
+        Some(("idl", idl_matches)) => {
+            let script = idl_matches.get_one::<String>("script").expect("required");
+            let output = idl_matches.get_one::<String>("output");
+            let name_override = idl_matches.get_one::<String>("name");
+            let address = idl_matches.get_one::<String>("address");
+            let compact = idl_matches.get_flag("compact");
+
+            use ovsm::compiler::anchor_idl::IdlGenerator;
+
+            println!("📋 Generating Anchor IDL from: {}", script);
+
+            let source = std::fs::read_to_string(script)?;
+            let mut generator = IdlGenerator::new(&source);
+
+            if let Some(name) = name_override {
+                generator = generator.with_name(name);
+            }
+
+            match generator.generate() {
+                Ok(mut idl) => {
+                    if let Some(addr) = address {
+                        idl.metadata = Some(ovsm::compiler::anchor_idl::IdlMetadata {
+                            address: Some(addr.clone()),
+                        });
+                    }
+
+                    let json_result = if compact {
+                        serde_json::to_string(&idl)
+                    } else {
+                        serde_json::to_string_pretty(&idl)
+                    };
+
+                    match json_result {
+                        Ok(json) => {
+                            if let Some(out_path) = output {
+                                std::fs::write(out_path, &json)?;
+                                println!("✅ IDL written to: {}", out_path);
+                            } else {
+                                println!("{}", json);
+                            }
+
+                            println!("\n📊 IDL Summary:");
+                            println!("   Program: {}", idl.name);
+                            println!("   Version: {}", idl.version);
+                            println!("   Instructions: {}", idl.instructions.len());
+                            println!("   Accounts: {}", idl.accounts.len());
+                            println!("   Types: {}", idl.types.len());
+                            println!("   Errors: {}", idl.errors.len());
+
+                            if !idl.instructions.is_empty() {
+                                println!("\n📝 Instructions:");
+                                for instr in &idl.instructions {
+                                    let disc = instr.discriminator.as_ref()
+                                        .map(|d| d.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(","))
+                                        .unwrap_or_default();
+                                    println!("   [{}] {} ({} accounts, {} args)",
+                                        disc, instr.name, instr.accounts.len(), instr.args.len());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("❌ JSON serialization failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("❌ IDL generation failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(("validate-instruction", val_matches)) => {
+            let idl_path = val_matches.get_one::<String>("idl").expect("required");
+            let data_parts: Vec<&String> = val_matches.get_many::<String>("data")
+                .expect("required")
+                .collect();
+            let verbose = val_matches.get_flag("verbose");
+
+            use ovsm::compiler::anchor_idl::{AnchorIdl, IdlType};
+
+            println!("🔍 Validating instruction data against IDL: {}", idl_path);
+
+            let idl_content = std::fs::read_to_string(idl_path)?;
+            let idl: AnchorIdl = serde_json::from_str(&idl_content).map_err(|e| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid IDL JSON: {}", e))
+            })?;
+
+            // Parse hex instruction data
+            let combined_hex: String = data_parts.iter()
+                .map(|s| s.trim_start_matches("0x").trim_start_matches("0X"))
+                .collect::<Vec<_>>()
+                .join("");
+
+            let instruction_data: Vec<u8> = (0..combined_hex.len())
+                .step_by(2)
+                .filter_map(|i| {
+                    if i + 2 <= combined_hex.len() {
+                        u8::from_str_radix(&combined_hex[i..i + 2], 16).ok()
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if instruction_data.is_empty() {
+                eprintln!("❌ No valid hex data provided");
+                std::process::exit(1);
+            }
+
+            if verbose {
+                println!("\n📊 Raw Data:");
+                println!("   Length: {} bytes", instruction_data.len());
+                println!("   Hex: {}", instruction_data.iter()
+                    .map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+            }
+
+            // Find matching instruction by discriminator
+            let discriminator_byte = instruction_data[0];
+            let matching = idl.instructions.iter().find(|instr| {
+                instr.discriminator.as_ref()
+                    .map(|d| !d.is_empty() && d[0] == discriminator_byte)
+                    .unwrap_or(false)
+            });
+
+            match matching {
+                Some(instr) => {
+                    println!("\n✅ Matched Instruction: {}", instr.name);
+                    let disc_str = instr.discriminator.as_ref()
+                        .map(|d| d.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "))
+                        .unwrap_or_default();
+                    println!("   Discriminator: [{}]", disc_str);
+
+                    if !instr.accounts.is_empty() {
+                        println!("\n📋 Required Accounts:");
+                        for (i, acc) in instr.accounts.iter().enumerate() {
+                            let mut flags = Vec::new();
+                            if acc.is_signer { flags.push("signer"); }
+                            if acc.is_mut { flags.push("writable"); }
+                            let flag_str = if flags.is_empty() { String::new() }
+                                else { format!(" [{}]", flags.join(", ")) };
+                            println!("   {}. {}{}", i, acc.name, flag_str);
+                        }
+                    }
+
+                    if !instr.args.is_empty() {
+                        println!("\n🔢 Arguments:");
+                        let mut offset = 1; // Skip discriminator
+                        for arg in &instr.args {
+                            let (value_str, bytes) = decode_idl_type(&arg.ty, &instruction_data, offset, verbose);
+                            let type_name = format_idl_type(&arg.ty);
+                            println!("   {} ({}): {}", arg.name, type_name, value_str);
+                            if verbose && bytes > 0 {
+                                let end = (offset + bytes).min(instruction_data.len());
+                                let hex: String = instruction_data[offset..end].iter()
+                                    .map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                                println!("      Bytes [{}..{}]: {}", offset, end, hex);
+                            }
+                            offset += bytes;
+                        }
+
+                        if offset < instruction_data.len() {
+                            println!("\n⚠️  {} extra bytes after arguments", instruction_data.len() - offset);
+                        } else if offset > instruction_data.len() {
+                            println!("\n❌ Insufficient data: expected {} bytes, got {}", offset, instruction_data.len());
+                        }
+                    } else if instruction_data.len() > 1 {
+                        println!("\n⚠️  No arguments defined but {} extra bytes present", instruction_data.len() - 1);
+                    } else {
+                        println!("\n   (no arguments)");
+                    }
+                }
+                None => {
+                    eprintln!("\n❌ No instruction found with discriminator: 0x{:02x}", discriminator_byte);
+                    eprintln!("\n📝 Available discriminators:");
+                    for instr in &idl.instructions {
+                        if let Some(disc) = &instr.discriminator {
+                            let disc_str = disc.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                            eprintln!("   [{}] = {}", disc_str, instr.name);
+                        }
+                    }
+                    std::process::exit(1);
+                }
+            }
+        }
         Some(("library", lib_matches)) => match lib_matches.subcommand() {
             Some(("list", _)) => {
                 println!("📚 OVSM Script Library");
@@ -1009,4 +1194,101 @@ fn count_leading_closes(line: &str) -> usize {
         }
     }
     count
+}
+
+// ============================================================================
+// IDL Type Decoding for validate-instruction
+// ============================================================================
+
+use ovsm::compiler::anchor_idl::IdlType;
+
+/// Decode an IDL type from instruction data bytes
+/// Returns (decoded_value_string, bytes_consumed)
+fn decode_idl_type(ty: &IdlType, data: &[u8], offset: usize, _verbose: bool) -> (String, usize) {
+    if offset >= data.len() {
+        return ("<insufficient data>".to_string(), 0);
+    }
+
+    match ty {
+        IdlType::Primitive(prim) => match prim.as_str() {
+            "u8" => (format!("{}", data[offset]), 1),
+            "i8" => (format!("{}", data[offset] as i8), 1),
+            "u16" if offset + 2 <= data.len() => {
+                let val = u16::from_le_bytes([data[offset], data[offset + 1]]);
+                (format!("{}", val), 2)
+            }
+            "u32" if offset + 4 <= data.len() => {
+                let val = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+                (format!("{}", val), 4)
+            }
+            "u64" if offset + 8 <= data.len() => {
+                let val = u64::from_le_bytes([
+                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                    data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
+                ]);
+                (format!("{}", val), 8)
+            }
+            "i64" if offset + 8 <= data.len() => {
+                let val = i64::from_le_bytes([
+                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                    data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
+                ]);
+                (format!("{}", val), 8)
+            }
+            "bool" => ((if data[offset] != 0 { "true" } else { "false" }).to_string(), 1),
+            "publicKey" | "pubkey" if offset + 32 <= data.len() => {
+                let encoded = bs58::encode(&data[offset..offset + 32]).into_string();
+                (encoded, 32)
+            }
+            "string" if offset + 4 <= data.len() => {
+                let len = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]) as usize;
+                if offset + 4 + len <= data.len() {
+                    match std::str::from_utf8(&data[offset + 4..offset + 4 + len]) {
+                        Ok(s) => (format!("\"{}\"", s), 4 + len),
+                        Err(_) => ("<invalid utf8>".to_string(), 4 + len),
+                    }
+                } else {
+                    (format!("<string len {} exceeds data>", len), 4)
+                }
+            }
+            other => (format!("<{}>", other), type_size(other)),
+        },
+        IdlType::Array { array: _ } => ("<array>".to_string(), 0),
+        IdlType::Vec { vec: _ } if offset + 4 <= data.len() => {
+            let len = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+            (format!("<vec of {} elements>", len), 4)
+        }
+        IdlType::Option { option } if offset < data.len() => {
+            if data[offset] == 0 {
+                ("None".to_string(), 1)
+            } else {
+                let (inner_val, inner_size) = decode_idl_type(option, data, offset + 1, _verbose);
+                (format!("Some({})", inner_val), 1 + inner_size)
+            }
+        }
+        IdlType::Defined { defined } => (format!("<defined:{}>", defined), 0),
+        _ => ("<?>".to_string(), 0),
+    }
+}
+
+fn type_size(prim: &str) -> usize {
+    match prim {
+        "u8" | "i8" | "bool" => 1,
+        "u16" | "i16" => 2,
+        "u32" | "i32" => 4,
+        "u64" | "i64" => 8,
+        "u128" | "i128" => 16,
+        "publicKey" | "pubkey" => 32,
+        _ => 0,
+    }
+}
+
+fn format_idl_type(ty: &IdlType) -> String {
+    match ty {
+        IdlType::Primitive(p) => p.clone(),
+        IdlType::Array { array: _ } => "array".to_string(),
+        IdlType::Vec { vec } => format!("Vec<{}>", format_idl_type(vec)),
+        IdlType::Option { option } => format!("Option<{}>", format_idl_type(option)),
+        IdlType::Defined { defined } => defined.clone(),
+    }
 }

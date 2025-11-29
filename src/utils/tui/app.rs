@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -2621,6 +2621,253 @@ impl OsvmApp {
         terminal.show_cursor()?;
 
         result
+    }
+
+    /// Run TUI with web streaming enabled - streams to browser AND local terminal
+    /// Also accepts keyboard input from web browsers
+    pub fn run_with_web<F>(
+        &mut self,
+        web_sender: crate::utils::web_terminal::WebTerminalSender,
+        mut web_input: crate::utils::web_terminal::WebInputReceiver,
+        on_tick: F,
+    ) -> Result<()>
+    where
+        F: Fn(&mut Self) + Send + 'static,
+    {
+        use crate::utils::web_tui_backend::DualBackend;
+
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen)?;
+
+        // Get terminal size for web backend
+        let (width, height) = crossterm::terminal::size().unwrap_or((120, 40));
+
+        // Create dual backend that writes to both terminal and web
+        let backend = DualBackend::new(stdout, web_sender, width, height);
+        let mut terminal = Terminal::new(backend)?;
+
+        // Run event loop with web input support
+        let result = self.event_loop_with_web_input(&mut terminal, &mut web_input, on_tick);
+
+        disable_raw_mode()?;
+        execute!(
+            terminal.backend_mut(),
+            LeaveAlternateScreen
+        )?;
+        terminal.show_cursor()?;
+
+        result
+    }
+
+    /// Event loop that also accepts input from web browsers
+    fn event_loop_with_web_input<B, F>(
+        &mut self,
+        terminal: &mut Terminal<B>,
+        web_input: &mut crate::utils::web_terminal::WebInputReceiver,
+        on_tick: F,
+    ) -> Result<()>
+    where
+        B: ratatui::backend::Backend + std::io::Write,
+        F: Fn(&mut Self),
+    {
+        loop {
+            terminal.draw(|f| self.ui(f))?;
+
+            // Check for web input first (non-blocking)
+            while let Some(key) = web_input.try_recv() {
+                self.handle_key_event(key);
+                if self.should_quit {
+                    return Ok(());
+                }
+            }
+
+            // Then check for local terminal input
+            if event::poll(Duration::from_millis(50))? {
+                if let Event::Key(key) = event::read()? {
+                    self.handle_key_event(key);
+                }
+            } else {
+                on_tick(self);
+            }
+
+            if self.should_quit {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Handle a key event (from either local terminal or web)
+    /// This is a simplified handler for web input - supports essential navigation keys
+    fn handle_key_event(&mut self, key: KeyEvent) {
+        match key.code {
+            // Quit/Escape - handle different contexts
+            KeyCode::Char('q') | KeyCode::Esc => {
+                if self.global_search_active {
+                    self.global_search_active = false;
+                } else if self.show_help {
+                    self.show_help = false;
+                    self.help_scroll = 0;
+                } else if self.active_tab == TabIndex::Graph {
+                    if let Ok(mut graph) = self.wallet_graph.lock() {
+                        if graph.search_active {
+                            graph.search_active = false;
+                            graph.search_query.clear();
+                            graph.search_results.clear();
+                        } else {
+                            self.should_quit = true;
+                        }
+                    } else {
+                        self.should_quit = true;
+                    }
+                } else if self.chat_input_active {
+                    self.chat_input.clear();
+                    self.chat_input_active = false;
+                } else {
+                    self.should_quit = true;
+                }
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.should_quit = true;
+            }
+            // Tab navigation
+            KeyCode::Tab => {
+                self.next_tab();
+            }
+            KeyCode::BackTab => {
+                // Reverse tab - inline prev_tab logic
+                self.active_tab = match self.active_tab {
+                    TabIndex::Chat => TabIndex::Federation,
+                    TabIndex::Dashboard => TabIndex::Chat,
+                    TabIndex::Graph => TabIndex::Dashboard,
+                    TabIndex::Logs => TabIndex::Graph,
+                    TabIndex::SearchResults => TabIndex::Logs,
+                    TabIndex::BBS => TabIndex::SearchResults,
+                    TabIndex::Federation => TabIndex::BBS,
+                };
+            }
+            // Help toggle
+            KeyCode::Char('?') => {
+                self.show_help = !self.show_help;
+            }
+            // Scrolling - handle tab-specific scroll states
+            KeyCode::Up | KeyCode::Char('k') if !self.chat_input_active => {
+                match self.active_tab {
+                    TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_sub(1); }
+                    TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_sub(1); }
+                    TabIndex::Graph => {
+                        // Pan up in graph view
+                        if let Ok(mut graph) = self.wallet_graph.lock() {
+                            let (cx, cy, zoom) = graph.viewport;
+                            graph.viewport = (cx, cy + 5.0 / zoom, zoom);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') if !self.chat_input_active => {
+                match self.active_tab {
+                    TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_add(1); }
+                    TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_add(1); }
+                    TabIndex::Graph => {
+                        // Pan down in graph view
+                        if let Ok(mut graph) = self.wallet_graph.lock() {
+                            let (cx, cy, zoom) = graph.viewport;
+                            graph.viewport = (cx, cy - 5.0 / zoom, zoom);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // Graph panning (left/right)
+            KeyCode::Left | KeyCode::Char('h') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    let (cx, cy, zoom) = graph.viewport;
+                    graph.viewport = (cx - 5.0 / zoom, cy, zoom);
+                }
+            }
+            KeyCode::Right | KeyCode::Char('l') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    let (cx, cy, zoom) = graph.viewport;
+                    graph.viewport = (cx + 5.0 / zoom, cy, zoom);
+                }
+            }
+            // Graph zoom
+            KeyCode::Char('+') | KeyCode::Char('=') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    let (cx, cy, zoom) = graph.viewport;
+                    graph.viewport = (cx, cy, (zoom * 1.2).min(10.0));
+                }
+            }
+            KeyCode::Char('-') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    let (cx, cy, zoom) = graph.viewport;
+                    graph.viewport = (cx, cy, (zoom / 1.2).max(0.1));
+                }
+            }
+            // Graph depth control
+            KeyCode::Char('[') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    if graph.current_depth > 1 {
+                        graph.current_depth -= 1;
+                    }
+                }
+            }
+            KeyCode::Char(']') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    if graph.current_depth < graph.max_depth {
+                        graph.current_depth += 1;
+                    }
+                }
+            }
+            // Graph trail toggle
+            KeyCode::Char('t') | KeyCode::Char('T') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.show_trail = !graph.show_trail;
+                }
+            }
+            // Graph reset view
+            KeyCode::Char('r') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.viewport = (0.0, 0.0, 1.0);
+                }
+            }
+            // Number keys 1-5 to select tabs
+            KeyCode::Char('1') if !self.chat_input_active => {
+                self.active_tab = TabIndex::Chat;
+            }
+            KeyCode::Char('2') if !self.chat_input_active => {
+                self.active_tab = TabIndex::Dashboard;
+            }
+            KeyCode::Char('3') if !self.chat_input_active => {
+                self.active_tab = TabIndex::Graph;
+            }
+            KeyCode::Char('4') if !self.chat_input_active => {
+                self.active_tab = TabIndex::Logs;
+            }
+            KeyCode::Char('5') if !self.chat_input_active => {
+                self.active_tab = TabIndex::SearchResults;
+            }
+            // Chat input handling
+            KeyCode::Char('i') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
+                self.chat_input_active = true;
+            }
+            KeyCode::Char(c) if self.chat_input_active => {
+                if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.chat_input.push(c);
+                }
+            }
+            KeyCode::Backspace if self.chat_input_active => {
+                self.chat_input.pop();
+            }
+            KeyCode::Enter if self.chat_input_active => {
+                if !self.chat_input.trim().is_empty() {
+                    self.send_chat_message();
+                }
+                self.chat_input_active = false;
+            }
+            _ => {}
+        }
     }
 
     fn event_loop<B, F>(&mut self, terminal: &mut Terminal<B>, on_tick: F) -> Result<()>

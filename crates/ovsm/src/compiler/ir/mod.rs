@@ -38,14 +38,34 @@
 //! | Events | `emit-event`, `emit-log` |
 //! | Sysvars | `clock-unix-timestamp`, `clock-epoch`, `rent-minimum-balance` |
 //! | Errors | `anchor-error`, `require`, `msg` |
+//!
+//! ## Memory Model (NEW)
+//!
+//! The `memory_model` module provides formal pointer provenance tracking and
+//! compile-time memory safety validation:
+//!
+//! - [`TypedReg`] - Register with type information (value vs pointer)
+//! - [`PointerType`] - Detailed pointer metadata (region, bounds, alignment)
+//! - [`TypeEnv`] - Type environment for tracking register types during codegen
+//! - [`MemoryError`] - Compile-time memory access errors
+//!
+//! This enables catching bugs like misaligned loads, out-of-bounds access,
+//! and type confusion at compile time rather than runtime.
 
 mod types;
 mod instruction;
 mod program;
 mod generator;
+pub mod memory_model;
 
 // Re-export all public types
 pub use types::{PrimitiveType, FieldType, StructField, StructDef};
 pub use instruction::{IrReg, IrInstruction};
 pub use program::{BasicBlock, IrProgram};
 pub use generator::IrGenerator;
+
+// Re-export memory model types
+pub use memory_model::{
+    TypedReg, RegType, PointerType, MemoryRegion, Alignment, MemoryError, TypeEnv,
+    account_layout, heap_layout,
+};

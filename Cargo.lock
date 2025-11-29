@@ -4743,6 +4743,7 @@ dependencies = [
  "arboard",
  "askama",
  "assert_cmd",
+ "async-stream",
  "async-trait",
  "axum",
  "base64 0.22.1",

@@ -51,6 +51,7 @@ cursive-multiplex = "0.7.0"
 anyhow = "1.0.99"
 fs2 = "0.4"  # File locking to prevent session recording race conditions
 async-trait = "0.1.83"
+async-stream = "0.3"
 futures = "0.3.31"
 rand = "0.9.2"
 colored = "3.0.0"
@@ -134,6 +135,7 @@ proptest = "1.5.0"
 default = []
 remote-wallet = ["solana-remote-wallet"]
 incomplete_tests = []  # Feature flag for incomplete/experimental test files
+mdns = []  # Optional mDNS peer discovery for BBS federation
 
 [[bin]]
 name = "osvm-bootstrap"

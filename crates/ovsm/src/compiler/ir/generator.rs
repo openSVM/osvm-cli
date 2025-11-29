@@ -41,8 +41,16 @@ use crate::{Statement, Expression, BinaryOp, UnaryOp};
 use super::types::{PrimitiveType, FieldType, StructField, StructDef};
 use super::instruction::{IrReg, IrInstruction};
 use super::program::{BasicBlock, IrProgram};
+use super::memory_model::{TypeEnv, RegType, PointerType, TypedReg, MemoryRegion, account_layout};
 
 /// IR Generator - transforms typed AST to IR
+///
+/// Now includes a `TypeEnv` for tracking register types during code generation.
+/// This enables compile-time detection of:
+/// - Misaligned memory access
+/// - Out-of-bounds field access
+/// - Type confusion (pointer vs value)
+/// - Write to read-only memory
 pub struct IrGenerator {
     /// Next available register
     next_reg: u32,
@@ -56,10 +64,30 @@ pub struct IrGenerator {
     instructions: Vec<IrInstruction>,
     /// Struct definitions (compile-time metadata for field layout)
     struct_defs: HashMap<String, StructDef>,
+    /// Type environment for pointer provenance tracking (NEW)
+    type_env: TypeEnv,
 }
 
 impl IrGenerator {
     pub fn new() -> Self {
+        let mut type_env = TypeEnv::new();
+
+        // Pre-allocate registers for Solana builtins (R1=accounts, R2=instruction-data per ABI)
+        let accounts_reg = IrReg::new(1);
+        let instr_data_reg = IrReg::new(2);
+
+        // Register the types for the built-in registers
+        type_env.set_type(accounts_reg, RegType::Pointer(PointerType {
+            region: MemoryRegion::InputBuffer,
+            bounds: None, // Size unknown until we parse header
+            struct_type: None,
+            offset: 0,
+            alignment: super::memory_model::Alignment::Byte8,
+            writable: false, // Accounts metadata region
+        }));
+
+        type_env.set_type(instr_data_reg, RegType::Pointer(PointerType::instruction_data(None)));
+
         let mut gen = Self {
             next_reg: 0,
             label_counter: 0,
@@ -67,10 +95,9 @@ impl IrGenerator {
             strings: Vec::new(),
             instructions: Vec::new(),
             struct_defs: HashMap::new(),
+            type_env,
         };
-        // Pre-allocate registers for Solana builtins (R1=accounts, R2=instruction-data per ABI)
-        let accounts_reg = IrReg::new(1);
-        let instr_data_reg = IrReg::new(2);
+
         gen.var_map.insert("accounts".to_string(), accounts_reg);
         gen.var_map.insert("instruction-data".to_string(), instr_data_reg);
         gen.next_reg = 3; // Start allocating from R3
@@ -1140,6 +1167,10 @@ impl IrGenerator {
                     // Return pointer to instruction data
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Add(dst, accounts_ptr, instr_data_offset));
+
+                    // Register as instruction data pointer
+                    self.type_env.set_type(dst, RegType::Pointer(PointerType::instruction_data(None)));
+
                     return Ok(Some(dst));
                 }
 
@@ -1147,6 +1178,12 @@ impl IrGenerator {
                 // Uses precomputed account offset table for dynamic account sizes
                 // Data starts at offset 88 from account start (after data_len at 80)
                 if name == "account-data-ptr" && args.len() == 1 {
+                    // Try to extract constant account index for type tracking
+                    let account_idx: Option<u8> = match &args[0].value {
+                        Expression::IntLiteral(n) => Some(*n as u8),
+                        _ => None,
+                    };
+
                     let idx_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-data-ptr index has no result"))?;
 
@@ -1159,13 +1196,30 @@ impl IrGenerator {
                     // Data starts at offset 88 from account start
                     // = 1+1+1+1+4+32+32+8+8 = 88
                     let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 88));
+                    self.emit(IrInstruction::ConstI64(data_offset, account_layout::DATA));
 
                     let total_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(total_offset, account_base, data_offset));
 
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Add(dst, accounts_ptr, total_offset));
+
+                    // Register pointer type for this result
+                    if let Some(idx) = account_idx {
+                        let ptr_type = PointerType::account_data(idx, None, None);
+                        self.type_env.set_type(dst, RegType::Pointer(ptr_type));
+                    } else {
+                        // Dynamic index - use Unknown region since we can't track statically
+                        self.type_env.set_type(dst, RegType::Pointer(PointerType {
+                            region: MemoryRegion::AccountData(255), // Marker for "unknown account"
+                            bounds: None,
+                            struct_type: None,
+                            offset: 0,
+                            alignment: super::memory_model::Alignment::Byte1,
+                            writable: true,
+                        }));
+                    }
+
                     return Ok(Some(dst));
                 }
 
@@ -1202,6 +1256,12 @@ impl IrGenerator {
                 // Uses precomputed account offset table for dynamic account sizes
                 // Pubkey is at offset 8 from account start
                 if name == "account-pubkey" && args.len() == 1 {
+                    // Try to extract constant account index for type tracking
+                    let account_idx: Option<u8> = match &args[0].value {
+                        Expression::IntLiteral(n) => Some(*n as u8),
+                        _ => None,
+                    };
+
                     let idx_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-pubkey index has no result"))?;
 
@@ -1213,7 +1273,7 @@ impl IrGenerator {
 
                     // Pubkey offset within account = 8 (after flags and padding)
                     let pubkey_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(pubkey_offset, 8));
+                    self.emit(IrInstruction::ConstI64(pubkey_offset, account_layout::PUBKEY));
 
                     let total_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(total_offset, account_base, pubkey_offset));
@@ -1221,6 +1281,14 @@ impl IrGenerator {
                     // Return pointer to the pubkey (not the value itself - it's 32 bytes)
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Add(dst, accounts_ptr, total_offset));
+
+                    // Register as pointer to account pubkey field (32 bytes, read-only)
+                    if let Some(idx) = account_idx {
+                        self.type_env.set_type(dst, RegType::Pointer(
+                            PointerType::account_field(idx, account_layout::PUBKEY, account_layout::PUBKEY_LEN)
+                        ));
+                    }
+
                     return Ok(Some(dst));
                 }
 
@@ -1228,6 +1296,12 @@ impl IrGenerator {
                 // Uses precomputed account offset table for dynamic account sizes
                 // Owner is at offset 40 from account start (after pubkey)
                 if name == "account-owner" && args.len() == 1 {
+                    // Try to extract constant account index for type tracking
+                    let account_idx: Option<u8> = match &args[0].value {
+                        Expression::IntLiteral(n) => Some(*n as u8),
+                        _ => None,
+                    };
+
                     let idx_reg = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-owner index has no result"))?;
 
@@ -1239,7 +1313,7 @@ impl IrGenerator {
 
                     // Owner offset within account = 40 (8 + 32)
                     let owner_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(owner_offset, 40));
+                    self.emit(IrInstruction::ConstI64(owner_offset, account_layout::OWNER));
 
                     let total_offset = self.alloc_reg();
                     self.emit(IrInstruction::Add(total_offset, account_base, owner_offset));
@@ -1247,6 +1321,14 @@ impl IrGenerator {
                     // Return pointer to the owner pubkey (32 bytes)
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Add(dst, accounts_ptr, total_offset));
+
+                    // Register as pointer to account owner field (32 bytes, read-only)
+                    if let Some(idx) = account_idx {
+                        self.type_env.set_type(dst, RegType::Pointer(
+                            PointerType::account_field(idx, account_layout::OWNER, account_layout::OWNER_LEN)
+                        ));
+                    }
+
                     return Ok(Some(dst));
                 }
 
@@ -1272,18 +1354,9 @@ impl IrGenerator {
                     let addr = self.alloc_reg();
                     self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
 
-                    // Load 1 byte (will be 0 or 1)
-                    // Note: sBPF Load always loads 8 bytes, but is_signer is just 1 byte
-                    // The value will be in the low byte, need to mask
-                    let raw = self.alloc_reg();
-                    self.emit(IrInstruction::Load(raw, addr, 0));
-
-                    // Mask to get just the lowest byte
-                    let mask = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(mask, 0xFF));
-
+                    // Load 1 byte (will be 0 or 1) using proper single-byte load
                     let dst = self.alloc_reg();
-                    self.emit(IrInstruction::And(dst, raw, mask));
+                    self.emit(IrInstruction::Load1(dst, addr, 0));
                     return Ok(Some(dst));
                 }
 
@@ -1309,14 +1382,9 @@ impl IrGenerator {
                     let addr = self.alloc_reg();
                     self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
 
-                    let raw = self.alloc_reg();
-                    self.emit(IrInstruction::Load(raw, addr, 0));
-
-                    let mask = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(mask, 0xFF));
-
+                    // Load 1 byte (will be 0 or 1) using proper single-byte load
                     let dst = self.alloc_reg();
-                    self.emit(IrInstruction::And(dst, raw, mask));
+                    self.emit(IrInstruction::Load1(dst, addr, 0));
                     return Ok(Some(dst));
                 }
 
@@ -1940,20 +2008,8 @@ impl IrGenerator {
                         .ok_or_else(|| Error::runtime("cpi-invoke data-len has no result"))?;
 
                     // Get program pubkey pointer (account pubkey at program_idx)
-                    // Account structure in input: 8 bytes header, then each account at 10336 byte intervals
-                    // Pubkey is at offset 8 from each account start
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let program_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(program_offset, program_idx, account_size));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    self.emit(IrInstruction::Add(program_offset, program_offset, eight)); // skip header
-                    self.emit(IrInstruction::Add(program_offset, program_offset, eight)); // pubkey at +8
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1)); // R1 at entry is input ptr
-                    let program_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(program_pk_ptr, input_ptr, program_offset));
+                    // Uses dynamic offset table for variable-size accounts
+                    let program_pk_ptr = self.emit_get_account_pubkey_ptr(program_idx);
 
                     // Process accounts array if provided (arg 3)
                     let mut num_accounts = 0usize;
@@ -1975,14 +2031,8 @@ impl IrGenerator {
                                         let is_signer = self.generate_expr(&triple[2])?
                                             .ok_or_else(|| Error::runtime("cpi-invoke is_signer has no result"))?;
 
-                                        // Calculate pubkey pointer for this account
-                                        let acct_offset = self.alloc_reg();
-                                        self.emit(IrInstruction::Mul(acct_offset, acct_idx, account_size));
-                                        let temp = self.alloc_reg();
-                                        self.emit(IrInstruction::Add(temp, acct_offset, eight)); // skip header
-                                        self.emit(IrInstruction::Add(temp, temp, eight)); // pubkey at +8
-                                        let acct_pk_ptr = self.alloc_reg();
-                                        self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                                        // Calculate pubkey pointer for this account using dynamic offset table
+                                        let acct_pk_ptr = self.emit_get_account_pubkey_ptr(acct_idx);
 
                                         // Write SolAccountMeta at heap_base + i*16
                                         // SolAccountMeta: pubkey* (8), is_writable (1), is_signer (1), padding (6)
@@ -2032,13 +2082,17 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24)); // data
                     self.emit(IrInstruction::Store(instr_ptr, data_len, 32)); // data_len
 
-                    // Get account_infos pointer from input (R1 + 8 points to first account)
+                    // Get account_infos pointer from accounts (accounts_ptr + 8 points to first account)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for cpi-invoke"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
 
-                    // Get number of accounts from input header (at R1 + 0)
+                    // Get number of accounts from input header (at accounts_ptr + 0)
                     let num_input_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_input_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_input_accounts, accounts_ptr, 0));
 
                     // Invoke: sol_invoke_signed_c(instr*, account_infos*, num_accounts, seeds*, num_seeds)
                     let zero = self.alloc_reg();
@@ -2094,21 +2148,8 @@ impl IrGenerator {
                     let data_len = self.generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("cpi-invoke-signed data-len has no result"))?;
 
-                    // Account size constant
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-
-                    // Get program pubkey pointer
-                    let program_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(program_offset, program_idx, account_size));
-                    self.emit(IrInstruction::Add(program_offset, program_offset, eight)); // skip header
-                    self.emit(IrInstruction::Add(program_offset, program_offset, eight)); // pubkey at +8
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1)); // R1 at entry is input ptr
-                    let program_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(program_pk_ptr, input_ptr, program_offset));
+                    // Get program pubkey pointer using dynamic offset table
+                    let program_pk_ptr = self.emit_get_account_pubkey_ptr(program_idx);
 
                     // Process accounts array (arg 3)
                     let mut num_accounts = 0usize;
@@ -2125,14 +2166,8 @@ impl IrGenerator {
                                     let is_signer = self.generate_expr(&triple[2])?
                                         .ok_or_else(|| Error::runtime("cpi-invoke-signed is_signer has no result"))?;
 
-                                    // Calculate pubkey pointer
-                                    let acct_offset = self.alloc_reg();
-                                    self.emit(IrInstruction::Mul(acct_offset, acct_idx, account_size));
-                                    let temp = self.alloc_reg();
-                                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
-                                    self.emit(IrInstruction::Add(temp, temp, eight));
-                                    let acct_pk_ptr = self.alloc_reg();
-                                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                                    // Calculate pubkey pointer using dynamic offset table
+                                    let acct_pk_ptr = self.emit_get_account_pubkey_ptr(acct_idx);
 
                                     // Write SolAccountMeta at heap_base + i*16
                                     let meta_offset = (i * 16) as i64;
@@ -2239,13 +2274,17 @@ impl IrGenerator {
                         }
                     }
 
-                    // Get account_infos pointer from input
+                    // Get account_infos pointer from accounts
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for cpi-invoke-signed"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
 
                     // Get number of accounts from input header
                     let num_input_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_input_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_input_accounts, accounts_ptr, 0));
 
                     // Invoke with signer seeds
                     let num_signers_reg = self.alloc_reg();
@@ -2320,55 +2359,24 @@ impl IrGenerator {
                     self.emit(IrInstruction::Or(combined, combined, disc_byte)); // combined = (amount << 8) | 3
                     self.emit(IrInstruction::Store(data_ptr, combined, 0));
 
-                    // Constants
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    // Get token program pubkey pointer
-                    let prog_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(prog_offset, token_prog_idx, account_size));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    let token_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, prog_offset));
+                    // Get account pubkey pointers using dynamic offset table
+                    let token_pk_ptr = self.emit_get_account_pubkey_ptr(token_prog_idx);
+                    let src_pk_ptr = self.emit_get_account_pubkey_ptr(source_idx);
+                    let dst_pk_ptr = self.emit_get_account_pubkey_ptr(dest_idx);
+                    let auth_pk_ptr = self.emit_get_account_pubkey_ptr(authority_idx);
 
                     // Build SolAccountMeta array at heap_base (3 accounts)
                     // Account 0: Source (writable, not signer)
-                    let src_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(src_offset, source_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, src_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let src_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(src_pk_ptr, input_ptr, temp));
                     self.emit(IrInstruction::Store(heap_base, src_pk_ptr, 0)); // pubkey ptr
                     let one = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(one, 1)); // writable=1, signer=0
                     self.emit(IrInstruction::Store(heap_base, one, 8)); // flags
 
                     // Account 1: Dest (writable, not signer)
-                    let dst_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(dst_offset, dest_idx, account_size));
-                    let temp2 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp2, dst_offset, eight));
-                    self.emit(IrInstruction::Add(temp2, temp2, eight));
-                    let dst_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(dst_pk_ptr, input_ptr, temp2));
                     self.emit(IrInstruction::Store(heap_base, dst_pk_ptr, 16)); // pubkey ptr at +16
                     self.emit(IrInstruction::Store(heap_base, one, 24)); // writable=1, signer=0
 
                     // Account 2: Authority (not writable, signer)
-                    let auth_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
-                    let temp3 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
-                    self.emit(IrInstruction::Add(temp3, temp3, eight));
-                    let auth_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
                     self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32)); // pubkey ptr at +32
                     let signer_flag = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(signer_flag, 256)); // writable=0, signer=1 (1 << 8)
@@ -2390,11 +2398,15 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(nine, 9)); // Transfer instruction is 9 bytes
                     self.emit(IrInstruction::Store(instr_ptr, nine, 32)); // data_len
 
-                    // Get account_infos from input
+                    // Get account_infos from accounts
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-transfer"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
 
                     // Invoke without signer seeds (authority must be an actual signer)
                     let zero = self.alloc_reg();
@@ -2454,21 +2466,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::Or(combined, combined, disc_byte)); // combined = (amount << 8) | 3
                     self.emit(IrInstruction::Store(heap_base, combined, 0)); // Store at heap_base
 
-                    // Constants
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    // Get token program pubkey pointer
-                    let prog_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(prog_offset, token_prog_idx, account_size));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    let token_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, prog_offset));
+                    // Get account pubkey pointers using dynamic offset table
+                    let token_pk_ptr = self.emit_get_account_pubkey_ptr(token_prog_idx);
+                    let src_pk_ptr = self.emit_get_account_pubkey_ptr(source_idx);
+                    let dst_pk_ptr = self.emit_get_account_pubkey_ptr(dest_idx);
+                    let auth_pk_ptr = self.emit_get_account_pubkey_ptr(authority_idx);
 
                     // SolAccountMeta array at heap_base + 64
                     let accounts_base = self.alloc_reg();
@@ -2477,37 +2479,16 @@ impl IrGenerator {
                     self.emit(IrInstruction::Add(accounts_base, heap_base, const_64));
 
                     // Account 0: Source (writable, not signer)
-                    let src_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(src_offset, source_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, src_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let src_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(src_pk_ptr, input_ptr, temp));
                     self.emit(IrInstruction::Store(accounts_base, src_pk_ptr, 0));
                     let one = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(one, 1)); // writable=1, signer=0
                     self.emit(IrInstruction::Store(accounts_base, one, 8));
 
                     // Account 1: Dest (writable, not signer)
-                    let dst_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(dst_offset, dest_idx, account_size));
-                    let temp2 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp2, dst_offset, eight));
-                    self.emit(IrInstruction::Add(temp2, temp2, eight));
-                    let dst_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(dst_pk_ptr, input_ptr, temp2));
                     self.emit(IrInstruction::Store(accounts_base, dst_pk_ptr, 16));
                     self.emit(IrInstruction::Store(accounts_base, one, 24));
 
                     // Account 2: Authority (not writable, signer via PDA)
-                    let auth_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
-                    let temp3 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
-                    self.emit(IrInstruction::Add(temp3, temp3, eight));
-                    let auth_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
                     self.emit(IrInstruction::Store(accounts_base, auth_pk_ptr, 32));
                     let signer_flag = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(signer_flag, 256)); // writable=0, signer=1 (1 << 8)
@@ -2612,11 +2593,15 @@ impl IrGenerator {
                         }
                     }
 
-                    // Get account_infos from input
+                    // Get account_infos from accounts
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-transfer-signed"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
 
                     // Call sol_invoke_signed_c
                     let num_signers_reg = self.alloc_reg();
@@ -2672,55 +2657,24 @@ impl IrGenerator {
                     self.emit(IrInstruction::Or(combined, combined, disc));
                     self.emit(IrInstruction::Store(data_ptr, combined, 0));
 
-                    // Constants
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    // Get token program pubkey
-                    let prog_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(prog_offset, token_prog_idx, account_size));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    let token_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, prog_offset));
+                    // Get account pubkey pointers using dynamic offset table
+                    let token_pk_ptr = self.emit_get_account_pubkey_ptr(token_prog_idx);
+                    let mint_pk_ptr = self.emit_get_account_pubkey_ptr(mint_idx);
+                    let dst_pk_ptr = self.emit_get_account_pubkey_ptr(dest_idx);
+                    let auth_pk_ptr = self.emit_get_account_pubkey_ptr(authority_idx);
 
                     // Build SolAccountMeta array (3 accounts)
                     // Account 0: Mint (writable)
-                    let mint_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(mint_offset, mint_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, mint_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let mint_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(mint_pk_ptr, input_ptr, temp));
                     self.emit(IrInstruction::Store(heap_base, mint_pk_ptr, 0));
                     let one = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(one, 1));
                     self.emit(IrInstruction::Store(heap_base, one, 8));
 
                     // Account 1: Dest (writable)
-                    let dst_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(dst_offset, dest_idx, account_size));
-                    let temp2 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp2, dst_offset, eight));
-                    self.emit(IrInstruction::Add(temp2, temp2, eight));
-                    let dst_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(dst_pk_ptr, input_ptr, temp2));
                     self.emit(IrInstruction::Store(heap_base, dst_pk_ptr, 16));
                     self.emit(IrInstruction::Store(heap_base, one, 24));
 
                     // Account 2: Authority (signer)
-                    let auth_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
-                    let temp3 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
-                    self.emit(IrInstruction::Add(temp3, temp3, eight));
-                    let auth_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
                     self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
                     let signer_flag = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(signer_flag, 256));
@@ -2742,11 +2696,15 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(nine, 9));
                     self.emit(IrInstruction::Store(instr_ptr, nine, 32));
 
-                    // Invoke
+                    // Invoke - get account_infos from accounts
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-mint-to"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
                     let zero = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(zero, 0));
                     let dst = self.alloc_reg();
@@ -2798,52 +2756,23 @@ impl IrGenerator {
                     self.emit(IrInstruction::Or(combined, combined, disc));
                     self.emit(IrInstruction::Store(data_ptr, combined, 0));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let prog_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(prog_offset, token_prog_idx, account_size));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    self.emit(IrInstruction::Add(prog_offset, prog_offset, eight));
-                    let token_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, prog_offset));
+                    // Get account pubkey pointers using dynamic offset table
+                    let token_pk_ptr = self.emit_get_account_pubkey_ptr(token_prog_idx);
+                    let src_pk_ptr = self.emit_get_account_pubkey_ptr(source_idx);
+                    let mint_pk_ptr = self.emit_get_account_pubkey_ptr(mint_idx);
+                    let auth_pk_ptr = self.emit_get_account_pubkey_ptr(authority_idx);
 
                     // Account 0: Source (writable)
-                    let src_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(src_offset, source_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, src_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let src_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(src_pk_ptr, input_ptr, temp));
                     self.emit(IrInstruction::Store(heap_base, src_pk_ptr, 0));
                     let one = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(one, 1));
                     self.emit(IrInstruction::Store(heap_base, one, 8));
 
                     // Account 1: Mint (writable)
-                    let mint_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(mint_offset, mint_idx, account_size));
-                    let temp2 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp2, mint_offset, eight));
-                    self.emit(IrInstruction::Add(temp2, temp2, eight));
-                    let mint_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(mint_pk_ptr, input_ptr, temp2));
                     self.emit(IrInstruction::Store(heap_base, mint_pk_ptr, 16));
                     self.emit(IrInstruction::Store(heap_base, one, 24));
 
                     // Account 2: Authority (signer)
-                    let auth_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
-                    let temp3 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
-                    self.emit(IrInstruction::Add(temp3, temp3, eight));
-                    let auth_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
                     self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
                     let signer_flag = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(signer_flag, 256));
@@ -2864,10 +2793,15 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(nine, 9));
                     self.emit(IrInstruction::Store(instr_ptr, nine, 32));
 
+                    // Get accounts_ptr from var_map
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-burn"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
                     let zero = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(zero, 0));
                     let dst = self.alloc_reg();
@@ -2945,40 +2879,21 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(data_ptr, owner_chunk2, 40));
                     self.emit(IrInstruction::Store(data_ptr, owner_chunk3, 48));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
                     // Build SolAccountMeta array at heap_base + 128
                     let meta_base = self.alloc_reg();
                     let const_128 = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(const_128, 128));
                     self.emit(IrInstruction::Add(meta_base, heap_base, const_128));
 
-                    // Account 0: Payer (writable, signer)
-                    let payer_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(payer_offset, payer_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, payer_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let payer_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(payer_pk_ptr, input_ptr, temp));
+                    // Account 0: Payer (writable, signer) - use dynamic offset
+                    let payer_pk_ptr = self.emit_get_account_pubkey_ptr(payer_idx);
                     self.emit(IrInstruction::Store(meta_base, payer_pk_ptr, 0));
                     let writable_signer = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(writable_signer, 0x0101)); // writable + signer
                     self.emit(IrInstruction::Store(meta_base, writable_signer, 8));
 
-                    // Account 1: New account (writable, signer)
-                    let new_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(new_offset, new_acct_idx, account_size));
-                    let temp2 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp2, new_offset, eight));
-                    self.emit(IrInstruction::Add(temp2, temp2, eight));
-                    let new_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(new_pk_ptr, input_ptr, temp2));
+                    // Account 1: New account (writable, signer) - use dynamic offset
+                    let new_pk_ptr = self.emit_get_account_pubkey_ptr(new_acct_idx);
                     self.emit(IrInstruction::Store(meta_base, new_pk_ptr, 16));
                     self.emit(IrInstruction::Store(meta_base, writable_signer, 24));
 
@@ -2998,10 +2913,15 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(data_len, 52));
                     self.emit(IrInstruction::Store(instr_ptr, data_len, 32)); // data_len
 
+                    // Get account_infos from accounts (dynamic)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for system-create-account"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
@@ -3048,54 +2968,23 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(nine, 9));
                     self.emit(IrInstruction::Store1(data_ptr, nine, 0));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+                    // Get token program pubkey pointer using dynamic offset
+                    let token_pk_ptr = self.emit_get_account_pubkey_ptr(token_prog_idx);
 
-                    // Get token program pubkey pointer
-                    let token_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(token_offset, token_prog_idx, account_size));
-                    let temp0 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp0, token_offset, eight));
-                    self.emit(IrInstruction::Add(temp0, temp0, eight));
-                    let token_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, temp0));
-
-                    // Account 0: Account to close (writable)
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    let temp1 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp1, acct_offset, eight));
-                    self.emit(IrInstruction::Add(temp1, temp1, eight));
-                    let acct_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp1));
+                    // Account 0: Account to close (writable) - dynamic offset
+                    let acct_pk_ptr = self.emit_get_account_pubkey_ptr(account_idx);
                     self.emit(IrInstruction::Store(heap_base, acct_pk_ptr, 0));
                     let one = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(one, 1));
                     self.emit(IrInstruction::Store(heap_base, one, 8)); // writable
 
-                    // Account 1: Destination (writable)
-                    let dest_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(dest_offset, destination_idx, account_size));
-                    let temp2 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp2, dest_offset, eight));
-                    self.emit(IrInstruction::Add(temp2, temp2, eight));
-                    let dest_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(dest_pk_ptr, input_ptr, temp2));
+                    // Account 1: Destination (writable) - dynamic offset
+                    let dest_pk_ptr = self.emit_get_account_pubkey_ptr(destination_idx);
                     self.emit(IrInstruction::Store(heap_base, dest_pk_ptr, 16));
                     self.emit(IrInstruction::Store(heap_base, one, 24)); // writable
 
-                    // Account 2: Authority (signer)
-                    let auth_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
-                    let temp3 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
-                    self.emit(IrInstruction::Add(temp3, temp3, eight));
-                    let auth_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
+                    // Account 2: Authority (signer) - dynamic offset
+                    let auth_pk_ptr = self.emit_get_account_pubkey_ptr(authority_idx);
                     self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
                     let signer_flag = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(signer_flag, 256)); // signer
@@ -3115,10 +3004,15 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24));
                     self.emit(IrInstruction::Store(instr_ptr, one, 32)); // data_len = 1
 
+                    // Get account_infos from accounts (dynamic)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for spl-close-account"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
                     let zero = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(zero, 0));
                     let dst = self.alloc_reg();
@@ -3168,54 +3062,23 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(nine, 9));
                     self.emit(IrInstruction::Store1(data_ptr, nine, 0));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+                    // Get token program pubkey pointer using dynamic offset
+                    let token_pk_ptr = self.emit_get_account_pubkey_ptr(token_prog_idx);
 
-                    // Get token program pubkey pointer
-                    let token_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(token_offset, token_prog_idx, account_size));
-                    let temp0 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp0, token_offset, eight));
-                    self.emit(IrInstruction::Add(temp0, temp0, eight));
-                    let token_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, temp0));
-
-                    // Account 0: Account to close (writable)
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    let temp1 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp1, acct_offset, eight));
-                    self.emit(IrInstruction::Add(temp1, temp1, eight));
-                    let acct_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp1));
+                    // Account 0: Account to close (writable) - dynamic offset
+                    let acct_pk_ptr = self.emit_get_account_pubkey_ptr(account_idx);
                     self.emit(IrInstruction::Store(heap_base, acct_pk_ptr, 0));
                     let one = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(one, 1));
                     self.emit(IrInstruction::Store(heap_base, one, 8)); // writable
 
-                    // Account 1: Destination (writable)
-                    let dest_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(dest_offset, destination_idx, account_size));
-                    let temp2 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp2, dest_offset, eight));
-                    self.emit(IrInstruction::Add(temp2, temp2, eight));
-                    let dest_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(dest_pk_ptr, input_ptr, temp2));
+                    // Account 1: Destination (writable) - dynamic offset
+                    let dest_pk_ptr = self.emit_get_account_pubkey_ptr(destination_idx);
                     self.emit(IrInstruction::Store(heap_base, dest_pk_ptr, 16));
                     self.emit(IrInstruction::Store(heap_base, one, 24)); // writable
 
-                    // Account 2: Authority (signer via PDA)
-                    let auth_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
-                    let temp3 = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
-                    self.emit(IrInstruction::Add(temp3, temp3, eight));
-                    let auth_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
+                    // Account 2: Authority (signer via PDA) - dynamic offset
+                    let auth_pk_ptr = self.emit_get_account_pubkey_ptr(authority_idx);
                     self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
                     let signer_flag = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(signer_flag, 256)); // signer
@@ -3315,10 +3178,15 @@ impl IrGenerator {
                         }
                     }
 
+                    // Get account_infos from accounts (dynamic)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for spl-close-account-signed"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
 
                     let num_signers_reg = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(num_signers_reg, num_signers as i64));
@@ -3371,27 +3239,14 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store4(data_ptr, eight_disc, 0));
                     self.emit(IrInstruction::Store(data_ptr, space, 8));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
                     // Build SolAccountMeta at heap_base + 64
                     let meta_base = self.alloc_reg();
                     let const_64 = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(const_64, 64));
                     self.emit(IrInstruction::Add(meta_base, heap_base, const_64));
 
-                    // Account 0: Account to allocate (writable, signer)
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let acct_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    // Account 0: Account to allocate (writable, signer) - dynamic offset
+                    let acct_pk_ptr = self.emit_get_account_pubkey_ptr(account_idx);
                     self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
                     let writable_signer = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(writable_signer, 257)); // writable + signer
@@ -3413,10 +3268,15 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(twelve, 12));
                     self.emit(IrInstruction::Store(instr_ptr, twelve, 32)); // data_len
 
+                    // Get account_infos from accounts (dynamic)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for system-allocate"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
@@ -3471,27 +3331,14 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store4(data_ptr, eight_disc, 0));
                     self.emit(IrInstruction::Store(data_ptr, space, 8));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
                     // Build SolAccountMeta at heap_base + 64
                     let meta_base = self.alloc_reg();
                     let const_64 = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(const_64, 64));
                     self.emit(IrInstruction::Add(meta_base, heap_base, const_64));
 
-                    // Account 0: Account to allocate (writable, signer via PDA)
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let acct_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    // Account 0: Account to allocate (writable, signer via PDA) - dynamic offset
+                    let acct_pk_ptr = self.emit_get_account_pubkey_ptr(account_idx);
                     self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
                     let writable_signer = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(writable_signer, 257)); // writable + signer
@@ -3593,10 +3440,15 @@ impl IrGenerator {
                         }
                     }
 
+                    // Get account_infos from accounts (dynamic)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for system-allocate-signed"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
 
                     let num_signers_reg = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(num_signers_reg, num_signers as i64));
@@ -3663,27 +3515,14 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(data_ptr, owner_chunk2, 20));
                     self.emit(IrInstruction::Store(data_ptr, owner_chunk3, 28));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
                     // Build SolAccountMeta at heap_base + 80
                     let meta_base = self.alloc_reg();
                     let const_80 = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(const_80, 80));
                     self.emit(IrInstruction::Add(meta_base, heap_base, const_80));
 
-                    // Account to assign (writable, signer)
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let acct_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    // Account to assign (writable, signer) - dynamic offset
+                    let acct_pk_ptr = self.emit_get_account_pubkey_ptr(account_idx);
                     self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
                     let writable_signer = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(writable_signer, 257));
@@ -3705,10 +3544,15 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(thirty_six, 36));
                     self.emit(IrInstruction::Store(instr_ptr, thirty_six, 32)); // data_len
 
+                    // Get account_infos from accounts (dynamic)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for system-assign"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
@@ -3777,27 +3621,14 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(data_ptr, owner_chunk2, 20));
                     self.emit(IrInstruction::Store(data_ptr, owner_chunk3, 28));
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
                     // Build SolAccountMeta at heap_base + 80
                     let meta_base = self.alloc_reg();
                     let const_80 = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(const_80, 80));
                     self.emit(IrInstruction::Add(meta_base, heap_base, const_80));
 
-                    // Account to assign (writable, signer via PDA)
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    let temp = self.alloc_reg();
-                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
-                    self.emit(IrInstruction::Add(temp, temp, eight));
-                    let acct_pk_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    // Account to assign (writable, signer via PDA) - dynamic offset
+                    let acct_pk_ptr = self.emit_get_account_pubkey_ptr(account_idx);
                     self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
                     let writable_signer = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(writable_signer, 257));
@@ -3899,10 +3730,15 @@ impl IrGenerator {
                         }
                     }
 
+                    // Get account_infos from accounts (dynamic)
+                    let accounts_ptr = *self.var_map.get("accounts")
+                        .ok_or_else(|| Error::runtime("accounts not available for system-assign-signed"))?;
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    self.emit(IrInstruction::Add(account_infos_ptr, accounts_ptr, eight));
                     let num_accounts = self.alloc_reg();
-                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+                    self.emit(IrInstruction::Load(num_accounts, accounts_ptr, 0));
 
                     let num_signers_reg = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(num_signers_reg, num_signers as i64));
@@ -4227,25 +4063,8 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("assert-signer account-idx has no result"))?;
 
-                    // Account structure in serialized input:
-                    // Offset 1 from account start = is_signer byte
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    // Calculate offset to is_signer byte
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight)); // skip num_accounts
-                    let one = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(one, 1));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, one)); // is_signer at +1
-
-                    let is_signer_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(is_signer_ptr, input_ptr, acct_offset));
+                    // Get pointer to is_signer field (offset +1 from account base) using dynamic offset
+                    let is_signer_ptr = self.emit_get_account_field_ptr(account_idx, 1);
 
                     // Load is_signer byte
                     let is_signer = self.alloc_reg();
@@ -4274,23 +4093,8 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("assert-writable account-idx has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    // is_writable at offset 2 from account start
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-                    let two = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(two, 2));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, two));
-
-                    let is_writable_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(is_writable_ptr, input_ptr, acct_offset));
+                    // Get pointer to is_writable field (offset +2 from account base) using dynamic offset
+                    let is_writable_ptr = self.emit_get_account_field_ptr(account_idx, 2);
 
                     let is_writable = self.alloc_reg();
                     self.emit(IrInstruction::Load1(is_writable, is_writable_ptr, 0));
@@ -4315,23 +4119,8 @@ impl IrGenerator {
                     let expected_owner = self.generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("assert-owner expected-owner-ptr has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    // Owner pubkey at offset 40 from account start (after pubkey at 8)
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-                    let forty = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(forty, 40));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, forty));
-
-                    let owner_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(owner_ptr, input_ptr, acct_offset));
+                    // Get pointer to owner field (offset +40 from account base) using dynamic offset
+                    let owner_ptr = self.emit_get_account_field_ptr(account_idx, 40);
 
                     // Compare 32 bytes using sol_memcmp_
                     let thirty_two = self.alloc_reg();
@@ -4557,24 +4346,8 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-data-len account-idx has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    // Data length at offset 64 from account start
-                    let len_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(len_offset, 64));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, len_offset));
-
-                    let len_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(len_ptr, input_ptr, acct_offset));
+                    // Get pointer to data_len field (offset +80 from account base) using dynamic offset
+                    let len_ptr = self.emit_get_account_field_ptr(account_idx, 80);
 
                     let data_len = self.alloc_reg();
                     self.emit(IrInstruction::Load(data_len, len_ptr, 0));
@@ -4587,24 +4360,8 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-lamports account-idx has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    // Lamports at offset 56 from account start
-                    let lamports_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(lamports_offset, 56));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, lamports_offset));
-
-                    let lamports_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(lamports_ptr, input_ptr, acct_offset));
+                    // Get pointer to lamports field (offset +72 from account base) using dynamic offset
+                    let lamports_ptr = self.emit_get_account_field_ptr(account_idx, 72);
 
                     let lamports = self.alloc_reg();
                     self.emit(IrInstruction::Load(lamports, lamports_ptr, 0));
@@ -4751,24 +4508,9 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("clock-unix-timestamp account-idx has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    // Data starts at +72, unix_timestamp is at offset 32 in Clock struct
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72 + 32));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
-
-                    let ts_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(ts_ptr, input_ptr, acct_offset));
+                    // Data starts at +88, unix_timestamp is at offset 32 in Clock struct
+                    // Total offset = 88 + 32 = 120
+                    let ts_ptr = self.emit_get_account_field_ptr(account_idx, 88 + 32);
 
                     let timestamp = self.alloc_reg();
                     self.emit(IrInstruction::Load(timestamp, ts_ptr, 0));
@@ -4781,24 +4523,9 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("clock-epoch account-idx has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
                     // epoch is at offset 16 in Clock struct (after slot and epoch_start_timestamp)
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72 + 16));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
-
-                    let epoch_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(epoch_ptr, input_ptr, acct_offset));
+                    // Data starts at +88, so total offset = 88 + 16 = 104
+                    let epoch_ptr = self.emit_get_account_field_ptr(account_idx, 88 + 16);
 
                     let epoch = self.alloc_reg();
                     self.emit(IrInstruction::Load(epoch, epoch_ptr, 0));
@@ -4814,24 +4541,9 @@ impl IrGenerator {
                     let data_size = self.generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("rent-minimum-balance data-size has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
                     // lamports_per_byte_year at offset 0 in Rent struct
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
-
-                    let rent_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(rent_ptr, input_ptr, acct_offset));
+                    // Data starts at +88, so total offset = 88
+                    let rent_ptr = self.emit_get_account_field_ptr(account_idx, 88);
 
                     let lamports_per_byte = self.alloc_reg();
                     self.emit(IrInstruction::Load(lamports_per_byte, rent_ptr, 0));
@@ -4867,23 +4579,8 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("instruction-count account-idx has no result"))?;
 
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
-
-                    let count_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(count_ptr, input_ptr, acct_offset));
+                    // Data starts at +88, instruction count is first 2 bytes
+                    let count_ptr = self.emit_get_account_field_ptr(account_idx, 88);
 
                     // Read u16 count (2 bytes)
                     let count = self.alloc_reg();
@@ -4916,21 +4613,8 @@ impl IrGenerator {
                     let sysvar_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("assert-not-cpi sysvar-idx has no result"))?;
 
-                    // Get instruction count
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, sysvar_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72 + 2)); // Skip count, check first instruction
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
+                    // Get pointer to instruction data (skip count at offset +88, check first instruction at +90)
+                    let _data_ptr = self.emit_get_account_field_ptr(sysvar_idx, 88 + 2);
 
                     // If we're executing as part of CPI, stack depth > 1
                     // For now, use a simple check - in production you'd verify the call stack
@@ -4958,24 +4642,8 @@ impl IrGenerator {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("pda-cache-init account-idx has no result"))?;
 
-                    // Get data pointer
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
-
-                    let cache_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(cache_ptr, input_ptr, acct_offset));
+                    // Get data pointer (offset +88)
+                    let cache_ptr = self.emit_get_account_field_ptr(account_idx, 88);
 
                     // Write magic number: 0x50444143 ("PDAC")
                     let magic = self.alloc_reg();
@@ -4995,27 +4663,11 @@ impl IrGenerator {
                 if name == "pda-cache-lookup" && args.len() == 2 {
                     let account_idx = self.generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("pda-cache-lookup account-idx has no result"))?;
-                    let seed_hash = self.generate_expr(&args[1].value)?
+                    let _seed_hash = self.generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("pda-cache-lookup seed-hash has no result"))?;
 
-                    // Get cache pointer
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
-
-                    let cache_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(cache_ptr, input_ptr, acct_offset));
+                    // Get cache pointer (offset +88)
+                    let cache_ptr = self.emit_get_account_field_ptr(account_idx, 88);
 
                     // Read count
                     let count_ptr = self.alloc_reg();
@@ -5047,24 +4699,8 @@ impl IrGenerator {
                     let bump = self.generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("pda-cache-store bump has no result"))?;
 
-                    // Get cache pointer
-                    let account_size = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
-                    let eight = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(eight, 8));
-                    let input_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
-
-                    let acct_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, eight));
-
-                    let data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(data_offset, 72));
-                    self.emit(IrInstruction::Add(acct_offset, acct_offset, data_offset));
-
-                    let cache_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(cache_ptr, input_ptr, acct_offset));
+                    // Get cache pointer (offset +88)
+                    let cache_ptr = self.emit_get_account_field_ptr(account_idx, 88);
 
                     // Read current count
                     let count_ptr = self.alloc_reg();
@@ -5076,6 +4712,8 @@ impl IrGenerator {
                     self.emit(IrInstruction::Load4(count, count_ptr, 0));
 
                     // Calculate entry offset: 8 (header) + count * 9
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
                     let nine = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(nine, 9));
                     let entry_offset = self.alloc_reg();
@@ -5689,14 +5327,273 @@ impl IrGenerator {
         reg
     }
 
+    /// Allocate a register and record its type as a value
+    fn alloc_value_reg(&mut self, size: i64, signed: bool) -> TypedReg {
+        let reg = self.alloc_reg();
+        let ty = RegType::Value { size, signed };
+        self.type_env.set_type(reg, ty.clone());
+        TypedReg { reg, ty }
+    }
+
+    /// Allocate a register for an unsigned 64-bit value
+    fn alloc_u64_reg(&mut self) -> TypedReg {
+        self.alloc_value_reg(8, false)
+    }
+
+    /// Allocate a register for a boolean value
+    fn alloc_bool_reg(&mut self) -> TypedReg {
+        let reg = self.alloc_reg();
+        let ty = RegType::Bool;
+        self.type_env.set_type(reg, ty.clone());
+        TypedReg { reg, ty }
+    }
+
+    /// Allocate a register and record it as a pointer with given type info
+    fn alloc_pointer_reg(&mut self, ptr_type: PointerType) -> TypedReg {
+        let reg = self.alloc_reg();
+        let ty = RegType::Pointer(ptr_type);
+        self.type_env.set_type(reg, ty.clone());
+        TypedReg { reg, ty }
+    }
+
+    /// Allocate a register for a pointer to account data
+    fn alloc_account_data_ptr(&mut self, account_idx: u8, struct_name: Option<String>) -> TypedReg {
+        self.alloc_pointer_reg(PointerType::account_data(account_idx, struct_name, None))
+    }
+
+    /// Allocate a register for a pointer to an account field (is_signer, lamports, etc.)
+    fn alloc_account_field_ptr(&mut self, account_idx: u8, field_offset: i64, field_size: i64) -> TypedReg {
+        self.alloc_pointer_reg(PointerType::account_field(account_idx, field_offset, field_size))
+    }
+
+    /// Record that a register holds an unknown type (from external sources)
+    fn set_reg_unknown(&mut self, reg: IrReg) {
+        self.type_env.set_type(reg, RegType::Unknown);
+    }
+
+    /// Get type environment errors accumulated during codegen
+    pub fn type_errors(&self) -> &[super::memory_model::MemoryError] {
+        self.type_env.errors()
+    }
+
+    /// Check if type environment has errors
+    pub fn has_type_errors(&self) -> bool {
+        self.type_env.has_errors()
+    }
+
     fn new_label(&mut self, prefix: &str) -> String {
         let label = format!("{}_{}", prefix, self.label_counter);
         self.label_counter += 1;
         label
     }
 
+    /// Emit an IR instruction with optional type validation.
+    ///
+    /// For memory operations (Load/Store), this validates:
+    /// - The base register is a known pointer (if tracked)
+    /// - The access size matches alignment requirements
+    /// - Write operations target writable memory
+    ///
+    /// Validation errors are accumulated in type_env for later reporting.
     fn emit(&mut self, instr: IrInstruction) {
+        // Validate and track types for memory operations
+        match &instr {
+            // Track types for constant loads
+            IrInstruction::ConstI64(dst, _) => {
+                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: true });
+            }
+            IrInstruction::ConstBool(dst, _) => {
+                self.type_env.set_type(*dst, RegType::Bool);
+            }
+
+            // Validate and track Load operations
+            IrInstruction::Load(dst, base, offset) => {
+                if let Err(e) = self.type_env.validate_load(*base, *offset, 8) {
+                    self.type_env.record_error(e);
+                }
+                // Result is a value (could be pointer, but we don't know without more context)
+                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: false });
+            }
+            IrInstruction::Load4(dst, base, offset) => {
+                if let Err(e) = self.type_env.validate_load(*base, *offset, 4) {
+                    self.type_env.record_error(e);
+                }
+                self.type_env.set_type(*dst, RegType::Value { size: 4, signed: false });
+            }
+            IrInstruction::Load2(dst, base, offset) => {
+                if let Err(e) = self.type_env.validate_load(*base, *offset, 2) {
+                    self.type_env.record_error(e);
+                }
+                self.type_env.set_type(*dst, RegType::Value { size: 2, signed: false });
+            }
+            IrInstruction::Load1(dst, base, offset) => {
+                if let Err(e) = self.type_env.validate_load(*base, *offset, 1) {
+                    self.type_env.record_error(e);
+                }
+                self.type_env.set_type(*dst, RegType::Value { size: 1, signed: false });
+            }
+
+            // Validate Store operations (also check writability)
+            IrInstruction::Store(base, _src, offset) => {
+                if let Err(e) = self.type_env.validate_store(*base, *offset, 8) {
+                    self.type_env.record_error(e);
+                }
+            }
+            IrInstruction::Store4(base, _src, offset) => {
+                if let Err(e) = self.type_env.validate_store(*base, *offset, 4) {
+                    self.type_env.record_error(e);
+                }
+            }
+            IrInstruction::Store2(base, _src, offset) => {
+                if let Err(e) = self.type_env.validate_store(*base, *offset, 2) {
+                    self.type_env.record_error(e);
+                }
+            }
+            IrInstruction::Store1(base, _src, offset) => {
+                if let Err(e) = self.type_env.validate_store(*base, *offset, 1) {
+                    self.type_env.record_error(e);
+                }
+            }
+
+            // Track pointer arithmetic - propagate pointer type with offset
+            IrInstruction::Add(dst, lhs, rhs) => {
+                // If either operand is a pointer, result is a pointer (offset by value)
+                let lhs_type = self.type_env.get_type(*lhs).cloned();
+                let rhs_type = self.type_env.get_type(*rhs).cloned();
+
+                match (lhs_type, rhs_type) {
+                    (Some(RegType::Pointer(ptr)), Some(RegType::Value { .. })) => {
+                        // Pointer + value = pointer (offset unknown statically)
+                        let mut new_ptr = ptr.clone();
+                        new_ptr.bounds = None; // Lost precision due to dynamic offset
+                        self.type_env.set_type(*dst, RegType::Pointer(new_ptr));
+                    }
+                    (Some(RegType::Value { .. }), Some(RegType::Pointer(ptr))) => {
+                        // Value + pointer = pointer
+                        let mut new_ptr = ptr.clone();
+                        new_ptr.bounds = None;
+                        self.type_env.set_type(*dst, RegType::Pointer(new_ptr));
+                    }
+                    (Some(RegType::Value { size: s1, signed: sg1 }), Some(RegType::Value { size: s2, signed: sg2 })) => {
+                        // Value + value = value (max size)
+                        self.type_env.set_type(*dst, RegType::Value {
+                            size: s1.max(s2),
+                            signed: sg1 || sg2
+                        });
+                    }
+                    _ => {
+                        // Unknown operand types, result is unknown
+                        self.type_env.set_type(*dst, RegType::Unknown);
+                    }
+                }
+            }
+
+            // Multiplication always produces a value
+            IrInstruction::Mul(dst, _, _) |
+            IrInstruction::Div(dst, _, _) |
+            IrInstruction::Mod(dst, _, _) |
+            IrInstruction::Sub(dst, _, _) => {
+                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: false });
+            }
+
+            // Comparisons produce booleans
+            IrInstruction::Eq(dst, _, _) |
+            IrInstruction::Ne(dst, _, _) |
+            IrInstruction::Lt(dst, _, _) |
+            IrInstruction::Le(dst, _, _) |
+            IrInstruction::Gt(dst, _, _) |
+            IrInstruction::Ge(dst, _, _) => {
+                self.type_env.set_type(*dst, RegType::Bool);
+            }
+
+            // Logical operations on values
+            IrInstruction::And(dst, _, _) |
+            IrInstruction::Or(dst, _, _) => {
+                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: false });
+            }
+            IrInstruction::Not(dst, _) => {
+                self.type_env.set_type(*dst, RegType::Bool);
+            }
+
+            // Move preserves type
+            IrInstruction::Move(dst, src) => {
+                if let Some(ty) = self.type_env.get_type(*src).cloned() {
+                    self.type_env.set_type(*dst, ty);
+                }
+            }
+
+            // Other instructions don't affect type tracking
+            _ => {}
+        }
+
         self.instructions.push(instr);
+    }
+
+    /// Emit an instruction without type validation (for bootstrap/internal use)
+    fn emit_unchecked(&mut self, instr: IrInstruction) {
+        self.instructions.push(instr);
+    }
+
+    /// Emit runtime bounds check for memory access.
+    ///
+    /// Generates sBPF code that aborts with error code 0x05 (MemoryAccessViolation)
+    /// if the access would be out of bounds.
+    ///
+    /// Parameters:
+    /// - `offset_reg`: Register containing the offset from data start
+    /// - `access_size`: Size of the memory access in bytes
+    /// - `max_len_reg`: Register containing the maximum valid offset (data_len)
+    ///
+    /// The check is: `if (offset + access_size > max_len) abort(5);`
+    #[allow(dead_code)]
+    fn emit_runtime_bounds_check(&mut self, offset_reg: IrReg, access_size: i64, max_len_reg: IrReg) {
+        // Calculate end of access: offset + access_size
+        let access_size_reg = self.alloc_reg();
+        self.emit(IrInstruction::ConstI64(access_size_reg, access_size));
+
+        let access_end = self.alloc_reg();
+        self.emit(IrInstruction::Add(access_end, offset_reg, access_size_reg));
+
+        // Compare: access_end > max_len
+        let out_of_bounds = self.alloc_reg();
+        self.emit(IrInstruction::Gt(out_of_bounds, access_end, max_len_reg));
+
+        // If out of bounds, abort with error code 5 (MemoryAccessViolation)
+        let ok_label = self.new_label("bounds_ok");
+        self.emit(IrInstruction::JumpIfNot(out_of_bounds, ok_label.clone()));
+
+        // Abort: sol_panic_ or return error
+        // For Solana, we use syscall abort
+        let error_code = self.alloc_reg();
+        self.emit(IrInstruction::ConstI64(error_code, 0x05)); // MemoryAccessViolation
+        self.emit(IrInstruction::Syscall(None, "abort".to_string(), vec![]));
+
+        self.emit(IrInstruction::Label(ok_label));
+    }
+
+    /// Emit runtime account index bounds check.
+    ///
+    /// Generates sBPF code that aborts if the account index is >= num_accounts.
+    ///
+    /// Parameters:
+    /// - `idx_reg`: Register containing the account index
+    /// - `num_accounts_reg`: Register containing the number of accounts
+    #[allow(dead_code)]
+    fn emit_runtime_account_index_check(&mut self, idx_reg: IrReg, num_accounts_reg: IrReg) {
+        // Compare: idx >= num_accounts
+        let invalid_idx = self.alloc_reg();
+        self.emit(IrInstruction::Ge(invalid_idx, idx_reg, num_accounts_reg));
+
+        // If invalid, abort
+        let ok_label = self.new_label("idx_ok");
+        self.emit(IrInstruction::JumpIfNot(invalid_idx, ok_label.clone()));
+
+        // Abort with error code 6 (InvalidAccountIndex)
+        let error_code = self.alloc_reg();
+        self.emit(IrInstruction::ConstI64(error_code, 0x06));
+        self.emit(IrInstruction::Syscall(None, "abort".to_string(), vec![]));
+
+        self.emit(IrInstruction::Label(ok_label));
     }
 
     /// Emit code to look up an account's base offset from the precomputed table.
@@ -5734,6 +5631,34 @@ impl IrGenerator {
 
         // Look up the instruction data offset at index [num_accounts] in the table
         self.emit_get_account_offset(num_accounts)
+    }
+
+    /// Emit code to get a pointer to an account's pubkey (32 bytes).
+    /// The pubkey is at offset +8 from the account base.
+    fn emit_get_account_pubkey_ptr(&mut self, idx_reg: IrReg) -> IrReg {
+        self.emit_get_account_field_ptr(idx_reg, 8)
+    }
+
+    /// Emit code to get a pointer to any field within an account.
+    /// field_offset: offset from account base (0=dup, 1=is_signer, 2=is_writable, etc.)
+    fn emit_get_account_field_ptr(&mut self, idx_reg: IrReg, field_offset: i64) -> IrReg {
+        let accounts_ptr = *self.var_map.get("accounts")
+            .expect("accounts not available for field ptr");
+
+        // Get the base offset for this account
+        let account_offset = self.emit_get_account_offset(idx_reg);
+
+        // Add field offset
+        let field_off_reg = self.alloc_reg();
+        self.emit(IrInstruction::ConstI64(field_off_reg, field_offset));
+
+        let total_offset = self.alloc_reg();
+        self.emit(IrInstruction::Add(total_offset, account_offset, field_off_reg));
+
+        let field_ptr = self.alloc_reg();
+        self.emit(IrInstruction::Add(field_ptr, accounts_ptr, total_offset));
+
+        field_ptr
     }
 
     /// Emit code to build the account offset table at program start.

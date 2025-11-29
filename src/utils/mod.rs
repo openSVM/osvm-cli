@@ -75,6 +75,10 @@ pub mod secure_logger;
 pub mod secure_system;
 /// Streaming agent with real-time terminal output (for `osvm {query}`)
 pub mod streaming_agent;
+/// Web terminal streaming server for browser-based research viewing
+pub mod web_terminal;
+/// Web TUI backend - streams ratatui output to browser
+pub mod web_tui_backend;
 /// Modern theme system with gradients and effects
 pub mod theme;
 /// Advanced theme customization system

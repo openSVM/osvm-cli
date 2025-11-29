@@ -122,6 +122,49 @@ pub fn build_research_command() -> Command {
                 )
                 .value_name("TOKEN")
         )
+        .arg(
+            Arg::new("web")
+                .long("web")
+                .help("Stream terminal/TUI output to browser at localhost:13370")
+                .long_help(
+                    "Starts a web server at http://localhost:13370 that streams the research\n\
+                    output to your browser in real-time using xterm.js terminal emulator.\n\n\
+                    Can be combined with --tui to stream the full TUI interface to browser!\n\n\
+                    This is useful for:\n\
+                    - Sharing research sessions with others on your network\n\
+                    - Viewing the TUI on a larger screen or remote machine\n\
+                    - Recording sessions in a browser-based environment\n\n\
+                    Example: osvm research <WALLET> --web\n\
+                    Example: osvm research <WALLET> --auto --web\n\
+                    Example: osvm research <WALLET> --tui --web  (streams TUI to browser!)"
+                )
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("web-port")
+                .long("web-port")
+                .help("Port for web streaming (default: 13370)")
+                .value_name("PORT")
+                .default_value("13370")
+                .requires("web")
+        )
+        .arg(
+            Arg::new("ai-chart")
+                .long("ai-chart")
+                .help("Generate ASCII flow charts using AI for dynamic, context-aware visualizations")
+                .long_help(
+                    "Uses AI to generate professional ASCII flow diagrams based on actual wallet data.\n\
+                    Instead of hardcoded templates, the AI analyzes:\n\
+                    - Inflows and outflows with token types and amounts\n\
+                    - Entity clusters (related wallets)\n\
+                    - Cross-token swaps\n\
+                    - Flow patterns\n\n\
+                    The AI produces visually appealing Unicode box-drawing diagrams.\n\n\
+                    Example: osvm research <WALLET> --auto --ai-chart\n\
+                    Example: osvm research <WALLET> --auto --ai-chart --save"
+                )
+                .action(clap::ArgAction::SetTrue)
+        )
         .subcommand(
             Command::new("demo")
                 .about("Run a demonstration of the research agent")
