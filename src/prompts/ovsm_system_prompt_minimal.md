@@ -37,6 +37,56 @@ Tool responses MAY be wrapped: `{:content {...} :isError false}` - ALWAYS use `g
 - Each candle is 6-element array: `[open, high, low, close, volume, time_delta]`
 - Use array indices: `([] candle 0)` for open, `([] candle 3)` for close
 
+# COMMON PATTERNS (Examples)
+
+**Pattern 1: Fetch chart data**
+```ovsm
+(do
+  (define resp (chart {:mint "TOKEN_ADDRESS" :interval "1H"}))
+  (define data (if (get resp "content") (get resp "content") resp))
+  (define candles (get (get data "data") "items"))
+  candles)
+```
+
+**Pattern 2: Get account transfers with pagination**
+```ovsm
+(do
+  (define resp (get_account_transfers {:address "WALLET" :limit 100}))
+  (define data (if (get resp "content") (get resp "content") resp))
+  (define transfers (get data "data"))
+  transfers)
+```
+
+**Pattern 3: Filter and aggregate**
+```ovsm
+(do
+  (define txs (get_account_transactions {:address "WALLET" :limit 50}))
+  (define data (get (get txs "content") "transactions"))
+  (define successful (filter (lambda (tx) (. tx success)) data))
+  (define total (count successful))
+  {:total total :transactions successful})
+```
+
+**Pattern 4: Safe array processing**
+```ovsm
+(do
+  (define items (get response "items"))
+  (if (null? items)
+    []
+    (map (lambda (item) {:id (get item "id") :value (get item "amount")}) items)))
+```
+
+**Pattern 5: Loop with accumulator**
+```ovsm
+(do
+  (define sum 0)
+  (define data (get response "transfers"))
+  (when (array? data)
+    (for (tx data)
+      (set! sum (+ sum (get tx "amount")))))
+  sum)
+```
+
 # Your Available MCP Tools
 
 {MCP_TOOLS_PLACEHOLDER}
