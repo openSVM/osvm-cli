@@ -1059,12 +1059,31 @@ impl AiService {
         user_request: &str,
         available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
     ) -> Result<(String, String)> {
+        // Check if minimal mode is enabled via environment variable
+        let use_minimal = std::env::var("OSVM_MINIMAL_PROMPT")
+            .unwrap_or_default()
+            .to_lowercase() == "true";
+
         let mut tools_context = String::new();
 
         if available_tools.is_empty() {
-            tools_context.push_str("No MCP tools are currently available.\n");
+            tools_context.push_str("No MCP tools available.\n");
+        } else if use_minimal {
+            // MINIMAL MODE: Just list tool names (90% size reduction)
+            tools_context.push_str("Available MCP Tools:\n");
+            for (server_id, tools) in available_tools {
+                let filtered_tools: Vec<_> = tools
+                    .iter()
+                    .filter(|t| !matches!(t.name.as_str(), "NOW" | "LOG" | "now" | "log"))
+                    .collect();
+
+                if !filtered_tools.is_empty() {
+                    let tool_names: Vec<_> = filtered_tools.iter().map(|t| t.name.as_str()).collect();
+                    tools_context.push_str(&format!("{}: {}\n", server_id, tool_names.join(", ")));
+                }
+            }
         } else {
-            // FULL tool listing with descriptions - AI needs this to choose correctly
+            // FULL MODE: Complete descriptions (backward compatibility)
             tools_context.push_str("Available MCP Tools:\n\n");
 
             for (server_id, tools) in available_tools {
@@ -1092,9 +1111,13 @@ impl AiService {
             tools_context.push_str("Tool names are case-sensitive. Use exact names from list above.\n");
         }
 
-        // Create system prompt with OVSM instructions and available tools
-        // Replace the {MCP_TOOLS_PLACEHOLDER} with dynamically discovered tools
-        let base_prompt = Self::get_ovsm_system_prompt();
+        // Choose prompt template based on mode
+        let base_prompt = if use_minimal {
+            include_str!("../prompts/ovsm_system_prompt_minimal.md")
+        } else {
+            Self::get_ovsm_system_prompt()
+        };
+
         let system_prompt = base_prompt.replace("{MCP_TOOLS_PLACEHOLDER}", &tools_context);
 
         // For ownPlan mode, send the raw user request without additional instructions
