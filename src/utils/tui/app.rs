@@ -2698,7 +2698,7 @@ impl OsvmApp {
     }
 
     /// Handle a key event (from either local terminal or web)
-    /// This is a simplified handler for web input - supports essential navigation keys
+    /// Mirrors the main event_loop key handling for consistent behavior
     fn handle_key_event(&mut self, key: KeyEvent) {
         match key.code {
             // Quit/Escape - handle different contexts
@@ -2750,74 +2750,129 @@ impl OsvmApp {
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
             }
-            // Scrolling - handle tab-specific scroll states
+            // Navigation - Up/k
             KeyCode::Up | KeyCode::Char('k') if !self.chat_input_active => {
-                match self.active_tab {
-                    TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_sub(1); }
-                    TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_sub(1); }
-                    TabIndex::Graph => {
-                        // Pan up in graph view
-                        if let Ok(mut graph) = self.wallet_graph.lock() {
-                            let (cx, cy, zoom) = graph.viewport;
-                            graph.viewport = (cx, cy + 5.0 / zoom, zoom);
+                if self.show_help {
+                    self.help_scroll = self.help_scroll.saturating_sub(1);
+                } else {
+                    match self.active_tab {
+                        TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_sub(1); }
+                        TabIndex::Dashboard => { self.ai_insights_scroll = self.ai_insights_scroll.saturating_sub(1); }
+                        TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_sub(1); }
+                        TabIndex::Graph => {
+                            if let Ok(mut graph) = self.wallet_graph.lock() {
+                                graph.handle_input(GraphInput::Up);
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
+            // Navigation - Down/j
             KeyCode::Down | KeyCode::Char('j') if !self.chat_input_active => {
-                match self.active_tab {
-                    TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_add(1); }
-                    TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_add(1); }
-                    TabIndex::Graph => {
-                        // Pan down in graph view
-                        if let Ok(mut graph) = self.wallet_graph.lock() {
-                            let (cx, cy, zoom) = graph.viewport;
-                            graph.viewport = (cx, cy - 5.0 / zoom, zoom);
+                if self.show_help {
+                    self.help_scroll = self.help_scroll.saturating_add(1);
+                } else {
+                    match self.active_tab {
+                        TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_add(1); }
+                        TabIndex::Dashboard => { self.ai_insights_scroll = self.ai_insights_scroll.saturating_add(1); }
+                        TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_add(1); }
+                        TabIndex::Graph => {
+                            if let Ok(mut graph) = self.wallet_graph.lock() {
+                                graph.handle_input(GraphInput::Down);
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
-            // Graph panning (left/right)
+            // Navigation - Left/h (graph node/edge selection)
             KeyCode::Left | KeyCode::Char('h') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
-                    let (cx, cy, zoom) = graph.viewport;
-                    graph.viewport = (cx - 5.0 / zoom, cy, zoom);
+                    graph.handle_input(GraphInput::Left);
                 }
             }
+            // Navigation - Right/l (graph node/edge selection)
             KeyCode::Right | KeyCode::Char('l') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
-                    let (cx, cy, zoom) = graph.viewport;
-                    graph.viewport = (cx + 5.0 / zoom, cy, zoom);
+                    graph.handle_input(GraphInput::Right);
+                }
+            }
+            // Enter - Hop to selected wallet
+            KeyCode::Enter if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::HopToWallet);
+                }
+            }
+            // Space - Toggle node collapse/expand
+            KeyCode::Char(' ') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::Toggle);
                 }
             }
             // Graph zoom
             KeyCode::Char('+') | KeyCode::Char('=') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
-                    let (cx, cy, zoom) = graph.viewport;
-                    graph.viewport = (cx, cy, (zoom * 1.2).min(10.0));
+                    graph.handle_input(GraphInput::ZoomIn);
                 }
             }
-            KeyCode::Char('-') if self.active_tab == TabIndex::Graph => {
+            KeyCode::Char('-') | KeyCode::Char('_') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
-                    let (cx, cy, zoom) = graph.viewport;
-                    graph.viewport = (cx, cy, (zoom / 1.2).max(0.1));
+                    graph.handle_input(GraphInput::ZoomOut);
+                }
+            }
+            // Graph panning (w/a/s/d for pan)
+            KeyCode::Char('w') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::PanUp);
+                }
+            }
+            KeyCode::Char('s') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::PanDown);
+                }
+            }
+            KeyCode::Char('a') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::PanLeft);
+                }
+            }
+            KeyCode::Char('d') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::PanRight);
                 }
             }
             // Graph depth control
             KeyCode::Char('[') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
-                    if graph.current_depth > 1 {
-                        graph.current_depth -= 1;
-                    }
+                    graph.handle_input(GraphInput::DecreaseDepth);
                 }
             }
             KeyCode::Char(']') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
-                    if graph.current_depth < graph.max_depth {
-                        graph.current_depth += 1;
-                    }
+                    graph.handle_input(GraphInput::IncreaseDepth);
+                }
+            }
+            // Graph search
+            KeyCode::Char('/') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::StartSearch);
+                }
+            }
+            KeyCode::Char('n') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::SearchNext);
+                }
+            }
+            KeyCode::Char('N') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::SearchPrev);
+                }
+            }
+            // Graph copy to clipboard
+            KeyCode::Char('y') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::Copy);
                 }
             }
             // Graph trail toggle
@@ -2830,6 +2885,17 @@ impl OsvmApp {
             KeyCode::Char('r') if self.active_tab == TabIndex::Graph => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.viewport = (0.0, 0.0, 1.0);
+                }
+            }
+            // Detail panel scroll (< and >)
+            KeyCode::Char('<') | KeyCode::Char(',') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ScrollDetailUp);
+                }
+            }
+            KeyCode::Char('>') | KeyCode::Char('.') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ScrollDetailDown);
                 }
             }
             // Number keys 1-5 to select tabs
@@ -2857,14 +2923,30 @@ impl OsvmApp {
                     self.chat_input.push(c);
                 }
             }
-            KeyCode::Backspace if self.chat_input_active => {
-                self.chat_input.pop();
+            KeyCode::Backspace => {
+                if self.chat_input_active {
+                    self.chat_input.pop();
+                } else if self.active_tab == TabIndex::Graph {
+                    if let Ok(mut graph) = self.wallet_graph.lock() {
+                        if graph.search_active {
+                            graph.handle_input(GraphInput::SearchBackspace);
+                        }
+                    }
+                }
             }
             KeyCode::Enter if self.chat_input_active => {
                 if !self.chat_input.trim().is_empty() {
                     self.send_chat_message();
                 }
                 self.chat_input_active = false;
+            }
+            // Handle graph search character input
+            KeyCode::Char(c) if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    if graph.search_active {
+                        graph.handle_input(GraphInput::SearchChar(c));
+                    }
+                }
             }
             _ => {}
         }
