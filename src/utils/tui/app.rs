@@ -335,7 +335,6 @@ pub struct OsvmApp {
     pub chat_input_active: bool,
     pub chat_scroll: usize,
     pub chat_auto_scroll: bool,  // Auto-scroll to bottom on new messages
-    pub show_keyboard_help: bool,  // Show keyboard shortcuts overlay in Graph tab
     // Chat AI integration channels
     pub chat_response_rx: Option<Receiver<ChatResponse>>,
     pub chat_response_tx: Option<Sender<ChatResponse>>,
@@ -1697,7 +1696,6 @@ impl OsvmApp {
             chat_input_active: false,
             chat_scroll: 0,
             chat_auto_scroll: true,
-            show_keyboard_help: false,  // Show with '?' key
             // Chat AI integration - channels created lazily when runtime is set
             chat_response_rx: None,
             chat_response_tx: None,
@@ -3139,10 +3137,6 @@ impl OsvmApp {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::LoadTrails);
                 }
-            }
-            // Help toggle (? key) - show keyboard shortcuts
-            KeyCode::Char('?') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
-                self.show_keyboard_help = !self.show_keyboard_help;
             }
             // Graph reset view
             KeyCode::Char('r') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
@@ -5440,6 +5434,18 @@ impl OsvmApp {
             Line::from("   r            Reset view (center on graph)"),
             Line::from("   Enter        Center graph on selected wallet (hop)"),
             Line::from("   Space        Expand or collapse node"),
+            Line::from("   `            Open filter modal (wallets/programs/tokens)"),
+            Line::from(""),
+            Line::from(Span::styled(" ─── Trail Mode (when T active) ──────────────────────────────", Style::default().fg(Color::Magenta))),
+            Line::from("   ←/→          Navigate trail edges (select next/prev hop)"),
+            Line::from("   Enter        Confirm edge selection and advance trail"),
+            Line::from("   F            Fork current trail (create branch from here)"),
+            Line::from("   Tab          Switch to next trail branch"),
+            Line::from("   Shift+Tab    Switch to previous trail branch"),
+            Line::from("   C            Toggle compare mode (overlay multiple trails)"),
+            Line::from("   X            Delete current trail branch"),
+            Line::from("   Ctrl+S       Save all trails to disk (~/.osvm/trails/)"),
+            Line::from("   Ctrl+L       Load trails from disk"),
             Line::from(""),
             Line::from(Span::styled(" ─── Chat View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   i            Activate chat input mode"),
