@@ -686,6 +686,14 @@ pub struct InvestigationTrail {
     pub tentative_edge_idx: Option<usize>,
     /// Cached outgoing edges from current node for quick cycling
     pub available_edges: Vec<usize>,
+    /// Trail branch name (for multi-trail comparison)
+    pub branch_name: String,
+    /// Branch color for visual distinction
+    pub branch_color: Color,
+    /// Created timestamp for persistence
+    pub created_at: u64,
+    /// Notes/hypothesis for this trail branch
+    pub hypothesis: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -703,8 +711,53 @@ pub struct TrailStep {
     pub edge_token: Option<String>,
 }
 
+/// Serializable trail format for persistence
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedTrail {
+    pub branch_name: String,
+    pub hypothesis: Option<String>,
+    pub created_at: u64,
+    pub target_wallet: String,
+    pub steps: Vec<SavedTrailStep>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedTrailStep {
+    pub wallet_address: String,
+    pub risk_level: String,  // "Critical", "High", "Medium", "Low"
+    pub note: Option<String>,
+    pub edge_amount: Option<f64>,
+    pub edge_token: Option<String>,
+}
+
+/// Trail file format containing multiple branches
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TrailFile {
+    pub version: u32,
+    pub target_wallet: String,
+    pub trails: Vec<SavedTrail>,
+    pub active_branch: usize,
+}
+
+/// Branch colors for multi-trail visual distinction
+const BRANCH_COLORS: [Color; 8] = [
+    Color::Rgb(30, 144, 255),   // Dodger Blue (primary)
+    Color::Rgb(255, 165, 0),    // Orange
+    Color::Rgb(50, 205, 50),    // Lime Green
+    Color::Rgb(255, 105, 180),  // Hot Pink
+    Color::Rgb(64, 224, 208),   // Turquoise
+    Color::Rgb(255, 215, 0),    // Gold
+    Color::Rgb(186, 85, 211),   // Medium Orchid
+    Color::Rgb(255, 99, 71),    // Tomato
+];
+
 impl InvestigationTrail {
     pub fn new(start_node: usize, start_address: String, start_risk: RiskLevel) -> Self {
+        Self::new_branch(start_node, start_address, start_risk, "main".to_string(), 0)
+    }
+
+    /// Create a new named branch trail
+    pub fn new_branch(start_node: usize, start_address: String, start_risk: RiskLevel, name: String, branch_idx: usize) -> Self {
         Self {
             steps: vec![TrailStep {
                 node_index: start_node,
@@ -719,7 +772,96 @@ impl InvestigationTrail {
             current_index: 0,
             tentative_edge_idx: None,
             available_edges: Vec::new(),
+            branch_name: name,
+            branch_color: BRANCH_COLORS[branch_idx % BRANCH_COLORS.len()],
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            hypothesis: None,
         }
+    }
+
+    /// Fork the current trail into a new branch from current position
+    pub fn fork(&self, new_name: String, branch_idx: usize) -> Self {
+        let mut forked = Self {
+            steps: self.steps[..=self.current_index].to_vec(),
+            current_index: self.current_index,
+            tentative_edge_idx: None,
+            available_edges: Vec::new(),
+            branch_name: new_name,
+            branch_color: BRANCH_COLORS[branch_idx % BRANCH_COLORS.len()],
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            hypothesis: None,
+        };
+        // Add fork note to the current step
+        if let Some(last) = forked.steps.last_mut() {
+            last.note = Some(format!("Forked from '{}' trail", self.branch_name));
+        }
+        forked
+    }
+
+    /// Convert to serializable format
+    pub fn to_saved(&self, target_wallet: &str) -> SavedTrail {
+        SavedTrail {
+            branch_name: self.branch_name.clone(),
+            hypothesis: self.hypothesis.clone(),
+            created_at: self.created_at,
+            target_wallet: target_wallet.to_string(),
+            steps: self.steps.iter().map(|s| SavedTrailStep {
+                wallet_address: s.wallet_address.clone(),
+                risk_level: format!("{:?}", s.risk_level),
+                note: s.note.clone(),
+                edge_amount: s.edge_amount,
+                edge_token: s.edge_token.clone(),
+            }).collect(),
+        }
+    }
+
+    /// Generate AI analysis context for this trail
+    pub fn generate_ai_context(&self) -> String {
+        let mut ctx = String::new();
+        ctx.push_str(&format!("=== Trail Analysis: '{}' ===\n", self.branch_name));
+
+        if let Some(h) = &self.hypothesis {
+            ctx.push_str(&format!("Hypothesis: {}\n", h));
+        }
+
+        ctx.push_str(&format!("Steps: {} | Total Flow: {:.2}\n\n",
+            self.steps.len(), self.total_amount()));
+
+        ctx.push_str("Flow Path:\n");
+        for (i, step) in self.steps.iter().enumerate() {
+            let arrow = if i < self.steps.len() - 1 { "→" } else { "●" };
+            let edge_info = match (&step.edge_amount, &step.edge_token) {
+                (Some(amt), Some(tok)) => format!(" [{:.2} {}]", amt, tok),
+                _ => String::new(),
+            };
+            ctx.push_str(&format!("  {} {} ({:?}){}\n",
+                arrow,
+                step.wallet_address,
+                step.risk_level,
+                edge_info
+            ));
+        }
+
+        // Token distribution
+        let tokens = self.unique_tokens();
+        if !tokens.is_empty() {
+            ctx.push_str(&format!("\nTokens involved: {}\n", tokens.join(", ")));
+        }
+
+        // Risk distribution
+        let critical = self.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::Critical)).count();
+        let high = self.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::High)).count();
+        if critical > 0 || high > 0 {
+            ctx.push_str(&format!("Risk wallets: {} critical, {} high\n", critical, high));
+        }
+
+        ctx
     }
 
     /// Add a step to the trail with edge information
@@ -924,8 +1066,12 @@ pub struct WalletGraph {
     pub entity_clusters: Vec<crate::utils::entity_clustering::EntityCluster>,
     /// Wallet to cluster ID mapping
     pub wallet_to_cluster: HashMap<String, usize>,
-    /// Investigation trail (breadcrumb navigation)
+    /// Investigation trail (breadcrumb navigation) - active trail
     pub investigation_trail: Option<InvestigationTrail>,
+    /// All trail branches (for comparison mode)
+    pub all_trails: Vec<InvestigationTrail>,
+    /// Active trail index in all_trails
+    pub active_trail_idx: usize,
     /// Show minimap in corner
     pub show_minimap: bool,
     /// Minimap heatmap mode (true = density heatmap, false = normal node view)
@@ -934,6 +1080,8 @@ pub struct WalletGraph {
     pub show_trail: bool,
     /// Trail navigation mode active (arrow keys navigate trail instead of normal selection)
     pub trail_mode: bool,
+    /// Trail comparison mode (show all branches overlaid)
+    pub trail_compare_mode: bool,
     /// Detail panel scroll position
     pub detail_scroll: usize,
     /// Filtered nodes (nodes with only 1 inflow OR 1 outflow - hidden from display)
@@ -1196,6 +1344,15 @@ pub enum GraphInput {
     TrailEdgeUp,   // UP arrow - cycle to previous available edge
     TrailEdgeDown, // DOWN arrow - cycle to next available edge
     ToggleTrailMode, // 'T' key - toggle trail navigation mode
+    // Trail persistence and branching
+    SaveTrails,       // Ctrl+S - save all trails to file
+    LoadTrails,       // Ctrl+L - load trails from file
+    ForkTrail,        // 'F' key - fork current trail into new branch
+    NextTrailBranch,  // Tab - switch to next trail branch
+    PrevTrailBranch,  // Shift+Tab - switch to previous trail branch
+    ToggleCompareMode, // 'C' key - toggle trail comparison overlay
+    DeleteTrailBranch, // 'X' key - delete current trail branch
+    RenameTrailBranch, // 'R' key - rename current branch (starts text input mode)
 }
 
 impl WalletGraph {
@@ -1238,11 +1395,14 @@ impl WalletGraph {
             connected_nodes,
             entity_clusters: Vec::new(),
             wallet_to_cluster: HashMap::new(),
-            investigation_trail: Some(InvestigationTrail::new(0, target_wallet, RiskLevel::Low)),
+            investigation_trail: Some(InvestigationTrail::new(0, target_wallet.clone(), RiskLevel::Low)),
+            all_trails: vec![InvestigationTrail::new(0, target_wallet, RiskLevel::Low)],
+            active_trail_idx: 0,
             show_minimap: true,
             minimap_heatmap: false,  // Start in normal node view
             show_trail: true,
             trail_mode: true,  // Trail mode on by default - arrow keys navigate trail
+            trail_compare_mode: false,
             detail_scroll: 0,
             filtered_nodes: std::collections::HashSet::new(),
             folded_groups: HashMap::new(),
@@ -1467,6 +1627,10 @@ impl WalletGraph {
                 None
             }
             GraphInput::Right => {
+                if self.trail_mode {
+                    // Trail mode: extend trail (add tentative edge and move to next node)
+                    return self.handle_input(GraphInput::TrailExtend);
+                }
                 match &self.selection {
                     SelectionMode::Node(node_idx) => {
                         // RIGHT from node → select outgoing edge
@@ -1810,6 +1974,91 @@ impl WalletGraph {
                 }
                 None
             }
+
+            // === Trail Persistence & Branching ===
+            GraphInput::SaveTrails => {
+                // Save all trails to ~/.osvm/trails/<target_wallet>.json
+                match self.save_trails_to_disk() {
+                    Ok(path) => self.show_toast(format!("Saved trails to {}", path)),
+                    Err(e) => self.show_toast(format!("Save failed: {}", e)),
+                }
+                None
+            }
+            GraphInput::LoadTrails => {
+                // Load trails from ~/.osvm/trails/<target_wallet>.json
+                match self.load_trails_from_disk() {
+                    Ok(count) => self.show_toast(format!("Loaded {} trail branches", count)),
+                    Err(e) => self.show_toast(format!("Load failed: {}", e)),
+                }
+                None
+            }
+            GraphInput::ForkTrail => {
+                // Fork current trail into new branch
+                if let Some(ref trail) = self.investigation_trail {
+                    let new_name = format!("branch-{}", self.all_trails.len());
+                    let forked = trail.fork(new_name.clone(), self.all_trails.len());
+                    self.all_trails.push(forked.clone());
+                    self.active_trail_idx = self.all_trails.len() - 1;
+                    self.investigation_trail = Some(forked);
+                    self.show_toast(format!("Forked to branch '{}' [{}]",
+                        new_name, self.all_trails.len()));
+                }
+                None
+            }
+            GraphInput::NextTrailBranch => {
+                if self.all_trails.is_empty() {
+                    return None;
+                }
+                self.active_trail_idx = (self.active_trail_idx + 1) % self.all_trails.len();
+                self.investigation_trail = Some(self.all_trails[self.active_trail_idx].clone());
+                let name = self.investigation_trail.as_ref().map(|t| t.branch_name.clone()).unwrap_or_default();
+                self.show_toast(format!("Trail: '{}' [{}/{}]",
+                    name, self.active_trail_idx + 1, self.all_trails.len()));
+                self.refresh_trail_available_edges();
+                None
+            }
+            GraphInput::PrevTrailBranch => {
+                if self.all_trails.is_empty() {
+                    return None;
+                }
+                if self.active_trail_idx == 0 {
+                    self.active_trail_idx = self.all_trails.len() - 1;
+                } else {
+                    self.active_trail_idx -= 1;
+                }
+                self.investigation_trail = Some(self.all_trails[self.active_trail_idx].clone());
+                let name = self.investigation_trail.as_ref().map(|t| t.branch_name.clone()).unwrap_or_default();
+                self.show_toast(format!("Trail: '{}' [{}/{}]",
+                    name, self.active_trail_idx + 1, self.all_trails.len()));
+                self.refresh_trail_available_edges();
+                None
+            }
+            GraphInput::ToggleCompareMode => {
+                self.trail_compare_mode = !self.trail_compare_mode;
+                self.show_toast(format!("Compare mode: {}",
+                    if self.trail_compare_mode { "ON (all branches)" } else { "OFF" }));
+                None
+            }
+            GraphInput::DeleteTrailBranch => {
+                if self.all_trails.len() <= 1 {
+                    self.show_toast("Cannot delete the only trail branch".to_string());
+                    return None;
+                }
+                let deleted_name = self.all_trails[self.active_trail_idx].branch_name.clone();
+                self.all_trails.remove(self.active_trail_idx);
+                if self.active_trail_idx >= self.all_trails.len() {
+                    self.active_trail_idx = self.all_trails.len() - 1;
+                }
+                self.investigation_trail = Some(self.all_trails[self.active_trail_idx].clone());
+                self.show_toast(format!("Deleted '{}', now on '{}'",
+                    deleted_name, self.investigation_trail.as_ref().map(|t| &t.branch_name).unwrap_or(&String::new())));
+                None
+            }
+            GraphInput::RenameTrailBranch => {
+                // TODO: This would need text input mode - for now just show a message
+                self.show_toast("Rename: use :rename <name> in future version".to_string());
+                None
+            }
         }
     }
 
@@ -1869,6 +2118,185 @@ impl WalletGraph {
                 self.filter_modal.selected_programs.insert(addr.clone());
             }
         }
+    }
+
+    // =========================================================================
+    // Trail Persistence Methods
+    // =========================================================================
+
+    /// Save all trail branches to disk (~/.osvm/trails/<target_wallet>.json)
+    pub fn save_trails_to_disk(&self) -> Result<String, String> {
+        let home = std::env::var("HOME").map_err(|_| "HOME not set")?;
+        let trails_dir = std::path::PathBuf::from(&home).join(".osvm/trails");
+
+        // Create directory if needed
+        std::fs::create_dir_all(&trails_dir)
+            .map_err(|e| format!("Failed to create trails dir: {}", e))?;
+
+        // Build the trail file
+        let trail_file = TrailFile {
+            version: 1,
+            target_wallet: self.target_wallet.clone(),
+            trails: self.all_trails.iter()
+                .map(|t| t.to_saved(&self.target_wallet))
+                .collect(),
+            active_branch: self.active_trail_idx,
+        };
+
+        // Generate filename from first 8 chars of wallet + timestamp
+        let wallet_short = &self.target_wallet[..8.min(self.target_wallet.len())];
+        let filename = format!("{}.json", wallet_short);
+        let path = trails_dir.join(&filename);
+
+        // Serialize and write
+        let json = serde_json::to_string_pretty(&trail_file)
+            .map_err(|e| format!("Serialize failed: {}", e))?;
+        std::fs::write(&path, json)
+            .map_err(|e| format!("Write failed: {}", e))?;
+
+        Ok(format!("~/.osvm/trails/{}", filename))
+    }
+
+    /// Load trail branches from disk
+    pub fn load_trails_from_disk(&mut self) -> Result<usize, String> {
+        let home = std::env::var("HOME").map_err(|_| "HOME not set")?;
+        let wallet_short = &self.target_wallet[..8.min(self.target_wallet.len())];
+        let path = std::path::PathBuf::from(&home)
+            .join(".osvm/trails")
+            .join(format!("{}.json", wallet_short));
+
+        if !path.exists() {
+            return Err("No saved trails found".to_string());
+        }
+
+        // Read and parse
+        let json = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Read failed: {}", e))?;
+        let trail_file: TrailFile = serde_json::from_str(&json)
+            .map_err(|e| format!("Parse failed: {}", e))?;
+
+        // Convert saved trails back to InvestigationTrail
+        // Note: We can't fully restore node indices, so this recreates trails
+        // with address-based reconstruction
+        let mut loaded_trails = Vec::new();
+        for (idx, saved) in trail_file.trails.iter().enumerate() {
+            // Find the starting node in current graph
+            let start_node = self.find_node_by_address(&saved.steps.first()
+                .map(|s| &s.wallet_address)
+                .unwrap_or(&self.target_wallet));
+
+            if let Some(start_idx) = start_node {
+                let risk = self.parse_risk_level(&saved.steps.first()
+                    .map(|s| &s.risk_level)
+                    .unwrap_or(&"Low".to_string()));
+
+                let mut trail = InvestigationTrail::new_branch(
+                    start_idx,
+                    saved.steps.first().map(|s| s.wallet_address.clone())
+                        .unwrap_or_default(),
+                    risk,
+                    saved.branch_name.clone(),
+                    idx,
+                );
+                trail.hypothesis = saved.hypothesis.clone();
+                trail.created_at = saved.created_at;
+
+                // Reconstruct remaining steps
+                for step in saved.steps.iter().skip(1) {
+                    if let Some(node_idx) = self.find_node_by_address(&step.wallet_address) {
+                        let risk = self.parse_risk_level(&step.risk_level);
+                        trail.add_step_with_edge(
+                            node_idx,
+                            step.wallet_address.clone(),
+                            risk,
+                            step.note.clone(),
+                            None, // Can't restore edge index
+                            step.edge_amount,
+                            step.edge_token.clone(),
+                        );
+                    }
+                }
+                loaded_trails.push(trail);
+            }
+        }
+
+        if loaded_trails.is_empty() {
+            return Err("No trails matched current graph".to_string());
+        }
+
+        let count = loaded_trails.len();
+        self.all_trails = loaded_trails;
+        self.active_trail_idx = trail_file.active_branch.min(self.all_trails.len() - 1);
+        self.investigation_trail = Some(self.all_trails[self.active_trail_idx].clone());
+
+        Ok(count)
+    }
+
+    fn find_node_by_address(&self, address: &str) -> Option<usize> {
+        self.nodes.iter().position(|(addr, _)| addr == address)
+    }
+
+    fn parse_risk_level(&self, level: &str) -> RiskLevel {
+        match level {
+            "Critical" => RiskLevel::Critical,
+            "High" => RiskLevel::High,
+            "Medium" => RiskLevel::Medium,
+            _ => RiskLevel::Low,
+        }
+    }
+
+    /// Get AI analysis context for current trail (for trail-guided AI)
+    pub fn get_trail_ai_context(&self) -> Option<String> {
+        self.investigation_trail.as_ref().map(|t| t.generate_ai_context())
+    }
+
+    /// Get AI comparison context for all trails (when compare mode is on)
+    pub fn get_trails_comparison_context(&self) -> String {
+        let mut ctx = String::from("=== Multi-Trail Comparison ===\n\n");
+
+        for (i, trail) in self.all_trails.iter().enumerate() {
+            let active = if i == self.active_trail_idx { " ← ACTIVE" } else { "" };
+            ctx.push_str(&format!("--- Branch {}: '{}'{} ---\n", i + 1, trail.branch_name, active));
+            ctx.push_str(&trail.generate_ai_context());
+            ctx.push('\n');
+        }
+
+        // Summary comparison
+        ctx.push_str("\n=== Trail Comparison Summary ===\n");
+        for trail in &self.all_trails {
+            ctx.push_str(&format!("• '{}': {} steps, {:.2} total flow, {} tokens\n",
+                trail.branch_name,
+                trail.steps.len(),
+                trail.total_amount(),
+                trail.unique_tokens().len()
+            ));
+        }
+
+        ctx
+    }
+
+    /// Check if a node is in the current trail
+    pub fn is_node_in_trail(&self, node_idx: usize) -> bool {
+        self.investigation_trail.as_ref()
+            .map(|t| t.trail_nodes().contains(&node_idx))
+            .unwrap_or(false)
+    }
+
+    /// Check if an edge is in the current trail
+    pub fn is_edge_in_trail(&self, edge_idx: usize) -> bool {
+        self.investigation_trail.as_ref()
+            .map(|t| t.trail_edges().contains(&edge_idx))
+            .unwrap_or(false)
+    }
+
+    /// Check if a node is in any trail (for compare mode)
+    pub fn is_node_in_any_trail(&self, node_idx: usize) -> Option<usize> {
+        for (i, trail) in self.all_trails.iter().enumerate() {
+            if trail.trail_nodes().contains(&node_idx) {
+                return Some(i);
+            }
+        }
+        None
     }
 
     /// Check if a node passes the current filter

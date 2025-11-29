@@ -37,9 +37,9 @@ Tool responses MAY be wrapped: `{:content {...} :isError false}` - ALWAYS use `g
 - Each candle is 6-element array: `[open, high, low, close, volume, time_delta]`
 - Use array indices: `([] candle 0)` for open, `([] candle 3)` for close
 
-# COMMON PATTERNS (Examples)
+# COMMON PATTERNS (Copy these!)
 
-**Pattern 1: Fetch chart data**
+**1. Chart data (OHLCV)**
 ```ovsm
 (do
   (define resp (chart {:mint "TOKEN_ADDRESS" :interval "1H"}))
@@ -48,7 +48,7 @@ Tool responses MAY be wrapped: `{:content {...} :isError false}` - ALWAYS use `g
   candles)
 ```
 
-**Pattern 2: Get account transfers with pagination**
+**2. Account transfers (paginated)**
 ```ovsm
 (do
   (define resp (get_account_transfers {:address "WALLET" :limit 100}))
@@ -57,34 +57,75 @@ Tool responses MAY be wrapped: `{:content {...} :isError false}` - ALWAYS use `g
   transfers)
 ```
 
-**Pattern 3: Filter and aggregate**
+**3. Token info lookup**
+```ovsm
+(do
+  (define info (get_token_info {:mint "MINT_ADDRESS"}))
+  {:symbol (get info "symbol")
+   :name (get info "name")
+   :decimals (get info "decimals")
+   :supply (get info "supply")})
+```
+
+**4. Account stats**
+```ovsm
+(do
+  (define stats (get_account_stats {:address "WALLET"}))
+  {:totalTx (get stats "totalTransactions")
+   :tokenTransfers (get stats "tokenTransfers")})
+```
+
+**5. Filter successful transactions**
 ```ovsm
 (do
   (define txs (get_account_transactions {:address "WALLET" :limit 50}))
   (define data (get (get txs "content") "transactions"))
   (define successful (filter (lambda (tx) (. tx success)) data))
-  (define total (count successful))
-  {:total total :transactions successful})
+  {:total (count successful) :transactions successful})
 ```
 
-**Pattern 4: Safe array processing**
+**6. Safe null handling**
 ```ovsm
 (do
-  (define items (get response "items"))
-  (if (null? items)
+  (define data (get response "items"))
+  (if (null? data)
     []
-    (map (lambda (item) {:id (get item "id") :value (get item "amount")}) items)))
+    (map (lambda (item) {:id (get item "id")}) data)))
 ```
 
-**Pattern 5: Loop with accumulator**
+**7. Accumulator pattern (sum amounts)**
 ```ovsm
 (do
   (define sum 0)
-  (define data (get response "transfers"))
-  (when (array? data)
-    (for (tx data)
+  (define transfers (get response "transfers"))
+  (when (array? transfers)
+    (for (tx transfers)
       (set! sum (+ sum (get tx "amount")))))
   sum)
+```
+
+**8. Fallback chain (error resilience)**
+```ovsm
+(do
+  (define host (or (get config "primary")
+                   (get config "secondary")
+                   "https://api.mainnet-beta.solana.com")))
+```
+
+**9. Direct RPC call**
+```ovsm
+(do
+  (define result (solana_rpc_call {:method "getSlot"}))
+  (get result "result"))
+```
+
+**10. Multi-step data processing**
+```ovsm
+(do
+  (define resp (get_defi_overview {}))
+  (define protocols (get resp "topProtocols"))
+  (define sorted (sort-by protocols (lambda (p) (get p "tvl")) :desc))
+  (take 3 sorted))
 ```
 
 # Your Available MCP Tools

@@ -335,6 +335,7 @@ pub struct OsvmApp {
     pub chat_input_active: bool,
     pub chat_scroll: usize,
     pub chat_auto_scroll: bool,  // Auto-scroll to bottom on new messages
+    pub show_keyboard_help: bool,  // Show keyboard shortcuts overlay in Graph tab
     // Chat AI integration channels
     pub chat_response_rx: Option<Receiver<ChatResponse>>,
     pub chat_response_tx: Option<Sender<ChatResponse>>,
@@ -1696,6 +1697,7 @@ impl OsvmApp {
             chat_input_active: false,
             chat_scroll: 0,
             chat_auto_scroll: true,
+            show_keyboard_help: false,  // Show with '?' key
             // Chat AI integration - channels created lazily when runtime is set
             chat_response_rx: None,
             chat_response_tx: None,
@@ -3091,14 +3093,59 @@ impl OsvmApp {
                     graph.handle_input(GraphInput::Copy);
                 }
             }
-            // Graph trail toggle
-            KeyCode::Char('t') | KeyCode::Char('T') if self.active_tab == TabIndex::Graph => {
+            // Graph trail mode toggle (T key)
+            KeyCode::Char('t') | KeyCode::Char('T') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
-                    graph.show_trail = !graph.show_trail;
+                    graph.handle_input(GraphInput::ToggleTrailMode);
                 }
             }
+            // Fork trail (F key)
+            KeyCode::Char('f') | KeyCode::Char('F') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ForkTrail);
+                }
+            }
+            // Compare mode toggle (C key)
+            KeyCode::Char('c') | KeyCode::Char('C') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ToggleCompareMode);
+                }
+            }
+            // Delete trail branch (X key)
+            KeyCode::Char('x') | KeyCode::Char('X') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::DeleteTrailBranch);
+                }
+            }
+            // Tab - switch trail branch
+            KeyCode::Tab if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::NextTrailBranch);
+                }
+            }
+            KeyCode::BackTab if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::PrevTrailBranch);
+                }
+            }
+            // Ctrl+S - save trails
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) && self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::SaveTrails);
+                }
+            }
+            // Ctrl+L - load trails
+            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) && self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::LoadTrails);
+                }
+            }
+            // Help toggle (? key) - show keyboard shortcuts
+            KeyCode::Char('?') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+                self.show_keyboard_help = !self.show_keyboard_help;
+            }
             // Graph reset view
-            KeyCode::Char('r') if self.active_tab == TabIndex::Graph => {
+            KeyCode::Char('r') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.viewport = (0.0, 0.0, 1.0);
                 }
@@ -5491,6 +5538,142 @@ impl OsvmApp {
 
         // Generate real-time automated analysis with explainable insights
         if let Ok(mut graph) = self.wallet_graph.lock() {
+            // =====================================================
+            // TRAIL-AWARE ANALYSIS (when trail mode is active)
+            // Shows contextual insights for the selected path
+            // =====================================================
+            if graph.trail_mode {
+                if let Some(ref trail) = graph.investigation_trail {
+                    // Trail header with branch info
+                    let branch_indicator = if graph.all_trails.len() > 1 {
+                        format!(" [{}/{}]", graph.active_trail_idx + 1, graph.all_trails.len())
+                    } else {
+                        String::new()
+                    };
+
+                    lines.push(Line::from(vec![
+                        Span::styled(" 🔍 ", Style::default()),
+                        Span::styled(
+                            format!("TRAIL ANALYSIS: '{}'{}", trail.branch_name, branch_indicator),
+                            Style::default().fg(Color::Rgb(30, 144, 255)).add_modifier(Modifier::BOLD)
+                        ),
+                    ]));
+
+                    // Trail summary stats
+                    let total_flow = trail.total_amount();
+                    let step_count = trail.steps.len();
+                    let tokens = trail.unique_tokens();
+
+                    lines.push(Line::from(vec![
+                        Span::styled("   ", Style::default()),
+                        Span::styled(
+                            format!("📍 {} steps • 💰 {:.2} total • {} tokens",
+                                step_count,
+                                total_flow,
+                                tokens.len()
+                            ),
+                            Style::default().fg(Color::Cyan)
+                        ),
+                    ]));
+
+                    // Risk wallets in trail
+                    let critical_count = trail.steps.iter()
+                        .filter(|s| matches!(s.risk_level, crate::utils::tui::graph::RiskLevel::Critical))
+                        .count();
+                    let high_count = trail.steps.iter()
+                        .filter(|s| matches!(s.risk_level, crate::utils::tui::graph::RiskLevel::High))
+                        .count();
+
+                    if critical_count > 0 || high_count > 0 {
+                        lines.push(Line::from(vec![
+                            Span::styled("   ", Style::default()),
+                            Span::styled(
+                                format!("⚠ Trail risk: {} critical, {} high-risk wallets",
+                                    critical_count, high_count),
+                                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                            ),
+                        ]));
+                    }
+
+                    // Trail flow path summary (abbreviated)
+                    lines.push(Line::from(vec![
+                        Span::styled("   ", Style::default()),
+                        Span::styled("Flow: ", Style::default().fg(Color::DarkGray)),
+                    ]));
+
+                    // Show first 5 steps in compact form
+                    let display_steps = trail.steps.iter().take(5);
+                    let mut flow_spans = Vec::new();
+                    flow_spans.push(Span::styled("   ", Style::default()));
+
+                    for (i, step) in display_steps.enumerate() {
+                        let addr_short = if step.wallet_address.len() > 8 {
+                            format!("{}..{}", &step.wallet_address[..4], &step.wallet_address[step.wallet_address.len()-4..])
+                        } else {
+                            step.wallet_address.clone()
+                        };
+
+                        let risk_color = match step.risk_level {
+                            crate::utils::tui::graph::RiskLevel::Critical => Color::Red,
+                            crate::utils::tui::graph::RiskLevel::High => Color::LightRed,
+                            crate::utils::tui::graph::RiskLevel::Medium => Color::Yellow,
+                            crate::utils::tui::graph::RiskLevel::Low => Color::Green,
+                        };
+
+                        if i > 0 {
+                            flow_spans.push(Span::styled(" → ", Style::default().fg(Color::DarkGray)));
+                        }
+                        flow_spans.push(Span::styled(addr_short, Style::default().fg(risk_color)));
+                    }
+
+                    if trail.steps.len() > 5 {
+                        flow_spans.push(Span::styled(
+                            format!(" +{} more", trail.steps.len() - 5),
+                            Style::default().fg(Color::DarkGray)
+                        ));
+                    }
+
+                    lines.push(Line::from(flow_spans));
+
+                    // Token distribution in trail
+                    if !tokens.is_empty() {
+                        lines.push(Line::from(vec![
+                            Span::styled("   ", Style::default()),
+                            Span::styled("Tokens: ", Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                tokens.iter().take(5).cloned().collect::<Vec<_>>().join(", "),
+                                Style::default().fg(Color::Yellow)
+                            ),
+                        ]));
+                    }
+
+                    // Hypothesis if set
+                    if let Some(ref hypothesis) = trail.hypothesis {
+                        lines.push(Line::from(vec![
+                            Span::styled("   ", Style::default()),
+                            Span::styled("💭 ", Style::default()),
+                            Span::styled(hypothesis.clone(), Style::default().fg(Color::LightMagenta)),
+                        ]));
+                    }
+
+                    // Compare mode info
+                    if graph.trail_compare_mode && graph.all_trails.len() > 1 {
+                        lines.push(Line::from(vec![
+                            Span::styled("   ", Style::default()),
+                            Span::styled(
+                                format!("📊 Compare mode: {} branches visible", graph.all_trails.len()),
+                                Style::default().fg(Color::Cyan)
+                            ),
+                        ]));
+                    }
+
+                    // Separator between trail and graph analysis
+                    lines.push(Line::from(vec![
+                        Span::styled(" ═══════════════════════════════", Style::default().fg(Color::Rgb(30, 144, 255))),
+                    ]));
+                }
+            }
+
             // Use cached explainable risk scoring system (avoids expensive recalculation on every frame)
             let risk_explanation = graph.get_cached_risk_explanation();
 
