@@ -45,14 +45,17 @@ src/
 
 ### Compiler (`compiler/ir.rs`) - **MOST IMPORTANT FILE**
 - Generates sBPF bytecode from OVSM source
-- 4800+ lines containing ALL macro implementations
+- 6100+ lines containing ALL macro implementations
 - Key sections:
   - Struct operations (lines ~1100-1600)
-  - Account access (lines ~3500-3900)
   - CPI helpers (lines ~1900-3000)
-  - Event emission (lines ~4000-4100)
-  - Sysvar access (lines ~4100-4230)
-  - PDA caching (lines ~4320-4500)
+  - SPL Token CPIs (lines ~3000-3400)
+  - Round 4 macros (lines ~3380-4300)
+  - Anchor error handling (lines ~4290-4400)
+  - PDA operations (lines ~4400-4600)
+  - Event emission (lines ~4800-4900)
+  - Sysvar access (lines ~4900-5100)
+  - PDA caching (lines ~5100-5300)
 
 ## Building & Testing
 
@@ -120,6 +123,17 @@ if name == "my-macro" && args.len() == 2 {
 - `system-transfer`, `system-create-account`
 - `spl-token-transfer`, `spl-token-transfer-signed`
 - `spl-token-mint-to`, `spl-token-burn`
+
+### Round 4 CPI & Error Handling (NEW)
+- `spl-close-account` - Close token account, reclaim lamports
+- `spl-close-account-signed` - Close with PDA authority
+- `system-allocate` - Allocate space in account (System Program)
+- `system-allocate-signed` - Allocate with PDA signer
+- `system-assign` - Assign account ownership to program
+- `system-assign-signed` - Assign with PDA signer
+- `anchor-error` - Return Anchor-compatible error (6000 + code)
+- `require` - Assert condition or abort with Anchor error
+- `msg` - Log message (Anchor-style, uses `sol_log_`)
 
 ### PDA Operations
 - `derive-pda`, `create-pda`, `get-ata`

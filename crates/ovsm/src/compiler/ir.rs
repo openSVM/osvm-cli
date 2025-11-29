@@ -3498,6 +3498,208 @@ impl IrGenerator {
                 }
 
                 // =================================================================
+                // SPL-CLOSE-ACCOUNT-SIGNED: Close token account with PDA authority
+                // =================================================================
+                // (spl-close-account-signed token-prog-idx account-idx destination-idx authority-idx signers)
+                //
+                // Same as spl-close-account but with PDA signing.
+                // signers: [[[seed1-ptr seed1-len] [seed2-ptr seed2-len] ...]]
+                //
+                // Memory layout at heap 0x300000E00:
+                //   +0:     SolAccountMeta array (3 accounts * 16 bytes each = 48 bytes)
+                //   +128:   SolInstruction struct (40 bytes)
+                //   +256:   SolSignerSeeds array (16 bytes each)
+                //   +384:   SolSignerSeed entries (16 bytes each)
+                //   +512:   Instruction data (1 byte discriminator)
+                // =================================================================
+                if name == "spl-close-account-signed" && args.len() == 5 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000E00_i64));
+
+                    let token_prog_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account-signed token-prog-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account-signed account-idx has no result"))?;
+                    let destination_idx = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account-signed destination-idx has no result"))?;
+                    let authority_idx = self.generate_expr(&args[3].value)?
+                        .ok_or_else(|| Error::runtime("spl-close-account-signed authority-idx has no result"))?;
+
+                    // Build instruction data: discriminator 9 (CloseAccount)
+                    let data_ptr = self.alloc_reg();
+                    let const_512 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_512, 512));
+                    self.emit(IrInstruction::Add(data_ptr, heap_base, const_512));
+                    let nine = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(nine, 9));
+                    self.emit(IrInstruction::Store1(data_ptr, nine, 0));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Get token program pubkey pointer
+                    let token_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(token_offset, token_prog_idx, account_size));
+                    let temp0 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp0, token_offset, eight));
+                    self.emit(IrInstruction::Add(temp0, temp0, eight));
+                    let token_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(token_pk_ptr, input_ptr, temp0));
+
+                    // Account 0: Account to close (writable)
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    let temp1 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp1, acct_offset, eight));
+                    self.emit(IrInstruction::Add(temp1, temp1, eight));
+                    let acct_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp1));
+                    self.emit(IrInstruction::Store(heap_base, acct_pk_ptr, 0));
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(heap_base, one, 8)); // writable
+
+                    // Account 1: Destination (writable)
+                    let dest_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(dest_offset, destination_idx, account_size));
+                    let temp2 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp2, dest_offset, eight));
+                    self.emit(IrInstruction::Add(temp2, temp2, eight));
+                    let dest_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(dest_pk_ptr, input_ptr, temp2));
+                    self.emit(IrInstruction::Store(heap_base, dest_pk_ptr, 16));
+                    self.emit(IrInstruction::Store(heap_base, one, 24)); // writable
+
+                    // Account 2: Authority (signer via PDA)
+                    let auth_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(auth_offset, authority_idx, account_size));
+                    let temp3 = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp3, auth_offset, eight));
+                    self.emit(IrInstruction::Add(temp3, temp3, eight));
+                    let auth_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(auth_pk_ptr, input_ptr, temp3));
+                    self.emit(IrInstruction::Store(heap_base, auth_pk_ptr, 32));
+                    let signer_flag = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(signer_flag, 256)); // signer
+                    self.emit(IrInstruction::Store(heap_base, signer_flag, 40));
+
+                    // Build instruction at heap_base + 128
+                    let instr_ptr = self.alloc_reg();
+                    let const_128 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_128, 128));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_128));
+
+                    self.emit(IrInstruction::Store(instr_ptr, token_pk_ptr, 0));
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 8));
+                    let three = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(three, 3));
+                    self.emit(IrInstruction::Store(instr_ptr, three, 16));
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24));
+                    self.emit(IrInstruction::Store(instr_ptr, one, 32)); // data_len = 1
+
+                    // =================================================================
+                    // Process PDA signer seeds (arg 4)
+                    // =================================================================
+                    let mut num_signers = 0usize;
+                    let signer_seeds_base = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(signer_seeds_base, heap_base, const_256));
+
+                    let seed_entries_base = self.alloc_reg();
+                    let const_384 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_384, 384));
+                    self.emit(IrInstruction::Add(seed_entries_base, heap_base, const_384));
+
+                    let mut total_seed_entries = 0usize;
+
+                    if let Expression::ArrayLiteral(signers) = &args[4].value {
+                        num_signers = signers.len();
+
+                        for (signer_idx, signer_seeds) in signers.iter().enumerate() {
+                            if let Expression::ArrayLiteral(seeds) = signer_seeds {
+                                let num_seeds_this_signer = seeds.len();
+
+                                let seeds_entry_ptr = self.alloc_reg();
+                                let seed_entry_offset = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(
+                                    seed_entry_offset,
+                                    (total_seed_entries * 16) as i64,
+                                ));
+                                self.emit(IrInstruction::Add(
+                                    seeds_entry_ptr,
+                                    seed_entries_base,
+                                    seed_entry_offset,
+                                ));
+
+                                let signer_offset = (signer_idx * 16) as i64;
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    seeds_entry_ptr,
+                                    signer_offset,
+                                ));
+                                let num_seeds_reg = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(
+                                    num_seeds_reg,
+                                    num_seeds_this_signer as i64,
+                                ));
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    num_seeds_reg,
+                                    signer_offset + 8,
+                                ));
+
+                                for (seed_idx, seed_pair) in seeds.iter().enumerate() {
+                                    if let Expression::ArrayLiteral(pair) = seed_pair {
+                                        if pair.len() >= 2 {
+                                            let seed_addr = self.generate_expr(&pair[0])?
+                                                .ok_or_else(|| Error::runtime("seed addr has no result"))?;
+                                            let seed_len = self.generate_expr(&pair[1])?
+                                                .ok_or_else(|| Error::runtime("seed len has no result"))?;
+
+                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_addr,
+                                                entry_offset,
+                                            ));
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_len,
+                                                entry_offset + 8,
+                                            ));
+                                        }
+                                    }
+                                }
+
+                                total_seed_entries += num_seeds_this_signer;
+                            }
+                        }
+                    }
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+
+                    let num_signers_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(num_signers_reg, num_signers as i64));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, signer_seeds_base, num_signers_reg],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
                 // SYSTEM-ALLOCATE: Allocate space in an account via System Program
                 // =================================================================
                 // (system-allocate account-idx space)
@@ -3586,6 +3788,190 @@ impl IrGenerator {
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
                         vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // SYSTEM-ALLOCATE-SIGNED: Allocate space with PDA as signer
+                // =================================================================
+                // (system-allocate-signed account-idx space signers)
+                //
+                // Same as system-allocate but with PDA signing.
+                // signers: [[[seed1-ptr seed1-len] [seed2-ptr seed2-len] ...]]
+                //
+                // Memory layout at heap 0x300000F00:
+                //   +0:     System Program ID (32 bytes, all zeros)
+                //   +32:    Instruction data (12 bytes: 4-byte discriminator + 8-byte space)
+                //   +64:    SolAccountMeta array (1 account * 16 bytes = 16 bytes)
+                //   +128:   SolInstruction struct (40 bytes)
+                //   +256:   SolSignerSeeds array (16 bytes each)
+                //   +384:   SolSignerSeed entries (16 bytes each)
+                // =================================================================
+                if name == "system-allocate-signed" && args.len() == 3 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300000F00_i64));
+
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("system-allocate-signed account-idx has no result"))?;
+                    let space = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("system-allocate-signed space has no result"))?;
+
+                    // Build System Program ID (all zeros)
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 8));
+                    self.emit(IrInstruction::Store(heap_base, zero, 16));
+                    self.emit(IrInstruction::Store(heap_base, zero, 24));
+
+                    // Build instruction data: [discriminator (4 bytes), space (8 bytes)]
+                    let data_ptr = self.alloc_reg();
+                    let const_32 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_32, 32));
+                    self.emit(IrInstruction::Add(data_ptr, heap_base, const_32));
+
+                    let eight_disc = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_disc, 8)); // Allocate = 8
+                    self.emit(IrInstruction::Store4(data_ptr, eight_disc, 0));
+                    self.emit(IrInstruction::Store(data_ptr, space, 8));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Build SolAccountMeta at heap_base + 64
+                    let meta_base = self.alloc_reg();
+                    let const_64 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_64, 64));
+                    self.emit(IrInstruction::Add(meta_base, heap_base, const_64));
+
+                    // Account 0: Account to allocate (writable, signer via PDA)
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    let temp = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
+                    self.emit(IrInstruction::Add(temp, temp, eight));
+                    let acct_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
+                    let writable_signer = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(writable_signer, 257)); // writable + signer
+                    self.emit(IrInstruction::Store(meta_base, writable_signer, 8));
+
+                    // Build instruction at heap_base + 128
+                    let instr_ptr = self.alloc_reg();
+                    let const_128 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_128, 128));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_128));
+
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 0)); // program_id
+                    self.emit(IrInstruction::Store(instr_ptr, meta_base, 8)); // accounts
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(instr_ptr, one, 16)); // accounts_len
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24)); // data
+                    let twelve = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(twelve, 12));
+                    self.emit(IrInstruction::Store(instr_ptr, twelve, 32)); // data_len
+
+                    // =================================================================
+                    // Process PDA signer seeds (arg 2)
+                    // =================================================================
+                    let mut num_signers = 0usize;
+                    let signer_seeds_base = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(signer_seeds_base, heap_base, const_256));
+
+                    let seed_entries_base = self.alloc_reg();
+                    let const_384 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_384, 384));
+                    self.emit(IrInstruction::Add(seed_entries_base, heap_base, const_384));
+
+                    let mut total_seed_entries = 0usize;
+
+                    if let Expression::ArrayLiteral(signers) = &args[2].value {
+                        num_signers = signers.len();
+
+                        for (signer_idx, signer_seeds) in signers.iter().enumerate() {
+                            if let Expression::ArrayLiteral(seeds) = signer_seeds {
+                                let num_seeds_this_signer = seeds.len();
+
+                                let seeds_entry_ptr = self.alloc_reg();
+                                let seed_entry_offset = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(
+                                    seed_entry_offset,
+                                    (total_seed_entries * 16) as i64,
+                                ));
+                                self.emit(IrInstruction::Add(
+                                    seeds_entry_ptr,
+                                    seed_entries_base,
+                                    seed_entry_offset,
+                                ));
+
+                                let signer_offset = (signer_idx * 16) as i64;
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    seeds_entry_ptr,
+                                    signer_offset,
+                                ));
+                                let num_seeds_reg = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(
+                                    num_seeds_reg,
+                                    num_seeds_this_signer as i64,
+                                ));
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    num_seeds_reg,
+                                    signer_offset + 8,
+                                ));
+
+                                for (seed_idx, seed_pair) in seeds.iter().enumerate() {
+                                    if let Expression::ArrayLiteral(pair) = seed_pair {
+                                        if pair.len() >= 2 {
+                                            let seed_addr = self.generate_expr(&pair[0])?
+                                                .ok_or_else(|| Error::runtime("seed addr has no result"))?;
+                                            let seed_len = self.generate_expr(&pair[1])?
+                                                .ok_or_else(|| Error::runtime("seed len has no result"))?;
+
+                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_addr,
+                                                entry_offset,
+                                            ));
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_len,
+                                                entry_offset + 8,
+                                            ));
+                                        }
+                                    }
+                                }
+
+                                total_seed_entries += num_seeds_this_signer;
+                            }
+                        }
+                    }
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+
+                    let num_signers_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(num_signers_reg, num_signers as i64));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, signer_seeds_base, num_signers_reg],
                     ));
 
                     return Ok(Some(dst));
@@ -3694,6 +4080,204 @@ impl IrGenerator {
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
                         vec![instr_ptr, account_infos_ptr, num_accounts, zero, zero],
+                    ));
+
+                    return Ok(Some(dst));
+                }
+
+                // =================================================================
+                // SYSTEM-ASSIGN-SIGNED: Assign account with PDA as signer
+                // =================================================================
+                // (system-assign-signed account-idx owner-pubkey-ptr signers)
+                //
+                // Same as system-assign but with PDA signing.
+                // signers: [[[seed1-ptr seed1-len] [seed2-ptr seed2-len] ...]]
+                //
+                // Memory layout at heap 0x300001000:
+                //   +0:     System Program ID (32 bytes, all zeros)
+                //   +32:    Instruction data (36 bytes: 4-byte discriminator + 32-byte owner)
+                //   +80:    SolAccountMeta array (1 account * 16 bytes = 16 bytes)
+                //   +128:   SolInstruction struct (40 bytes)
+                //   +256:   SolSignerSeeds array (16 bytes each)
+                //   +384:   SolSignerSeed entries (16 bytes each)
+                // =================================================================
+                if name == "system-assign-signed" && args.len() == 3 {
+                    let heap_base = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(heap_base, 0x300001000_i64));
+
+                    let account_idx = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("system-assign-signed account-idx has no result"))?;
+                    let owner_ptr = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("system-assign-signed owner-pubkey-ptr has no result"))?;
+
+                    // Build System Program ID (all zeros)
+                    let zero = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 0));
+                    self.emit(IrInstruction::Store(heap_base, zero, 8));
+                    self.emit(IrInstruction::Store(heap_base, zero, 16));
+                    self.emit(IrInstruction::Store(heap_base, zero, 24));
+
+                    // Build instruction data at heap_base + 32
+                    let data_ptr = self.alloc_reg();
+                    let const_32 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_32, 32));
+                    self.emit(IrInstruction::Add(data_ptr, heap_base, const_32));
+
+                    // Discriminator 1 = Assign
+                    let one_disc = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one_disc, 1));
+                    self.emit(IrInstruction::Store4(data_ptr, one_disc, 0));
+
+                    // Copy owner pubkey (32 bytes)
+                    let owner_chunk0 = self.alloc_reg();
+                    let owner_chunk1 = self.alloc_reg();
+                    let owner_chunk2 = self.alloc_reg();
+                    let owner_chunk3 = self.alloc_reg();
+                    self.emit(IrInstruction::Load(owner_chunk0, owner_ptr, 0));
+                    self.emit(IrInstruction::Load(owner_chunk1, owner_ptr, 8));
+                    self.emit(IrInstruction::Load(owner_chunk2, owner_ptr, 16));
+                    self.emit(IrInstruction::Load(owner_chunk3, owner_ptr, 24));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk0, 4));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk1, 12));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk2, 20));
+                    self.emit(IrInstruction::Store(data_ptr, owner_chunk3, 28));
+
+                    let account_size = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(account_size, 10336_i64));
+                    let eight = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight, 8));
+                    let input_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(input_ptr, 1));
+
+                    // Build SolAccountMeta at heap_base + 80
+                    let meta_base = self.alloc_reg();
+                    let const_80 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_80, 80));
+                    self.emit(IrInstruction::Add(meta_base, heap_base, const_80));
+
+                    // Account to assign (writable, signer via PDA)
+                    let acct_offset = self.alloc_reg();
+                    self.emit(IrInstruction::Mul(acct_offset, account_idx, account_size));
+                    let temp = self.alloc_reg();
+                    self.emit(IrInstruction::Add(temp, acct_offset, eight));
+                    self.emit(IrInstruction::Add(temp, temp, eight));
+                    let acct_pk_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(acct_pk_ptr, input_ptr, temp));
+                    self.emit(IrInstruction::Store(meta_base, acct_pk_ptr, 0));
+                    let writable_signer = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(writable_signer, 257));
+                    self.emit(IrInstruction::Store(meta_base, writable_signer, 8));
+
+                    // Build instruction at heap_base + 128
+                    let instr_ptr = self.alloc_reg();
+                    let const_128 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_128, 128));
+                    self.emit(IrInstruction::Add(instr_ptr, heap_base, const_128));
+
+                    self.emit(IrInstruction::Store(instr_ptr, heap_base, 0)); // program_id
+                    self.emit(IrInstruction::Store(instr_ptr, meta_base, 8)); // accounts
+                    let one = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(one, 1));
+                    self.emit(IrInstruction::Store(instr_ptr, one, 16)); // accounts_len
+                    self.emit(IrInstruction::Store(instr_ptr, data_ptr, 24)); // data
+                    let thirty_six = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(thirty_six, 36));
+                    self.emit(IrInstruction::Store(instr_ptr, thirty_six, 32)); // data_len
+
+                    // =================================================================
+                    // Process PDA signer seeds (arg 2)
+                    // =================================================================
+                    let mut num_signers = 0usize;
+                    let signer_seeds_base = self.alloc_reg();
+                    let const_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_256, 256));
+                    self.emit(IrInstruction::Add(signer_seeds_base, heap_base, const_256));
+
+                    let seed_entries_base = self.alloc_reg();
+                    let const_384 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(const_384, 384));
+                    self.emit(IrInstruction::Add(seed_entries_base, heap_base, const_384));
+
+                    let mut total_seed_entries = 0usize;
+
+                    if let Expression::ArrayLiteral(signers) = &args[2].value {
+                        num_signers = signers.len();
+
+                        for (signer_idx, signer_seeds) in signers.iter().enumerate() {
+                            if let Expression::ArrayLiteral(seeds) = signer_seeds {
+                                let num_seeds_this_signer = seeds.len();
+
+                                let seeds_entry_ptr = self.alloc_reg();
+                                let seed_entry_offset = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(
+                                    seed_entry_offset,
+                                    (total_seed_entries * 16) as i64,
+                                ));
+                                self.emit(IrInstruction::Add(
+                                    seeds_entry_ptr,
+                                    seed_entries_base,
+                                    seed_entry_offset,
+                                ));
+
+                                let signer_offset = (signer_idx * 16) as i64;
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    seeds_entry_ptr,
+                                    signer_offset,
+                                ));
+                                let num_seeds_reg = self.alloc_reg();
+                                self.emit(IrInstruction::ConstI64(
+                                    num_seeds_reg,
+                                    num_seeds_this_signer as i64,
+                                ));
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    num_seeds_reg,
+                                    signer_offset + 8,
+                                ));
+
+                                for (seed_idx, seed_pair) in seeds.iter().enumerate() {
+                                    if let Expression::ArrayLiteral(pair) = seed_pair {
+                                        if pair.len() >= 2 {
+                                            let seed_addr = self.generate_expr(&pair[0])?
+                                                .ok_or_else(|| Error::runtime("seed addr has no result"))?;
+                                            let seed_len = self.generate_expr(&pair[1])?
+                                                .ok_or_else(|| Error::runtime("seed len has no result"))?;
+
+                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_addr,
+                                                entry_offset,
+                                            ));
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_len,
+                                                entry_offset + 8,
+                                            ));
+                                        }
+                                    }
+                                }
+
+                                total_seed_entries += num_seeds_this_signer;
+                            }
+                        }
+                    }
+
+                    let account_infos_ptr = self.alloc_reg();
+                    self.emit(IrInstruction::Add(account_infos_ptr, input_ptr, eight));
+                    let num_accounts = self.alloc_reg();
+                    self.emit(IrInstruction::Load(num_accounts, input_ptr, 0));
+
+                    let num_signers_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(num_signers_reg, num_signers as i64));
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_invoke_signed_c".to_string(),
+                        vec![instr_ptr, account_infos_ptr, num_accounts, signer_seeds_base, num_signers_reg],
                     ));
 
                     return Ok(Some(dst));
