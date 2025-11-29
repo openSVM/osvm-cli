@@ -475,7 +475,39 @@ services.rs          # Service management (systemd)
 
 **Workspace Structure:**
 - Main crate: `osvm-cli` (CLI tool)
-- OVSM crate: `crates/ovsm` (LISP interpreter)
+- OVSM crate: `crates/ovsm` (LISP interpreter + sBPF compiler)
+
+**OVSM Compiler Architecture:**
+
+```text
+crates/ovsm/src/
+├── lexer/
+│   └── sexpr_scanner.rs   # S-expression tokenizer
+├── parser/
+│   └── sexpr_parser.rs    # AST builder from tokens
+├── runtime/
+│   └── lisp_evaluator.rs  # LISP interpreter (for scripts)
+└── compiler/              # sBPF bytecode compiler
+    ├── mod.rs             # Compiler entry point
+    ├── ir/                # Intermediate Representation (3AC)
+    │   ├── mod.rs         # Module definition + re-exports
+    │   ├── types.rs       # PrimitiveType, FieldType, StructDef
+    │   ├── instruction.rs # IrReg, IrInstruction enum
+    │   ├── program.rs     # BasicBlock, IrProgram (CFG)
+    │   └── generator.rs   # IrGenerator (~60 macro impls, 5700 lines)
+    ├── codegen/           # IR → sBPF lowering
+    │   ├── mod.rs
+    │   ├── register_allocator.rs  # Graph coloring allocator
+    │   └── elf_writer.rs  # ELF .so output
+    └── solana_abi.rs      # Solana ABI helpers (WIP)
+```
+
+**Compilation Pipeline:**
+1. `sexpr_scanner` → Tokens
+2. `sexpr_parser` → AST
+3. `ir/generator.rs` → Three-address-code IR
+4. `codegen/register_allocator.rs` → Physical register mapping
+5. `codegen/elf_writer.rs` → Solana-compatible .so binary
 
 **OVSM LISP Syntax Reference:**
 
@@ -1284,7 +1316,9 @@ osvm ovsm repl
 - `crates/ovsm/src/lexer/sexpr_scanner.rs` - S-expression lexer
 - `crates/ovsm/src/parser/sexpr_parser.rs` - S-expression parser
 - `crates/ovsm/src/runtime/lisp_evaluator.rs` - OVSM LISP evaluator
-- why BUILD  release? WE DEBUGGING
+- `crates/ovsm/src/compiler/ir/` - IR module (see OVSM Compiler Architecture above)
+- `crates/ovsm/src/compiler/codegen/` - sBPF bytecode generation
+
 ---
 
 ## ✅ TUI DASHBOARD STATUS (PRODUCTION-READY)
