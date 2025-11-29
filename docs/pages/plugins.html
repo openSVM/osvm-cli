@@ -1,4 +1,4 @@
-<!-- Plugin System Documentation -->
+<!-- Plugin System Documentation - OVSM ONLY -->
 <div class="page-header">
     <div class="command-line">
         <span class="prompt">user@osvm:~$</span>
@@ -8,12 +8,17 @@
 
 <section class="page-intro">
     <h1>🧩 Plugin System</h1>
-    <p class="subtitle">Extend OSVM with custom commands, tools, themes, and integrations</p>
+    <p class="subtitle">Extend OSVM with OVSM scripts - custom commands, tools, and integrations</p>
+
+    <div class="info-box" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; border: 2px solid #c23616; font-weight: bold;">
+        ⚠️ <strong>OVSM-ONLY PLUGINS</strong> ⚠️<br>
+        All plugins are written in OVSM LISP. No Python, Rust, or JavaScript - just pure OVSM scripts (.ovsm files).
+    </div>
 
     <div class="feature-highlights">
         <div class="highlight-item">
             <span class="highlight-icon">⚡</span>
-            <span>4 Plugin Types</span>
+            <span>OVSM Scripts</span>
         </div>
         <div class="highlight-item">
             <span class="highlight-icon">🔒</span>
@@ -38,46 +43,42 @@
         <div class="plugin-type-card" data-type="command">
             <div class="plugin-type-icon">⌨️</div>
             <h3>Command Plugins</h3>
-            <p>Add custom slash commands to the chat interface</p>
+            <p>Add custom slash commands using OVSM scripts</p>
             <div class="plugin-examples">
                 <code>/weather Boston</code>
-                <code>/github create-issue</code>
-                <code>/db query users</code>
+                <code>/analyze wallet</code>
+                <code>/report daily</code>
             </div>
-            <button class="learn-more-btn" onclick="scrollToSection('command-plugins')">Learn More</button>
         </div>
 
         <div class="plugin-type-card" data-type="tool">
             <div class="plugin-type-icon">🔧</div>
             <h3>Tool Plugins</h3>
-            <p>Provide MCP-style tools for AI integration</p>
+            <p>Provide MCP-style tools in OVSM for AI integration</p>
             <div class="plugin-examples">
-                <code>AI: "Get weather in Boston"</code>
-                <code>→ Uses weather tool automatically</code>
+                <code>AI: "Get wallet balance"</code>
+                <code>→ Uses OVSM tool automatically</code>
             </div>
-            <button class="learn-more-btn" onclick="scrollToSection('tool-plugins')">Learn More</button>
         </div>
 
-        <div class="plugin-type-card" data-type="theme">
-            <div class="plugin-type-icon">🎨</div>
-            <h3>Theme Plugins</h3>
-            <p>Customize visual appearance and styling</p>
+        <div class="plugin-type-card" data-type="automation">
+            <div class="plugin-type-icon">🤖</div>
+            <h3>Automation Plugins</h3>
+            <p>Schedule and automate blockchain tasks with OVSM</p>
             <div class="plugin-examples">
-                <code>osvm chat --theme cyberpunk</code>
-                <code>osvm chat --theme minimal</code>
+                <code>Monitor wallet activity</code>
+                <code>Alert on large transfers</code>
             </div>
-            <button class="learn-more-btn" onclick="scrollToSection('theme-plugins')">Learn More</button>
         </div>
 
         <div class="plugin-type-card" data-type="integration">
             <div class="plugin-type-icon">🔌</div>
             <h3>Integration Plugins</h3>
-            <p>Connect to external services and APIs</p>
+            <p>Connect to external APIs using OVSM's HTTP functions</p>
             <div class="plugin-examples">
-                <code>/slack send-message</code>
-                <code>/aws deploy-lambda</code>
+                <code>/notify slack</code>
+                <code>/export csv</code>
             </div>
-            <button class="learn-more-btn" onclick="scrollToSection('integration-plugins')">Learn More</button>
         </div>
     </div>
 </section>
@@ -102,20 +103,19 @@
 <span class="copyable-command" onclick="copyCommand('osvm plugins install ./my-plugin/')"><span class="prompt">$</span> osvm plugins install ./my-plugin/</span>
 
 <span class="comment"># Install from GitHub repository</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins install github.com/user/weather-plugin')"><span class="prompt">$</span> osvm plugins install github.com/user/weather-plugin</span>
+<span class="copyable-command" onclick="copyCommand('osvm plugins install github.com/user/ovsm-plugin')"><span class="prompt">$</span> osvm plugins install github.com/user/ovsm-plugin</span>
 
 <span class="comment"># Enable/disable plugins</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins enable weather-plugin')"><span class="prompt">$</span> osvm plugins enable weather-plugin</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins disable old-plugin')"><span class="prompt">$</span> osvm plugins disable old-plugin</span>
+<span class="copyable-command" onclick="copyCommand('osvm plugins enable wallet-monitor')"><span class="prompt">$</span> osvm plugins enable wallet-monitor</span>
 
 <span class="comment"># Get plugin information</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins info weather-plugin')"><span class="prompt">$</span> osvm plugins info weather-plugin</span></code></pre>
+<span class="copyable-command" onclick="copyCommand('osvm plugins info wallet-monitor')"><span class="prompt">$</span> osvm plugins info wallet-monitor</span></code></pre>
         </div>
     </div>
 
     <div class="tab-content" id="plugin-create">
         <div class="code-block">
-            <div class="code-header">Creating Your First Plugin <span class="copy-hint">← Click any command to copy</span></div>
+            <div class="code-header">Creating Your First OVSM Plugin <span class="copy-hint">← Click any command to copy</span></div>
             <pre><code><span class="comment"># Create plugin directory</span>
 <span class="copyable-command" onclick="copyCommand('mkdir ~/.osvm/plugins/my-plugin')"><span class="prompt">$</span> mkdir ~/.osvm/plugins/my-plugin</span>
 <span class="copyable-command" onclick="copyCommand('cd ~/.osvm/plugins/my-plugin')"><span class="prompt">$</span> cd ~/.osvm/plugins/my-plugin</span>
@@ -123,8 +123,8 @@
 <span class="comment"># Create plugin manifest</span>
 <span class="copyable-command" onclick="copyCommand('touch plugin.json')"><span class="prompt">$</span> touch plugin.json</span>
 
-<span class="comment"># Create entry point script</span>
-<span class="copyable-command" onclick="copyCommand('touch main.py && chmod +x main.py')"><span class="prompt">$</span> touch main.py && chmod +x main.py</span>
+<span class="comment"># Create OVSM entry point script</span>
+<span class="copyable-command" onclick="copyCommand('touch main.ovsm')"><span class="prompt">$</span> touch main.ovsm</span>
 
 <span class="comment"># Test your plugin</span>
 <span class="copyable-command" onclick="copyCommand('osvm plugins install .')"><span class="prompt">$</span> osvm plugins install .</span>
@@ -134,61 +134,32 @@
 
     <div class="tab-content" id="plugin-distribute">
         <div class="code-block">
-            <div class="code-header">Distributing Plugins <span class="copy-hint">← Click any command to copy</span></div>
+            <div class="code-header">Distributing OVSM Plugins <span class="copy-hint">← Click any command to copy</span></div>
             <pre><code><span class="comment"># Create GitHub repository</span>
-<span class="copyable-command" onclick="copyCommand('git init && git add . && git commit -m \"Initial plugin\"')"><span class="prompt">$</span> git init && git add . && git commit -m "Initial plugin"</span>
+<span class="copyable-command" onclick="copyCommand('git init && git add . && git commit -m \"Initial OVSM plugin\"')"><span class="prompt">$</span> git init && git add . && git commit -m "Initial OVSM plugin"</span>
 
 <span class="comment"># Push to GitHub</span>
-<span class="copyable-command" onclick="copyCommand('git remote add origin https://github.com/user/my-plugin.git')"><span class="prompt">$</span> git remote add origin https://github.com/user/my-plugin.git</span>
+<span class="copyable-command" onclick="copyCommand('git remote add origin https://github.com/user/my-ovsm-plugin.git')"><span class="prompt">$</span> git remote add origin https://github.com/user/my-ovsm-plugin.git</span>
 <span class="copyable-command" onclick="copyCommand('git push -u origin main')"><span class="prompt">$</span> git push -u origin main</span>
 
 <span class="comment"># Others can now install with:</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins install github.com/user/my-plugin')"><span class="prompt">$</span> osvm plugins install github.com/user/my-plugin</span></code></pre>
+<span class="copyable-command" onclick="copyCommand('osvm plugins install github.com/user/my-ovsm-plugin')"><span class="prompt">$</span> osvm plugins install github.com/user/my-ovsm-plugin</span></code></pre>
         </div>
     </div>
 </section>
 
-<!-- Command Plugins Section -->
+<!-- Complete OVSM Plugin Example -->
 <section id="command-plugins" class="plugin-detail-section">
-    <h2><span class="section-marker">[</span>COMMAND PLUGINS<span class="section-marker">]</span></h2>
+    <h2><span class="section-marker">[</span>OVSM PLUGIN EXAMPLE<span class="section-marker">]</span></h2>
 
-    <p>Command plugins add new slash commands to the OSVM chat interface. They receive user input and return formatted responses.</p>
-
-    <div class="plugin-architecture">
-        <h3>How Command Plugins Work</h3>
-        <div class="architecture-flow">
-            <div class="flow-step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                    <h4>User Types Command</h4>
-                    <code>/weather Boston</code>
-                </div>
-            </div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                    <h4>Plugin Receives Context</h4>
-                    <code>{"user_input": "/weather Boston", "session_id": "..."}</code>
-                </div>
-            </div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                    <h4>Plugin Returns Result</h4>
-                    <code>{"success": true, "output": "🌤️ Weather in Boston: 22°C"}</code>
-                </div>
-            </div>
-        </div>
-    </div>
+    <p>All plugins are written in OVSM LISP. Here's a complete wallet monitor plugin:</p>
 
     <div class="plugin-example">
-        <h3>Complete Weather Plugin Example</h3>
+        <h3>Wallet Monitor Plugin</h3>
 
         <div class="example-tabs">
             <button class="tab-btn active" onclick="showExampleTab('manifest')">plugin.json</button>
-            <button class="tab-btn" onclick="showExampleTab('python')">main.py</button>
+            <button class="tab-btn" onclick="showExampleTab('ovsm')">main.ovsm</button>
             <button class="tab-btn" onclick="showExampleTab('usage')">Usage</button>
         </div>
 
@@ -196,302 +167,218 @@
             <div class="code-block">
                 <div class="code-header">Plugin Manifest (plugin.json)</div>
                 <pre><code>{
-  "name": "weather-plugin",
+  "name": "wallet-monitor",
   "version": "1.0.0",
-  "description": "Get weather information for any city",
+  "description": "Monitor Solana wallet activity",
   "author": "Your Name",
   "license": "MIT",
-  "homepage": "https://github.com/yourusername/osvm-weather-plugin",
-  "repository": "https://github.com/yourusername/osvm-weather-plugin",
 
   "plugin_type": "Command",
-  "entry_point": "main.py",
-  "dependencies": ["requests", "python-dotenv"],
+  "entry_point": "main.ovsm",
+  "language": "ovsm",
+
+  "commands": ["/monitor", "/alerts"],
 
   "permissions": [
-    {"NetworkAccess": ["api.openweathermap.org"]},
-    "EnvironmentAccess"
+    {"NetworkAccess": ["api.mainnet-beta.solana.com"]},
+    "MCPAccess"
   ],
 
-  "min_osvm_version": "0.8.0",
-  "supported_platforms": ["linux", "macos", "windows"],
-
-  "config_schema": {
-    "type": "object",
-    "properties": {
-      "api_key": {
-        "type": "string",
-        "description": "OpenWeatherMap API key"
-      },
-      "default_units": {
-        "type": "string",
-        "enum": ["metric", "imperial"],
-        "default": "metric"
-      }
-    },
-    "required": ["api_key"]
-  }
+  "min_osvm_version": "0.9.0"
 }</code></pre>
             </div>
         </div>
 
-        <div class="tab-content" id="example-python">
+        <div class="tab-content" id="example-ovsm">
             <div class="code-block">
-                <div class="code-header">Python Implementation (main.py)</div>
-                <pre><code>#!/usr/bin/env python3
-import json
-import sys
-import requests
-import os
-from datetime import datetime
+                <div class="code-header">OVSM Implementation (main.ovsm)</div>
+                <pre><code>;; ============================================
+;; Wallet Monitor Plugin - OVSM LISP
+;; ============================================
 
-def main():
-    # Read context from stdin
-    context = json.loads(sys.stdin.read())
+;; Configuration
+(define monitored-wallets [])
+(define alert-threshold 1000000000)  ;; 1 SOL in lamports
 
-    # Parse command
-    user_input = context["user_input"]
-    city = user_input.replace("/weather", "").strip()
+;; Helper: Format lamports to SOL
+(defun lamports-to-sol (lamports)
+  (/ lamports 1000000000.0))
 
-    if not city:
-        return error_response("Please specify a city: /weather Boston")
+;; Helper: Check if transfer is large
+(defun large-transfer? (amount)
+  (> amount alert-threshold))
 
-    # Get configuration
-    config = context.get("config", {})
-    api_key = config.get("api_key")
-    units = config.get("default_units", "metric")
+;; Get recent transactions for wallet
+(defun get-recent-activity (wallet-addr)
+  (define sigs (getSignaturesForAddress
+    :address wallet-addr
+    :limit 10))
+  (map (lambda (sig)
+    (getTransaction (. sig signature)))
+    sigs))
 
-    if not api_key:
-        return error_response("API key not configured")
+;; Analyze wallet activity
+(defun analyze-wallet (wallet-addr)
+  (define txs (get-recent-activity wallet-addr))
+  (define transfers
+    (filter
+      (lambda (tx)
+        (and (not (null? tx))
+             (= (get tx "type") "transfer")))
+      txs))
 
-    # Fetch weather data
-    try:
-        weather_data = fetch_weather(city, api_key, units)
-        return success_response(weather_data, city, units)
-    except Exception as e:
-        return error_response(f"Failed to get weather: {str(e)}")
+  (define total-volume
+    (reduce +
+      (map (lambda (tx) (get tx "amount")) transfers)
+      0))
 
-def fetch_weather(city, api_key, units):
-    url = "http://api.openweathermap.org/data/2.5/weather"
-    params = {
-        "q": city,
-        "appid": api_key,
-        "units": units
-    }
+  {
+    :wallet wallet-addr
+    :transaction_count (length txs)
+    :transfer_count (length transfers)
+    :total_volume (lamports-to-sol total-volume)
+    :has_large_transfers (some large-transfer?
+      (map (lambda (tx) (get tx "amount")) transfers))
+  })
 
-    response = requests.get(url, params=params, timeout=10)
-    response.raise_for_status()
-    return response.json()
+;; Command: /monitor <wallet>
+(defun handle-monitor (args)
+  (define wallet (first args))
+  (if (null? wallet)
+    (log :message "Usage: /monitor <wallet-address>")
+    (do
+      (log :message "Analyzing wallet..." :value wallet)
+      (define analysis (analyze-wallet wallet))
+      (log :message "=== Wallet Analysis ===" :value analysis)
 
-def success_response(data, city, units):
-    temp = data["main"]["temp"]
-    feels_like = data["main"]["feels_like"]
-    description = data["weather"][0]["description"].title()
-    humidity = data["main"]["humidity"]
+      (when (. analysis has_large_transfers)
+        (log :message "⚠️ ALERT: Large transfers detected!"))
 
-    unit_symbol = "°C" if units == "metric" else "°F"
+      analysis)))
 
-    output = f"""🌤️ Weather in {city}:
-Temperature: {temp}{unit_symbol} (feels like {feels_like}{unit_symbol})
-Condition: {description}
-Humidity: {humidity}%
-Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"""
+;; Command: /alerts
+(defun handle-alerts (args)
+  (define all-analyses
+    (map analyze-wallet monitored-wallets))
 
-    result = {
-        "success": True,
-        "output": output,
-        "data": {
-            "city": city,
-            "temperature": temp,
-            "description": description,
-            "humidity": humidity,
-            "units": units
-        },
-        "suggestions": [
-            f"/weather forecast {city}",
-            f"/weather alerts {city}"
-        ]
-    }
+  (define alerts
+    (filter
+      (lambda (a) (. a has_large_transfers))
+      all-analyses))
 
-    print(json.dumps(result))
+  (if (empty? alerts)
+    (log :message "✅ No alerts - all wallets normal")
+    (do
+      (log :message "🚨 Active Alerts:" :value (length alerts))
+      (for (alert alerts)
+        (log :message "  ⚠️" :value (. alert wallet))))))
 
-def error_response(message):
-    result = {
-        "success": False,
-        "error": message
-    }
-    print(json.dumps(result))
+;; Main entry point - route commands
+(defun main (context)
+  (define command (get context "command"))
+  (define args (get context "args"))
 
-if __name__ == "__main__":
-    main()</code></pre>
+  (cond
+    ((= command "/monitor") (handle-monitor args))
+    ((= command "/alerts") (handle-alerts args))
+    (true (log :message "Unknown command"))))</code></pre>
             </div>
         </div>
 
         <div class="tab-content" id="example-usage">
             <div class="code-block">
-                <div class="code-header">Using the Weather Plugin</div>
+                <div class="code-header">Using the Wallet Monitor Plugin</div>
                 <pre><code><span class="comment"># Install the plugin</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins install ./weather-plugin')"><span class="prompt">$</span> osvm plugins install ./weather-plugin</span>
+<span class="copyable-command" onclick="copyCommand('osvm plugins install ./wallet-monitor')"><span class="prompt">$</span> osvm plugins install ./wallet-monitor</span>
 
-<span class="comment"># Configure API key</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins config weather-plugin api_key YOUR_API_KEY')"><span class="prompt">$</span> osvm plugins config weather-plugin api_key YOUR_API_KEY</span>
+<span class="comment"># Enable it</span>
+<span class="copyable-command" onclick="copyCommand('osvm plugins enable wallet-monitor')"><span class="prompt">$</span> osvm plugins enable wallet-monitor</span>
 
 <span class="comment"># Use in chat</span>
 <span class="prompt">$</span> osvm chat
-<span class="chat-user">> /weather Boston</span>
-<span class="chat-bot">🌤️ Weather in Boston:
-Temperature: 22°C (feels like 25°C)
-Condition: Partly Cloudy
-Humidity: 65%
-Updated: 2024-01-15 14:30</span>
+<span class="chat-user">> /monitor 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM</span>
+<span class="chat-bot">Analyzing wallet...
+=== Wallet Analysis ===
+{
+  :wallet "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+  :transaction_count 10
+  :transfer_count 7
+  :total_volume 156.42
+  :has_large_transfers true
+}
+⚠️ ALERT: Large transfers detected!</span>
 
-<span class="chat-user">> /weather forecast Boston</span>
-<span class="chat-bot">📅 5-Day Forecast for Boston:
-Tomorrow: 18°C, Rain
-Thu: 20°C, Cloudy
-Fri: 24°C, Sunny
-...</span></code></pre>
+<span class="chat-user">> /alerts</span>
+<span class="chat-bot">🚨 Active Alerts: 1
+  ⚠️ 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM</span></code></pre>
             </div>
         </div>
     </div>
 </section>
 
-<!-- Tool Plugins Section -->
-<section id="tool-plugins" class="plugin-detail-section">
-    <h2><span class="section-marker">[</span>TOOL PLUGINS<span class="section-marker">]</span></h2>
+<!-- More OVSM Examples -->
+<section class="more-examples">
+    <h2><span class="section-marker">[</span>MORE OVSM PLUGIN EXAMPLES<span class="section-marker">]</span></h2>
 
-    <p>Tool plugins provide MCP-style tools that AI can use automatically. They're perfect for data retrieval, analysis, and automation tasks.</p>
+    <div class="example-grid">
+        <div class="example-card">
+            <h3>🔔 Notification Plugin</h3>
+            <div class="code-block">
+                <pre><code>;; Send alerts via webhook
+(defun notify (message webhook-url)
+  (http-post webhook-url
+    {:text message
+     :timestamp (now)}))
 
-    <div class="tool-integration-example">
-        <h3>AI Integration Example</h3>
-        <div class="ai-conversation">
-            <div class="ai-message user">
-                <span class="speaker">User:</span>
-                <span class="message">"What's the weather like in Boston and should I bring an umbrella?"</span>
-            </div>
-            <div class="ai-message assistant">
-                <span class="speaker">AI:</span>
-                <span class="message">I'll check the weather in Boston for you.</span>
-                <div class="tool-call">
-                    <span class="tool-icon">🔧</span>
-                    <span class="tool-name">weather-tool</span>
-                    <span class="tool-args">{"city": "Boston"}</span>
-                </div>
-            </div>
-            <div class="ai-message assistant">
-                <span class="speaker">AI:</span>
-                <span class="message">The weather in Boston is currently 22°C and partly cloudy with 65% humidity. There's no rain expected today, so you won't need an umbrella! It's a beautiful day for outdoor activities.</span>
+(defun handle-notify (args)
+  (define msg (join " " args))
+  (notify msg (get-config "webhook_url"))
+  (log :message "Notification sent!"))</code></pre>
             </div>
         </div>
-    </div>
-</section>
 
-<!-- Theme Plugins Section -->
-<section id="theme-plugins" class="plugin-detail-section">
-    <h2><span class="section-marker">[</span>THEME PLUGINS<span class="section-marker">]</span></h2>
+        <div class="example-card">
+            <h3>📊 Portfolio Tracker</h3>
+            <div class="code-block">
+                <pre><code>;; Track token holdings
+(defun get-portfolio (wallet)
+  (define tokens (getTokenAccountsByOwner wallet))
+  (map (lambda (token)
+    {
+      :mint (. token mint)
+      :amount (. token amount)
+      :decimals (. token decimals)
+    })
+    tokens))
 
-    <p>Theme plugins customize the visual appearance of OSVM interfaces. Create custom color schemes, layouts, and animations.</p>
-
-    <div class="theme-gallery">
-        <h3>Popular Themes</h3>
-        <div class="theme-previews">
-            <div class="theme-preview" data-theme="cyberpunk">
-                <div class="theme-window">
-                    <div class="theme-header">cyberpunk.json</div>
-                    <div class="theme-content cyberpunk-theme">
-                        <span class="prompt">neo@matrix:~$</span>
-                        <span class="command">osvm chat</span>
-                        <div class="output">🤖 Agent initialized...</div>
-                    </div>
-                </div>
-                <div class="theme-info">
-                    <h4>Cyberpunk</h4>
-                    <p>Neon colors, matrix-style animations</p>
-                </div>
-            </div>
-
-            <div class="theme-preview" data-theme="minimal">
-                <div class="theme-window">
-                    <div class="theme-header">minimal.json</div>
-                    <div class="theme-content minimal-theme">
-                        <span class="prompt">$</span>
-                        <span class="command">osvm svm list</span>
-                        <div class="output">sonic mainnet ✓</div>
-                    </div>
-                </div>
-                <div class="theme-info">
-                    <h4>Minimal</h4>
-                    <p>Clean, distraction-free interface</p>
-                </div>
-            </div>
-
-            <div class="theme-preview" data-theme="retro">
-                <div class="theme-window">
-                    <div class="theme-header">retro.json</div>
-                    <div class="theme-content retro-theme">
-                        <span class="prompt">C:\></span>
-                        <span class="command">osvm.exe</span>
-                        <div class="output">OSVM v0.8.2 READY</div>
-                    </div>
-                </div>
-                <div class="theme-info">
-                    <h4>Retro</h4>
-                    <p>Classic terminal aesthetics</p>
-                </div>
+(defun handle-portfolio (args)
+  (define wallet (first args))
+  (define holdings (get-portfolio wallet))
+  (log :message "Portfolio:" :value holdings))</code></pre>
             </div>
         </div>
-    </div>
 
-    <div class="theme-creation">
-        <h3>Creating Custom Themes</h3>
-        <div class="code-block">
-            <div class="code-header">Theme Configuration (theme.json)</div>
-            <pre><code>{
-  "name": "my-custom-theme",
-  "version": "1.0.0",
-  "description": "My custom OSVM theme",
-  "author": "Your Name",
-  "plugin_type": "Theme",
+        <div class="example-card">
+            <h3>🔍 Transaction Analyzer</h3>
+            <div class="code-block">
+                <pre><code>;; Analyze transaction patterns
+(defun analyze-tx (signature)
+  (define tx (getTransaction signature))
+  (define instructions (get tx "instructions"))
 
-  "colors": {
-    "primary": "#00ff41",
-    "secondary": "#ff00ff",
-    "background": "#0d0208",
-    "surface": "#1a0f0f",
-    "text": "#e0e0e0",
-    "accent": "#00ffff",
-    "warning": "#ffaa00",
-    "error": "#ff0055",
-    "success": "#00ff41"
-  },
+  {
+    :program_calls (distinct
+      (map (lambda (ix) (. ix programId))
+        instructions))
+    :fee (get tx "fee")
+    :success (get tx "success")
+  })
 
-  "styles": {
-    "chat_input": {
-      "background": "surface",
-      "text": "text",
-      "border": "accent",
-      "border_width": 2
-    },
-    "message_user": {
-      "text": "primary",
-      "prefix": "► "
-    },
-    "message_assistant": {
-      "text": "text",
-      "prefix": "◉ "
-    },
-    "commands": {
-      "text": "accent",
-      "background": "transparent"
-    }
-  },
-
-  "animations": {
-    "typing_indicator": "dots",
-    "transition_speed": "fast",
-    "enable_particles": true
-  }
-}</code></pre>
+(defun handle-analyze (args)
+  (define sig (first args))
+  (log :message "Analysis:"
+       :value (analyze-tx sig)))</code></pre>
+            </div>
         </div>
     </div>
 </section>
@@ -502,20 +389,20 @@ Fri: 24°C, Sunny
 
     <div class="security-grid">
         <div class="security-feature">
-            <h3>🔒 Sandboxed Execution</h3>
-            <p>All plugins run in isolated environments with limited system access</p>
+            <h3>🔒 OVSM Sandbox</h3>
+            <p>All OVSM plugins run in a secure sandboxed interpreter</p>
         </div>
         <div class="security-feature">
             <h3>📋 Permission System</h3>
-            <p>Granular permissions for files, network, and system resources</p>
+            <p>Plugins declare network and file access in plugin.json</p>
         </div>
         <div class="security-feature">
             <h3>🔍 Code Review</h3>
-            <p>All plugin submissions undergo security review</p>
+            <p>OVSM code is human-readable and auditable</p>
         </div>
         <div class="security-feature">
-            <h3>🛡️ Safe Defaults</h3>
-            <p>Plugins start with minimal permissions, request more as needed</p>
+            <h3>🛡️ No Native Code</h3>
+            <p>Pure OVSM - no compiled binaries, no system calls</p>
         </div>
     </div>
 
@@ -523,32 +410,20 @@ Fri: 24°C, Sunny
         <h3>Permission Types</h3>
         <div class="permission-list">
             <div class="permission-item">
-                <code>ReadFiles(["~/data", "/tmp"])</code>
-                <span>Read access to specific directories</span>
-            </div>
-            <div class="permission-item">
-                <code>WriteFiles(["~/output"])</code>
-                <span>Write access to specific directories</span>
-            </div>
-            <div class="permission-item">
-                <code>NetworkAccess(["api.example.com"])</code>
-                <span>Network access to specific hosts</span>
-            </div>
-            <div class="permission-item">
-                <code>ExecuteCommands</code>
-                <span>Execute system commands (high risk)</span>
-            </div>
-            <div class="permission-item">
-                <code>EnvironmentAccess</code>
-                <span>Access to environment variables</span>
+                <code>NetworkAccess(["api.solana.com"])</code>
+                <span>Allow RPC calls to specific hosts</span>
             </div>
             <div class="permission-item">
                 <code>MCPAccess</code>
-                <span>Access to MCP servers</span>
+                <span>Access to MCP server tools</span>
+            </div>
+            <div class="permission-item">
+                <code>ReadFiles(["~/.config/myapp"])</code>
+                <span>Read local config files</span>
             </div>
             <div class="permission-item">
                 <code>AIAccess</code>
-                <span>Access to AI services</span>
+                <span>Access to AI chat context</span>
             </div>
         </div>
     </div>
@@ -556,103 +431,85 @@ Fri: 24°C, Sunny
 
 <!-- Plugin Marketplace -->
 <section class="marketplace-section">
-    <h2><span class="section-marker">[</span>PLUGIN MARKETPLACE<span class="section-marker">]</span></h2>
-
-    <div class="marketplace-notice">
-        <span class="notice-icon">🚀</span>
-        <div class="notice-content">
-            <h3>Coming Soon: Plugin Marketplace</h3>
-            <p>Discover, install, and share plugins through the official OSVM marketplace</p>
-            <div class="marketplace-features">
-                <span class="feature">🔍 Search & Discovery</span>
-                <span class="feature">⭐ Ratings & Reviews</span>
-                <span class="feature">🔄 Automatic Updates</span>
-                <span class="feature">🛡️ Security Scanning</span>
-            </div>
-        </div>
-    </div>
+    <h2><span class="section-marker">[</span>COMMUNITY PLUGINS<span class="section-marker">]</span></h2>
 
     <div class="featured-plugins">
-        <h3>Featured Community Plugins</h3>
+        <h3>Featured OVSM Plugins</h3>
         <div class="plugin-cards">
             <div class="plugin-card">
-                <div class="plugin-icon">🌤️</div>
-                <h4>Weather Plugin</h4>
-                <p>Get weather information and forecasts for any location</p>
+                <div class="plugin-icon">👛</div>
+                <h4>Wallet Monitor</h4>
+                <p>Real-time Solana wallet activity tracking in OVSM</p>
                 <div class="plugin-meta">
-                    <span class="plugin-author">@weatherdev</span>
-                    <span class="plugin-downloads">1.2k installs</span>
+                    <span class="plugin-author">@solanadev</span>
+                    <span class="plugin-lang">OVSM</span>
                 </div>
-                <button class="install-btn" onclick="copyCommand('osvm plugins install github.com/weatherdev/osvm-weather')">Install</button>
+                <button class="install-btn" onclick="copyCommand('osvm plugins install github.com/solanadev/wallet-monitor')">Install</button>
             </div>
 
             <div class="plugin-card">
-                <div class="plugin-icon">📊</div>
-                <h4>Analytics Plugin</h4>
-                <p>Monitor and analyze your validator performance metrics</p>
+                <div class="plugin-icon">📈</div>
+                <h4>DEX Analytics</h4>
+                <p>Analyze DEX trading patterns with OVSM scripts</p>
                 <div class="plugin-meta">
-                    <span class="plugin-author">@metricslab</span>
-                    <span class="plugin-downloads">856 installs</span>
+                    <span class="plugin-author">@defitools</span>
+                    <span class="plugin-lang">OVSM</span>
                 </div>
-                <button class="install-btn" onclick="copyCommand('osvm plugins install github.com/metricslab/osvm-analytics')">Install</button>
+                <button class="install-btn" onclick="copyCommand('osvm plugins install github.com/defitools/dex-analytics')">Install</button>
             </div>
 
             <div class="plugin-card">
-                <div class="plugin-icon">🔗</div>
-                <h4>GitHub Integration</h4>
-                <p>Create issues, manage repos, and deploy directly from OSVM</p>
+                <div class="plugin-icon">🔔</div>
+                <h4>Alert System</h4>
+                <p>Configurable alerts for on-chain events</p>
                 <div class="plugin-meta">
-                    <span class="plugin-author">@gittools</span>
-                    <span class="plugin-downloads">2.1k installs</span>
+                    <span class="plugin-author">@chainwatch</span>
+                    <span class="plugin-lang">OVSM</span>
                 </div>
-                <button class="install-btn" onclick="copyCommand('osvm plugins install github.com/gittools/osvm-github')">Install</button>
+                <button class="install-btn" onclick="copyCommand('osvm plugins install github.com/chainwatch/alerts')">Install</button>
             </div>
         </div>
     </div>
 </section>
 
-<!-- Plugin Development Resources -->
+<!-- Resources -->
 <section class="resources-section">
-    <h2><span class="section-marker">[</span>DEVELOPMENT RESOURCES<span class="section-marker">]</span></h2>
+    <h2><span class="section-marker">[</span>OVSM PLUGIN RESOURCES<span class="section-marker">]</span></h2>
 
     <div class="resource-grid">
         <div class="resource-item">
             <h3>📖 Documentation</h3>
             <ul>
+                <li><a href="#" data-cross-link="ovsm-language">OVSM Language Reference</a></li>
                 <li><a href="#" data-cross-link="api-reference">Plugin API Reference</a></li>
-                <li><a href="#" data-cross-link="api-reference">TypeScript Definitions</a></li>
-                <li><a href="#" data-cross-link="installation">Development Setup</a></li>
-                <li><a href="#" data-cross-link="api-reference">Testing Guide</a></li>
+                <li><a href="#" data-cross-link="mcp">MCP Integration Guide</a></li>
             </ul>
         </div>
 
         <div class="resource-item">
-            <h3>🛠️ Tools & Templates</h3>
+            <h3>🛠️ Templates</h3>
             <ul>
-                <li>Plugin Generator CLI</li>
-                <li>TypeScript Plugin Template</li>
-                <li>Python Plugin Template</li>
-                <li>Rust Plugin Template</li>
+                <li>Command Plugin Template (.ovsm)</li>
+                <li>Tool Plugin Template (.ovsm)</li>
+                <li>Automation Plugin Template (.ovsm)</li>
             </ul>
         </div>
 
         <div class="resource-item">
             <h3>🤝 Community</h3>
             <ul>
-                <li>Discord #plugin-dev Channel</li>
+                <li>Discord #ovsm-plugins Channel</li>
                 <li>GitHub Discussions</li>
                 <li>Plugin Showcase</li>
-                <li>Monthly Developer Calls</li>
             </ul>
         </div>
 
         <div class="resource-item">
-            <h3>🔧 Advanced Topics</h3>
+            <h3>📚 Learn OVSM</h3>
             <ul>
-                <li>Custom Permission Types</li>
-                <li>Plugin Performance Optimization</li>
-                <li>Error Handling Best Practices</li>
-                <li>Multi-Language Support</li>
+                <li><a href="#" data-cross-link="ovsm-language">OVSM Syntax Guide</a></li>
+                <li><a href="#" data-cross-link="ovsm-language">Built-in Functions</a></li>
+                <li><a href="#" data-cross-link="ovsm-language">Example Scripts</a></li>
             </ul>
         </div>
     </div>
@@ -661,43 +518,24 @@ Fri: 24°C, Sunny
 <script>
 // Plugin-specific JavaScript
 function showPluginTab(tabName) {
-    // Hide all tab contents
     document.querySelectorAll('#plugin-install, #plugin-create, #plugin-distribute').forEach(tab => {
         tab.classList.remove('active');
     });
-
-    // Remove active class from all buttons
     document.querySelectorAll('.quick-start-tabs .tab-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-
-    // Show selected tab
     document.getElementById(`plugin-${tabName}`).classList.add('active');
-
-    // Add active class to clicked button
     event.target.classList.add('active');
 }
 
 function showExampleTab(tabName) {
-    // Hide all example tabs
-    document.querySelectorAll('#example-manifest, #example-python, #example-usage').forEach(tab => {
+    document.querySelectorAll('#example-manifest, #example-ovsm, #example-usage').forEach(tab => {
         tab.classList.remove('active');
     });
-
-    // Remove active from buttons
     event.target.parentElement.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-
-    // Show selected tab
     document.getElementById(`example-${tabName}`).classList.add('active');
     event.target.classList.add('active');
-}
-
-function scrollToSection(sectionId) {
-    document.getElementById(sectionId).scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-    });
 }
 </script>

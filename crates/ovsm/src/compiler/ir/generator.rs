@@ -41,7 +41,7 @@ use crate::{Statement, Expression, BinaryOp, UnaryOp};
 use super::types::{PrimitiveType, FieldType, StructField, StructDef};
 use super::instruction::{IrReg, IrInstruction};
 use super::program::{BasicBlock, IrProgram};
-use super::memory_model::{TypeEnv, RegType, PointerType, TypedReg, MemoryRegion, account_layout};
+use super::memory_model::{TypeEnv, RegType, PointerType, TypedReg, MemoryRegion, Alignment, MemoryError, account_layout};
 
 /// IR Generator - transforms typed AST to IR
 ///
@@ -524,7 +524,12 @@ impl IrGenerator {
                             eprintln!("   +{}: {} ({:?})", field.offset, field.name, field.field_type);
                         }
 
-                        self.struct_defs.insert(struct_name.clone(), struct_def);
+                        self.struct_defs.insert(struct_name.clone(), struct_def.clone());
+
+                        // Sync to type environment for memory model validation
+                        let mut defs = std::collections::HashMap::new();
+                        defs.insert(struct_name.clone(), struct_def);
+                        self.type_env.add_struct_defs(defs);
 
                         // define-struct produces no runtime value
                         return Ok(None);
@@ -534,6 +539,7 @@ impl IrGenerator {
                 // Handle (struct-get StructName base_ptr field_name)
                 // Example: (struct-get MyState state_ptr counter)
                 // Generates the appropriate Load1/2/4/8 based on field type
+                // MEMORY MODEL: Validates field access and registers result type
                 if name == "struct-get" && args.len() == 3 {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
@@ -551,29 +557,70 @@ impl IrGenerator {
                         let base_reg = self.generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("struct-get base_ptr has no result"))?;
 
+                        // MEMORY MODEL: Validate struct field access (checks bounds if base_reg has type info)
+                        self.type_env.validate_struct_field(struct_name, field_name, base_reg);
+
                         let dst = self.alloc_reg();
                         let offset = field.offset;
+                        let field_type_clone = field.field_type.clone();
 
                         // Emit the appropriate load instruction based on field type
                         match &field.field_type {
                             FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Load1(dst, base_reg, offset));
+                                // Register result as u8 value
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I8));
+                                self.type_env.set_type(dst, RegType::Value { size: 1, signed });
                             }
                             FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Load2(dst, base_reg, offset));
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I16));
+                                self.type_env.set_type(dst, RegType::Value { size: 2, signed });
                             }
                             FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Load4(dst, base_reg, offset));
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I32));
+                                self.type_env.set_type(dst, RegType::Value { size: 4, signed });
                             }
                             FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Load(dst, base_reg, offset));
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I64));
+                                self.type_env.set_type(dst, RegType::Value { size: 8, signed });
                             }
                             FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
                                 // For pubkey/array/struct, return pointer to field (not value)
-                                // Use struct-ptr for these types instead
                                 let offset_reg = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(offset_reg, offset));
                                 self.emit(IrInstruction::Add(dst, base_reg, offset_reg));
+
+                                // Register result as pointer to the field
+                                let field_size = match &field_type_clone {
+                                    FieldType::Pubkey => 32,
+                                    FieldType::Array { element_type, count } => {
+                                        element_type.size() * (*count as i64)
+                                    }
+                                    FieldType::Struct(nested_name) => {
+                                        self.struct_defs.get(nested_name)
+                                            .map(|s| s.total_size)
+                                            .unwrap_or(0)
+                                    }
+                                    _ => 0,
+                                };
+                                // If base_reg has pointer info, derive field pointer from it
+                                if let Some(RegType::Pointer(base_ptr)) = self.type_env.get_type(base_reg).cloned() {
+                                    let field_ptr = base_ptr.field_access(offset, field_size, field_name.clone());
+                                    self.type_env.set_type(dst, RegType::Pointer(field_ptr));
+                                } else {
+                                    // Unknown base, create a generic pointer
+                                    self.type_env.set_type(dst, RegType::Pointer(PointerType {
+                                        region: MemoryRegion::Unknown,
+                                        bounds: Some((0, field_size)),
+                                        struct_type: Some(format!("{}.{}", struct_name, field_name)),
+                                        offset: 0,
+                                        alignment: Alignment::Byte1,
+                                        writable: true,
+                                    }));
+                                }
                             }
                         }
 
@@ -584,6 +631,7 @@ impl IrGenerator {
                 // Handle (struct-set StructName base_ptr field_name value)
                 // Example: (struct-set MyState state_ptr counter 42)
                 // Generates the appropriate Store1/2/4/8 based on field type
+                // MEMORY MODEL: Validates field access and checks writability
                 if name == "struct-set" && args.len() == 4 {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
@@ -600,6 +648,18 @@ impl IrGenerator {
 
                         let base_reg = self.generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("struct-set base_ptr has no result"))?;
+
+                        // MEMORY MODEL: Validate struct field access and writability
+                        self.type_env.validate_struct_field(struct_name, field_name, base_reg);
+
+                        // Also validate writability if base_reg has type info
+                        if let Some(RegType::Pointer(ptr)) = self.type_env.get_type(base_reg) {
+                            if !ptr.writable {
+                                self.type_env.record_error(MemoryError::ReadOnlyWrite {
+                                    region: ptr.region,
+                                });
+                            }
+                        }
 
                         let value_reg = self.generate_expr(&args[3].value)?
                             .ok_or_else(|| Error::runtime("struct-set value has no result"))?;
@@ -4213,12 +4273,19 @@ impl IrGenerator {
                 // (zerocopy-load StructName account-idx field-name) -> value
                 // Directly loads a field from account data without struct-get overhead
                 // Uses the struct definition for offset calculation
+                // MEMORY MODEL: Validates field access and registers result type
                 if name == "zerocopy-load" && args.len() == 3 {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
                     {
                         let account_idx = self.generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("zerocopy-load account-idx has no result"))?;
+
+                        // MEMORY MODEL: Try to extract constant account index for type tracking
+                        let account_idx_const: Option<u8> = match &args[1].value {
+                            Expression::IntLiteral(n) => Some(*n as u8),
+                            _ => None,
+                        };
 
                         let struct_def = self.struct_defs.get(struct_name)
                             .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
@@ -4246,28 +4313,68 @@ impl IrGenerator {
                         let data_ptr = self.alloc_reg();
                         self.emit(IrInstruction::Add(data_ptr, accounts_ptr, total_offset));
 
+                        // MEMORY MODEL: Register data_ptr as typed account data pointer
+                        if let Some(idx) = account_idx_const {
+                            self.type_env.set_type(data_ptr, RegType::Pointer(
+                                PointerType::struct_ptr(idx, struct_name.clone(), struct_def.total_size, None)
+                            ));
+                        }
+
                         // Load field at offset
                         let dst = self.alloc_reg();
                         let field_offset = field.offset;
+                        let field_type_clone = field.field_type.clone();
 
                         match &field.field_type {
                             FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Load1(dst, data_ptr, field_offset));
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I8));
+                                self.type_env.set_type(dst, RegType::Value { size: 1, signed });
                             }
                             FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Load2(dst, data_ptr, field_offset));
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I16));
+                                self.type_env.set_type(dst, RegType::Value { size: 2, signed });
                             }
                             FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Load4(dst, data_ptr, field_offset));
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I32));
+                                self.type_env.set_type(dst, RegType::Value { size: 4, signed });
                             }
                             FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Load(dst, data_ptr, field_offset));
+                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I64));
+                                self.type_env.set_type(dst, RegType::Value { size: 8, signed });
                             }
                             FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
                                 // Return pointer to field for complex types
                                 let offset_reg = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(offset_reg, field_offset));
                                 self.emit(IrInstruction::Add(dst, data_ptr, offset_reg));
+
+                                // Register result as pointer
+                                let field_size = match &field_type_clone {
+                                    FieldType::Pubkey => 32,
+                                    FieldType::Array { element_type, count } => {
+                                        element_type.size() * (*count as i64)
+                                    }
+                                    FieldType::Struct(nested_name) => {
+                                        self.struct_defs.get(nested_name)
+                                            .map(|s| s.total_size)
+                                            .unwrap_or(0)
+                                    }
+                                    _ => 0,
+                                };
+                                if let Some(idx) = account_idx_const {
+                                    self.type_env.set_type(dst, RegType::Pointer(PointerType {
+                                        region: MemoryRegion::AccountData(idx),
+                                        bounds: Some((field_offset, field_size)),
+                                        struct_type: Some(format!("{}.{}", struct_name, field_name)),
+                                        offset: field_offset,
+                                        alignment: Alignment::Byte1,
+                                        writable: true,
+                                    }));
+                                }
                             }
                         }
 
@@ -4277,12 +4384,27 @@ impl IrGenerator {
 
                 // (zerocopy-store StructName account-idx field-name value) -> void
                 // Directly stores a value to account data
+                // MEMORY MODEL: Validates field access and checks account writability
                 if name == "zerocopy-store" && args.len() == 4 {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
                     {
                         let account_idx = self.generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("zerocopy-store account-idx has no result"))?;
+
+                        // MEMORY MODEL: Try to extract constant account index for validation
+                        let account_idx_const: Option<u8> = match &args[1].value {
+                            Expression::IntLiteral(n) => Some(*n as u8),
+                            _ => None,
+                        };
+
+                        // MEMORY MODEL: Validate account index if known
+                        if let Some(idx) = account_idx_const {
+                            if let Err(e) = self.type_env.validate_account_index(idx) {
+                                self.type_env.record_error(e);
+                            }
+                        }
+
                         let value = self.generate_expr(&args[3].value)?
                             .ok_or_else(|| Error::runtime("zerocopy-store value has no result"))?;
 
@@ -4311,6 +4433,13 @@ impl IrGenerator {
 
                         let data_ptr = self.alloc_reg();
                         self.emit(IrInstruction::Add(data_ptr, accounts_ptr, total_offset));
+
+                        // MEMORY MODEL: Register data_ptr as typed account data pointer
+                        if let Some(idx) = account_idx_const {
+                            self.type_env.set_type(data_ptr, RegType::Pointer(
+                                PointerType::struct_ptr(idx, struct_name.clone(), struct_def.total_size, None)
+                            ));
+                        }
 
                         let field_offset = field.offset;
 

@@ -183,11 +183,57 @@ impl PointerType {
         }
     }
 
+    /// Create a pointer to a struct in account data
+    pub fn struct_ptr(
+        account_idx: u8,
+        struct_name: String,
+        struct_size: i64,
+        data_len: Option<i64>,
+    ) -> Self {
+        PointerType {
+            region: MemoryRegion::AccountData(account_idx),
+            bounds: data_len.map(|len| (0, len)).or(Some((0, struct_size))),
+            struct_type: Some(struct_name),
+            offset: 0,
+            alignment: Alignment::Byte1, // Account data may not be aligned
+            writable: true,
+        }
+    }
+
+    /// Create a pointer to a specific field within a struct
+    pub fn struct_field_ptr(
+        base: &PointerType,
+        field_name: String,
+        field_offset: i64,
+        field_size: i64,
+    ) -> Self {
+        PointerType {
+            region: base.region,
+            bounds: Some((field_offset, field_size)),
+            struct_type: Some(field_name),
+            offset: base.offset + field_offset,
+            alignment: Alignment::from_size(field_size),
+            writable: base.writable,
+        }
+    }
+
     /// Offset this pointer by a constant
     pub fn offset_by(&self, delta: i64) -> Self {
         let mut new = self.clone();
         new.offset += delta;
         new
+    }
+
+    /// Offset into a struct field (with type info preserved)
+    pub fn field_access(&self, field_offset: i64, field_size: i64, field_name: String) -> Self {
+        PointerType {
+            region: self.region,
+            bounds: Some((self.offset + field_offset, field_size)),
+            struct_type: Some(field_name),
+            offset: self.offset + field_offset,
+            alignment: Alignment::from_size(field_size),
+            writable: self.writable,
+        }
     }
 
     /// Check if an access at current offset with given size is in bounds
@@ -501,6 +547,110 @@ impl TypeEnv {
             }
         }
         Ok(())
+    }
+
+    /// Validate struct field access
+    /// Returns the field size if valid, records error otherwise
+    pub fn validate_struct_field(
+        &mut self,
+        struct_name: &str,
+        field_name: &str,
+        base_reg: super::instruction::IrReg,
+    ) -> Option<(i64, i64)> {
+        // Check if struct is defined
+        let struct_def = match self.struct_defs.get(struct_name) {
+            Some(def) => def.clone(),
+            None => {
+                self.record_error(MemoryError::StructNotDefined {
+                    name: struct_name.to_string(),
+                });
+                return None;
+            }
+        };
+
+        // Check if field exists
+        let field = match struct_def.fields.iter().find(|f| f.name == field_name) {
+            Some(f) => f.clone(),
+            None => {
+                self.record_error(MemoryError::FieldNotFound {
+                    struct_name: struct_name.to_string(),
+                    field_name: field_name.to_string(),
+                });
+                return None;
+            }
+        };
+
+        // If base_reg has type info, validate bounds
+        if let Some(RegType::Pointer(ptr)) = self.get_type(base_reg).cloned() {
+            // Check struct size fits in bounds
+            if let Some((start, len)) = ptr.bounds {
+                let field_end = field.offset + self.field_size(&field.field_type);
+                if field_end > len {
+                    self.record_error(MemoryError::OutOfBounds {
+                        region: ptr.region,
+                        offset: field.offset,
+                        size: self.field_size(&field.field_type),
+                        bounds: (start, len),
+                    });
+                }
+            }
+        }
+
+        Some((field.offset, self.field_size(&field.field_type)))
+    }
+
+    /// Get size of a field type
+    fn field_size(&self, field_type: &super::types::FieldType) -> i64 {
+        use super::types::{FieldType, PrimitiveType};
+        match field_type {
+            FieldType::Primitive(p) => match p {
+                PrimitiveType::U8 | PrimitiveType::I8 => 1,
+                PrimitiveType::U16 | PrimitiveType::I16 => 2,
+                PrimitiveType::U32 | PrimitiveType::I32 => 4,
+                PrimitiveType::U64 | PrimitiveType::I64 => 8,
+            },
+            FieldType::Pubkey => 32,
+            FieldType::Array { element_type, count } => {
+                let elem_size = match element_type {
+                    PrimitiveType::U8 | PrimitiveType::I8 => 1,
+                    PrimitiveType::U16 | PrimitiveType::I16 => 2,
+                    PrimitiveType::U32 | PrimitiveType::I32 => 4,
+                    PrimitiveType::U64 | PrimitiveType::I64 => 8,
+                };
+                elem_size * (*count as i64)
+            }
+            FieldType::Struct(name) => {
+                self.struct_defs.get(name).map(|s| s.total_size).unwrap_or(0)
+            }
+        }
+    }
+
+    /// Register a struct-typed pointer
+    pub fn register_struct_ptr(
+        &mut self,
+        reg: super::instruction::IrReg,
+        struct_name: &str,
+        account_idx: Option<u8>,
+    ) {
+        if let Some(struct_def) = self.struct_defs.get(struct_name) {
+            let ptr_type = match account_idx {
+                Some(idx) => PointerType::struct_ptr(
+                    idx,
+                    struct_name.to_string(),
+                    struct_def.total_size,
+                    None,
+                ),
+                None => PointerType {
+                    region: MemoryRegion::Unknown,
+                    bounds: Some((0, struct_def.total_size)),
+                    struct_type: Some(struct_name.to_string()),
+                    offset: 0,
+                    alignment: Alignment::Byte1,
+                    writable: true,
+                },
+            };
+            self.set_type(reg, RegType::Pointer(ptr_type));
+        }
     }
 
     /// Record an error (or warning if not strict)

@@ -4,8 +4,13 @@ use ratatui::{
     widgets::{Block, Borders, Widget, Wrap, canvas::{Canvas, Points, Line as CanvasLine, Circle, Rectangle}},
     Frame,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use arboard::Clipboard;
+
+// Re-export forensics types for backward compatibility (only types not defined locally)
+pub use super::graph_forensics::{
+    GraphData, GraphForensics, MixerStats,
+};
 
 #[derive(Debug, Clone)]
 pub enum WalletNodeType {
@@ -132,6 +137,153 @@ pub enum RiskLevel {
     High,      // 50-75
     Medium,    // 25-50
     Low,       // 0-25
+}
+
+/// Incremental risk statistics - updated O(1) on each edge/node add
+/// Avoids full graph traversal for most risk factors
+#[derive(Debug, Clone, Default)]
+pub struct IncrementalRiskStats {
+    /// Whale transfers (amount > 100 SOL)
+    pub whale_count: usize,
+    pub whale_total_volume: f64,
+    /// Unique tokens seen (for diversity calculation)
+    pub unique_tokens: HashSet<String>,
+    /// Per-token transfer timestamps for rapid detection
+    /// Maps token -> sorted list of (timestamp_secs, amount)
+    pub token_transfer_times: HashMap<String, Vec<(u64, f64)>>,
+    /// Running total transfer volume
+    pub total_volume: f64,
+    /// Running transfer count
+    pub transfer_count: usize,
+    /// Cached circular flow count (only updated on full recalc)
+    pub cached_circular_count: usize,
+    /// Cached rapid flow alerts (only updated on full recalc)
+    pub cached_rapid_alerts: Vec<RapidFlowAlert>,
+    /// Whether circular/rapid need full recalc (set to true after N incremental updates)
+    pub needs_deep_recalc: bool,
+    /// Counter for incremental updates since last deep recalc
+    pub updates_since_deep_recalc: usize,
+}
+
+impl IncrementalRiskStats {
+    /// Process a new edge and update incremental stats in O(1)
+    pub fn on_edge_added(&mut self, amount: f64, token: &str, timestamp: Option<&str>) {
+        self.transfer_count += 1;
+        self.total_volume += amount;
+        self.updates_since_deep_recalc += 1;
+
+        // Track whale activity (>100 SOL)
+        if amount > 100.0 {
+            self.whale_count += 1;
+            self.whale_total_volume += amount;
+        }
+
+        // Track token diversity
+        self.unique_tokens.insert(token.to_string());
+
+        // Track transfer timestamps for rapid detection
+        if let Some(ts_str) = timestamp {
+            if let Ok(ts) = ts_str.parse::<u64>() {
+                self.token_transfer_times
+                    .entry(token.to_string())
+                    .or_insert_with(Vec::new)
+                    .push((ts, amount));
+            }
+        }
+
+        // Trigger deep recalc every 50 updates to keep circular flow detection fresh
+        if self.updates_since_deep_recalc > 50 {
+            self.needs_deep_recalc = true;
+        }
+    }
+
+    /// Calculate rapid transfer alerts from cached timestamp data
+    /// This is O(T * log T) where T is number of transfers per token (typically small)
+    pub fn detect_rapid_transfers_incremental(&self, window_secs: u64, threshold: usize) -> Vec<RapidFlowAlert> {
+        let mut alerts = Vec::new();
+
+        for (token, times) in &self.token_transfer_times {
+            if times.len() < threshold {
+                continue;
+            }
+
+            // Sort by timestamp (already mostly sorted due to append-order)
+            let mut sorted_times: Vec<_> = times.clone();
+            sorted_times.sort_by_key(|(ts, _)| *ts);
+
+            // Sliding window to find rapid bursts
+            let mut window_start = 0;
+            for window_end in 0..sorted_times.len() {
+                // Shrink window from left if outside time window
+                while sorted_times[window_end].0 - sorted_times[window_start].0 > window_secs {
+                    window_start += 1;
+                }
+
+                let count = window_end - window_start + 1;
+                if count >= threshold {
+                    let volume: f64 = sorted_times[window_start..=window_end]
+                        .iter()
+                        .map(|(_, amt)| amt)
+                        .sum();
+
+                    let severity = if count >= 20 || volume > 1000.0 {
+                        AlertSeverity::Critical
+                    } else if count >= 10 || volume > 500.0 {
+                        AlertSeverity::High
+                    } else if count >= 5 || volume > 100.0 {
+                        AlertSeverity::Medium
+                    } else {
+                        AlertSeverity::Low
+                    };
+
+                    alerts.push(RapidFlowAlert {
+                        transfer_count: count,
+                        time_window_secs: window_secs,
+                        total_volume: volume,
+                        token: token.clone(),
+                        severity,
+                    });
+                    break; // One alert per token is enough
+                }
+            }
+        }
+
+        alerts
+    }
+
+    /// Calculate incremental risk score (O(1) for most factors)
+    pub fn calculate_incremental_score(&self, node_count: usize, edge_count: usize) -> f64 {
+        let mut score = 0.0;
+
+        // 1. Network complexity (already O(1))
+        let complexity = edge_count as f64 / node_count.max(1) as f64;
+        if complexity > 5.0 {
+            score += 30.0;
+        } else if complexity > 3.0 {
+            score += 15.0;
+        }
+
+        // 2. Whale activity (O(1) - pre-computed)
+        if self.whale_count > 5 {
+            score += 15.0;
+        }
+
+        // 3. Token diversity (O(1) - just check set size)
+        if self.unique_tokens.len() > 20 {
+            score += 10.0;
+        }
+
+        // 4. Rapid transfers (use cached if available, else compute)
+        let rapid_count = self.cached_rapid_alerts.iter()
+            .filter(|a| matches!(a.severity, AlertSeverity::Critical | AlertSeverity::High))
+            .count();
+        score += (rapid_count as f64) * 15.0;
+
+        // 5. Circular flows (use cached count from last deep recalc)
+        score += (self.cached_circular_count.min(3) as f64) * 20.0;
+
+        score.min(100.0)
+    }
 }
 
 /// Investigation trail - breadcrumb navigation through the graph
@@ -273,6 +425,18 @@ pub struct WalletGraph {
     pub filter_modal: FilterModal,
     /// Whether user-defined filters are active (affects which nodes are rendered)
     pub user_filter_active: bool,
+    /// Cached risk explanation to avoid expensive recalculation on every frame
+    cached_risk_explanation: Option<RiskExplanation>,
+    /// Flag indicating if risk cache needs recalculation (set when graph changes)
+    risk_cache_dirty: bool,
+    /// Flag indicating if layout needs recalculation (set when nodes/edges change)
+    layout_dirty: bool,
+    /// Incremental risk tracking - updated O(1) on each edge/node add
+    incremental_risk: IncrementalRiskStats,
+    /// Cached BFS distances from target node for proper layer calculation
+    bfs_distances: HashMap<usize, usize>,
+    /// Forensics engine instance for reuse
+    forensics: GraphForensics,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -285,15 +449,7 @@ pub struct WalletCacheEntry {
     pub is_rendered: bool,  // false if not yet connected to target
 }
 
-/// Statistics for a mixer/tumbling node
-#[derive(Debug, Clone)]
-pub struct MixerStats {
-    pub sources: usize,       // Number of incoming wallets
-    pub destinations: usize,  // Number of outgoing wallets
-    pub total_in: f64,        // Total amount received
-    pub total_out: f64,       // Total amount sent
-    pub unique_tokens: usize, // Number of different tokens
-}
+// MixerStats is now in graph_forensics module (re-exported above)
 
 /// Filter modal tab selection
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -540,6 +696,12 @@ impl WalletGraph {
             folded_groups: HashMap::new(),
             filter_modal: FilterModal::default(),
             user_filter_active: false,
+            cached_risk_explanation: None,
+            risk_cache_dirty: true,
+            layout_dirty: true,  // Need initial layout calculation
+            incremental_risk: IncrementalRiskStats::default(),
+            bfs_distances: HashMap::new(),
+            forensics: GraphForensics::with_defaults(),
         }
     }
 
@@ -1241,6 +1403,9 @@ impl WalletGraph {
             self.connected_nodes.insert(idx);
         }
 
+        // Invalidate risk cache since graph structure changed
+        self.risk_cache_dirty = true;
+
         idx
     }
 
@@ -1263,14 +1428,52 @@ impl WalletGraph {
         ));
     }
 
+    /// Calculate node layer using cached BFS distances
+    /// Uses the pre-computed bfs_distances map for O(1) lookup
     fn calculate_node_layer(&self, idx: usize) -> usize {
-        // Target wallet is layer 0
-        if idx == 0 { return 0; }
+        // Target wallet is always layer 0
+        if idx == 0 {
+            return 0;
+        }
 
-        // Calculate based on connection depth
-        // For now, use a simple heuristic based on node index
-        // TODO: Use BFS to calculate actual distance
-        ((idx as f64).log2() as usize).min(5)
+        // Use cached BFS distance if available, fallback to 5 for disconnected nodes
+        self.bfs_distances.get(&idx).copied().unwrap_or(5)
+    }
+
+    /// Compute BFS distances from target node to all other nodes
+    /// This should be called when the graph structure changes (layout_dirty == true)
+    fn compute_bfs_distances(&mut self) {
+        self.bfs_distances.clear();
+
+        // Target wallet (idx 0) is at distance 0
+        let target_idx = 0;
+        self.bfs_distances.insert(target_idx, 0);
+
+        // BFS from target wallet following edges in BOTH directions
+        let mut queue = VecDeque::new();
+        queue.push_back((target_idx, 0usize));
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if depth >= 10 {
+                continue; // Cap depth to avoid runaway
+            }
+
+            // Follow outgoing edges
+            for (from, to, _) in &self.connections {
+                if *from == current && !self.bfs_distances.contains_key(to) {
+                    self.bfs_distances.insert(*to, depth + 1);
+                    queue.push_back((*to, depth + 1));
+                }
+            }
+
+            // Follow incoming edges (bidirectional traversal)
+            for (from, to, _) in &self.connections {
+                if *to == current && !self.bfs_distances.contains_key(from) {
+                    self.bfs_distances.insert(*from, depth + 1);
+                    queue.push_back((*from, depth + 1));
+                }
+            }
+        }
     }
 
     fn count_nodes_in_layer(&self, layer: usize) -> usize {
@@ -1292,6 +1495,13 @@ impl WalletGraph {
         let to_idx = self.nodes.iter().position(|(addr, _)| addr == to_address);
 
         if let (Some(from), Some(to)) = (from_idx, to_idx) {
+            // Update incremental risk stats BEFORE moving token
+            self.incremental_risk.on_edge_added(
+                amount,
+                &token,
+                timestamp.as_deref(),
+            );
+
             let edge_label = EdgeLabel {
                 amount,
                 token,
@@ -1299,6 +1509,9 @@ impl WalletGraph {
                 signature,
             };
             self.connections.push((from, to, edge_label));
+            // Invalidate caches since graph structure changed
+            self.risk_cache_dirty = true;
+            self.layout_dirty = true;
         }
     }
 
@@ -1789,13 +2002,16 @@ impl WalletGraph {
             (area, None)
         };
 
-        // Detect mixer nodes for visualization
-        let mixer_nodes = self.detect_mixer_nodes();
+        // Detect mixer nodes for visualization (uses forensics engine)
+        let mixer_nodes = self.forensics.detect_mixer_nodes(self);
 
-        // Compute hierarchical layout on every render (cheap operation)
-        if !self.nodes.is_empty() && !self.connections.is_empty() {
+        // Only recompute layout when graph structure changes (layout_dirty flag)
+        // This is O(n²) and should NOT run every frame
+        if self.layout_dirty && !self.nodes.is_empty() && !self.connections.is_empty() {
+            self.compute_bfs_distances();  // Compute proper BFS distances
             self.compute_hierarchical_layout();
-            self.update_node_filtering();  // Update filtering after layout
+            self.update_node_filtering();
+            self.layout_dirty = false;
         }
 
         if self.nodes.is_empty() {
@@ -2551,8 +2767,126 @@ impl WalletGraph {
         WalletBehaviorType::EOA
     }
 
-    /// Calculate explainable risk score with detailed reasoning
-    pub fn calculate_explainable_risk(&self) -> RiskExplanation {
+    /// Mark risk cache as dirty (needs recalculation)
+    /// Call this when the graph structure changes (nodes/edges added)
+    pub fn invalidate_risk_cache(&mut self) {
+        self.risk_cache_dirty = true;
+        self.cached_risk_explanation = None;
+    }
+
+    /// Get cached risk explanation, recalculating only if cache is dirty
+    /// Uses incremental stats for O(1) updates when possible
+    /// This is the method that should be used during rendering for performance
+    pub fn get_cached_risk_explanation(&mut self) -> RiskExplanation {
+        // If we have cached data and just need incremental update
+        if !self.risk_cache_dirty && self.cached_risk_explanation.is_some() {
+            return self.cached_risk_explanation.clone().unwrap();
+        }
+
+        // Decide if we need full recalc or can use incremental
+        let needs_deep_recalc = self.incremental_risk.needs_deep_recalc
+            || self.cached_risk_explanation.is_none()
+            || self.incremental_risk.cached_circular_count == 0;
+
+        let explanation = if needs_deep_recalc {
+            // Full recalculation (expensive but accurate)
+            let result = self.calculate_explainable_risk_impl();
+            // Update cached values in incremental stats
+            self.incremental_risk.cached_circular_count = self.detect_circular_flows().len();
+            self.incremental_risk.cached_rapid_alerts = self.incremental_risk.detect_rapid_transfers_incremental(60, 5);
+            self.incremental_risk.needs_deep_recalc = false;
+            self.incremental_risk.updates_since_deep_recalc = 0;
+            result
+        } else {
+            // Fast incremental calculation
+            self.calculate_risk_incremental()
+        };
+
+        self.cached_risk_explanation = Some(explanation.clone());
+        self.risk_cache_dirty = false;
+        explanation
+    }
+
+    /// Calculate risk using pre-computed incremental stats (O(1) for most factors)
+    fn calculate_risk_incremental(&self) -> RiskExplanation {
+        let mut score: f64 = 0.0;
+        let mut reasons = Vec::new();
+        let mut alerts = Vec::new();
+
+        // 1. Network complexity (O(1) - just check counts)
+        let complexity_ratio = self.connections.len() as f64 / self.nodes.len().max(1) as f64;
+        if complexity_ratio > 5.0 {
+            score += 30.0;
+            alerts.push(format!("🚨 CRITICAL: Very high network complexity ({:.1} edges/node)", complexity_ratio));
+            reasons.push(format!("Network complexity ratio of {:.1} indicates potential mixing/obfuscation", complexity_ratio));
+        } else if complexity_ratio > 3.0 {
+            score += 15.0;
+            reasons.push(format!("Elevated network complexity ({:.1} edges/node)", complexity_ratio));
+        }
+
+        // 2. Rapid transfer detection (use cached from incremental stats)
+        for alert in self.incremental_risk.cached_rapid_alerts.iter()
+            .filter(|a| matches!(a.severity, AlertSeverity::Critical | AlertSeverity::High)) {
+            score += 15.0;
+            alerts.push(format!(
+                "⚡ RAPID ACTIVITY: {} transfers in {}s ({:.2} {})",
+                alert.transfer_count,
+                alert.time_window_secs,
+                alert.total_volume,
+                alert.token
+            ));
+        }
+        if !self.incremental_risk.cached_rapid_alerts.is_empty() {
+            reasons.push(format!("Detected {} rapid transfer burst(s)", self.incremental_risk.cached_rapid_alerts.len()));
+        }
+
+        // 3. Circular flow detection (use cached count)
+        let circular_count = self.incremental_risk.cached_circular_count;
+        if circular_count > 0 {
+            score += (circular_count.min(3) as f64) * 20.0;
+            alerts.push(format!("🔄 CIRCULAR FLOW: {} pattern(s) detected", circular_count));
+            reasons.push(format!("Detected {} circular flow pattern(s) - potential wash trading", circular_count));
+        }
+
+        // 4. Whale activity (O(1) - use pre-computed from incremental stats)
+        if self.incremental_risk.whale_count > 5 {
+            score += 15.0;
+            reasons.push(format!("High whale activity: {} large transfers totaling {:.2} SOL",
+                self.incremental_risk.whale_count, self.incremental_risk.whale_total_volume));
+        }
+
+        // 5. Token diversity (O(1) - check HashSet size)
+        if self.incremental_risk.unique_tokens.len() > 20 {
+            score += 10.0;
+            reasons.push(format!("Very high token diversity ({} tokens) may indicate portfolio mixing",
+                self.incremental_risk.unique_tokens.len()));
+        }
+
+        // 6. Hub wallet detection (O(1) - use cached)
+        // (Skip for incremental - will be updated on deep recalc)
+
+        // Cap score and determine level
+        score = score.min(100.0_f64).max(0.0_f64);
+        let level = if score >= 75.0 {
+            RiskLevel::Critical
+        } else if score >= 50.0 {
+            RiskLevel::High
+        } else if score >= 25.0 {
+            RiskLevel::Medium
+        } else {
+            RiskLevel::Low
+        };
+
+        RiskExplanation {
+            score,
+            level,
+            reasons,
+            alerts,
+        }
+    }
+
+    /// Calculate explainable risk score with detailed reasoning (internal implementation)
+    fn calculate_explainable_risk_impl(&self) -> RiskExplanation {
         let mut score: f64 = 0.0;
         let mut reasons = Vec::new();
         let mut alerts = Vec::new();
@@ -2856,6 +3190,81 @@ impl WalletGraph {
         f.render_widget(paragraph, inner);
     }
 
+}
+
+// ============================================================================
+// GraphData trait implementation for WalletGraph
+// This allows the forensics engine to analyze the graph
+// ============================================================================
+
+impl GraphData for WalletGraph {
+    fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    fn edge_count(&self) -> usize {
+        self.connections.len()
+    }
+
+    fn node_address(&self, idx: usize) -> Option<&str> {
+        self.nodes.get(idx).map(|(addr, _)| addr.as_str())
+    }
+
+    fn node_type(&self, idx: usize) -> Option<&str> {
+        self.nodes.get(idx).map(|(_, node)| {
+            match node.node_type {
+                WalletNodeType::Target => "Target",
+                WalletNodeType::Funding => "Funding",
+                WalletNodeType::Recipient => "Recipient",
+                WalletNodeType::DeFi => "DeFi",
+                WalletNodeType::Token => "Token",
+                WalletNodeType::Mixer => "Mixer",
+            }
+        })
+    }
+
+    fn edges(&self) -> Vec<(usize, usize, f64, String, Option<String>)> {
+        self.connections
+            .iter()
+            .map(|(from, to, label)| {
+                (*from, *to, label.amount, label.token.clone(), label.timestamp.clone())
+            })
+            .collect()
+    }
+
+    fn incoming_edges(&self, node_idx: usize) -> Vec<usize> {
+        self.connections
+            .iter()
+            .enumerate()
+            .filter_map(|(edge_idx, (_, to, _))| {
+                if *to == node_idx {
+                    Some(edge_idx)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn outgoing_edges(&self, node_idx: usize) -> Vec<usize> {
+        self.connections
+            .iter()
+            .enumerate()
+            .filter_map(|(edge_idx, (from, _, _))| {
+                if *from == node_idx {
+                    Some(edge_idx)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn edge_data(&self, edge_idx: usize) -> Option<(usize, usize, f64, String, Option<String>)> {
+        self.connections.get(edge_idx).map(|(from, to, label)| {
+            (*from, *to, label.amount, label.token.clone(), label.timestamp.clone())
+        })
+    }
 }
 
 // Data structure for transfer information

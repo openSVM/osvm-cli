@@ -32,6 +32,7 @@ pub mod solana_abi;
 pub mod regalloc_analyzer;
 pub mod graph_coloring;
 pub mod anchor_idl;
+pub mod formal_verification;
 
 pub use types::{OvsmType, TypeChecker, TypeEnv};
 pub use ir::{IrProgram, IrInstruction, IrReg, IrGenerator};

@@ -5210,9 +5210,9 @@ impl OsvmApp {
         let mut lines = Vec::new();
 
         // Generate real-time automated analysis with explainable insights
-        if let Ok(graph) = self.wallet_graph.lock() {
-            // Use new explainable risk scoring system
-            let risk_explanation = graph.calculate_explainable_risk();
+        if let Ok(mut graph) = self.wallet_graph.lock() {
+            // Use cached explainable risk scoring system (avoids expensive recalculation on every frame)
+            let risk_explanation = graph.get_cached_risk_explanation();
 
             // Display critical alerts first (highest priority)
             for alert in &risk_explanation.alerts {
@@ -5398,8 +5398,8 @@ impl OsvmApp {
         let filename = format!("investigation_{}_{}.json", self.target_wallet[..8].to_string(), timestamp);
 
         let (nodes, edges, risk_analysis, behavior) = self.wallet_graph.lock()
-            .map(|g| {
-                let risk = g.calculate_explainable_risk();
+            .map(|mut g| {
+                let risk = g.get_cached_risk_explanation();
                 let behavior_type = g.classify_wallet_behavior(0);
                 (g.node_count(), g.edge_count(), risk, behavior_type)
             })

@@ -286,6 +286,7 @@ pub mod runtime;
 pub mod tools;
 pub mod compiler;
 pub mod decompiler;
+pub mod types;
 
 // Re-export main types
 pub use error::{Error, Result};
@@ -293,6 +294,7 @@ pub use lexer::{SExprScanner, Token, TokenKind};
 pub use parser::{BinaryOp, Expression, Program, SExprParser, Statement, UnaryOp};
 pub use runtime::{Environment, LispEvaluator, Value};
 pub use tools::{Tool, ToolRegistry};
+pub use types::{Type, TypeContext, TypeChecker, TypeError};
 
 // Convenient type aliases for the primary LISP-based interpreter
 /// Type alias for the S-expression scanner (lexer).
