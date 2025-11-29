@@ -2700,6 +2700,20 @@ impl OsvmApp {
     /// Handle a key event (from either local terminal or web)
     /// Mirrors the main event_loop key handling for consistent behavior
     fn handle_key_event(&mut self, key: KeyEvent) {
+        // Check if filter modal is active first
+        let filter_modal_active = if self.active_tab == TabIndex::Graph {
+            self.wallet_graph.lock()
+                .map(|g| g.filter_modal.active)
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
+        if filter_modal_active {
+            self.handle_filter_modal_key(key);
+            return;
+        }
+
         match key.code {
             // Quit/Escape - handle different contexts
             KeyCode::Char('q') | KeyCode::Esc => {
@@ -2898,6 +2912,12 @@ impl OsvmApp {
                     graph.handle_input(GraphInput::ScrollDetailDown);
                 }
             }
+            // Filter modal (backtick key)
+            KeyCode::Char('`') if self.active_tab == TabIndex::Graph => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::OpenFilterModal);
+                }
+            }
             // Number keys 1-5 to select tabs
             KeyCode::Char('1') if !self.chat_input_active => {
                 self.active_tab = TabIndex::Chat;
@@ -2946,6 +2966,78 @@ impl OsvmApp {
                     if graph.search_active {
                         graph.handle_input(GraphInput::SearchChar(c));
                     }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Handle key events when filter modal is active
+    fn handle_filter_modal_key(&mut self, key: KeyEvent) {
+        match key.code {
+            // Close modal
+            KeyCode::Esc | KeyCode::Char('`') | KeyCode::Char('q') => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::CloseFilterModal);
+                }
+            }
+            // Navigate items
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    if graph.filter_modal.selected_index > 0 {
+                        graph.filter_modal.selected_index -= 1;
+                        // Adjust scroll offset if needed
+                        if graph.filter_modal.selected_index < graph.filter_modal.scroll_offset {
+                            graph.filter_modal.scroll_offset = graph.filter_modal.selected_index;
+                        }
+                    }
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    let max_idx = graph.filter_modal.current_items().len().saturating_sub(1);
+                    if graph.filter_modal.selected_index < max_idx {
+                        graph.filter_modal.selected_index += 1;
+                        // Adjust scroll offset if needed (assume 10 visible items)
+                        if graph.filter_modal.selected_index >= graph.filter_modal.scroll_offset + 15 {
+                            graph.filter_modal.scroll_offset = graph.filter_modal.selected_index.saturating_sub(14);
+                        }
+                    }
+                }
+            }
+            // Toggle selection with Space
+            KeyCode::Char(' ') => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::FilterToggleItem);
+                }
+            }
+            // Tab to switch between Wallets/Programs/Tokens tabs
+            KeyCode::Tab => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::FilterNextTab);
+                }
+            }
+            KeyCode::BackTab => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::FilterPrevTab);
+                }
+            }
+            // Select all with 'a'
+            KeyCode::Char('a') => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::FilterSelectAll);
+                }
+            }
+            // Deselect all with 'x'
+            KeyCode::Char('x') => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::FilterDeselectAll);
+                }
+            }
+            // Enter to apply and close
+            KeyCode::Enter => {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::CloseFilterModal);
                 }
             }
             _ => {}
@@ -3713,6 +3805,19 @@ impl OsvmApp {
                     crate::utils::bbs::tui_widgets::render_bbs_tab(f, size, &mut bbs_state);
                 }
             }
+        }
+
+        // Render filter modal if active (only on Graph tab)
+        let show_filter_modal = if self.active_tab == TabIndex::Graph {
+            self.wallet_graph.lock()
+                .map(|g| g.filter_modal.active)
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
+        if show_filter_modal {
+            self.render_filter_modal(f, size);
         }
 
         // Render help overlay if active
@@ -4829,6 +4934,147 @@ impl OsvmApp {
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(search_widget, modal_area);
+    }
+
+    /// Render the filter modal for graph node/token filtering
+    fn render_filter_modal(&mut self, f: &mut Frame, area: Rect) {
+        use super::graph::FilterTab;
+
+        // Get filter modal state
+        let (current_tab, selected_index, scroll_offset, items, counts) = {
+            if let Ok(graph) = self.wallet_graph.lock() {
+                let items = graph.filter_modal.current_items();
+                let counts = (
+                    graph.filter_modal.all_wallets.len(),
+                    graph.filter_modal.all_programs.len(),
+                    graph.filter_modal.all_tokens.len(),
+                    graph.filter_modal.selected_wallets.len(),
+                    graph.filter_modal.selected_programs.len(),
+                    graph.filter_modal.selected_tokens.len(),
+                );
+                (
+                    graph.filter_modal.current_tab,
+                    graph.filter_modal.selected_index,
+                    graph.filter_modal.scroll_offset,
+                    items,
+                    counts,
+                )
+            } else {
+                return;
+            }
+        };
+
+        // Center the modal (50% width, 60% height)
+        let width = (area.width * 60 / 100).max(50).min(area.width.saturating_sub(4));
+        let height = (area.height * 70 / 100).max(20).min(area.height.saturating_sub(4));
+        let x = (area.width.saturating_sub(width)) / 2;
+        let y = (area.height.saturating_sub(height)) / 2;
+        let modal_area = Rect::new(x, y, width, height);
+
+        // Clear background
+        f.render_widget(Clear, modal_area);
+
+        // Create main block
+        let block = Block::default()
+            .title(" 🔍 Filter Graph ")
+            .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .style(Style::default().bg(Color::Black));
+
+        let inner = block.inner(modal_area);
+        f.render_widget(block, modal_area);
+
+        // Split into tabs bar and content
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Tabs
+                Constraint::Min(0),    // Content
+                Constraint::Length(3), // Footer with instructions
+            ])
+            .split(inner);
+
+        // Render tabs
+        let (wallet_count, program_count, token_count, sel_wallet, sel_program, sel_token) = counts;
+        let tabs = vec![
+            format!(" Wallets ({}/{}) ", sel_wallet, wallet_count),
+            format!(" Programs ({}/{}) ", sel_program, program_count),
+            format!(" Tokens ({}/{}) ", sel_token, token_count),
+        ];
+
+        let tab_idx = match current_tab {
+            FilterTab::Wallets => 0,
+            FilterTab::Programs => 1,
+            FilterTab::Tokens => 2,
+        };
+
+        let tabs_widget = Tabs::new(tabs.iter().map(|s| s.as_str()).collect::<Vec<_>>())
+            .block(Block::default().borders(Borders::BOTTOM))
+            .select(tab_idx)
+            .style(Style::default().fg(Color::White))
+            .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+
+        f.render_widget(tabs_widget, chunks[0]);
+
+        // Render content list
+        let visible_height = chunks[1].height as usize;
+        let display_items: Vec<ListItem> = items
+            .iter()
+            .enumerate()
+            .skip(scroll_offset)
+            .take(visible_height)
+            .map(|(idx, (name, selected))| {
+                let checkbox = if *selected { "☑" } else { "☐" };
+                let style = if idx == selected_index {
+                    Style::default().fg(Color::Yellow).bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                } else if *selected {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+
+                // Truncate long addresses
+                let display_name = if name.len() > 50 {
+                    format!("{}...{}", &name[..20], &name[name.len()-20..])
+                } else {
+                    name.clone()
+                };
+
+                ListItem::new(Line::from(vec![
+                    Span::styled(format!(" {} ", checkbox), style),
+                    Span::styled(display_name, style),
+                ]))
+            })
+            .collect();
+
+        let list = List::new(display_items)
+            .block(Block::default());
+
+        f.render_widget(list, chunks[1]);
+
+        // Render footer with instructions
+        let footer_text = Line::from(vec![
+            Span::styled(" ↑↓ ", Style::default().fg(Color::Yellow)),
+            Span::raw("navigate  "),
+            Span::styled("Space", Style::default().fg(Color::Yellow)),
+            Span::raw(" toggle  "),
+            Span::styled("Tab", Style::default().fg(Color::Yellow)),
+            Span::raw(" switch  "),
+            Span::styled("a", Style::default().fg(Color::Yellow)),
+            Span::raw(" all  "),
+            Span::styled("x", Style::default().fg(Color::Yellow)),
+            Span::raw(" none  "),
+            Span::styled("Enter/`/Esc", Style::default().fg(Color::Yellow)),
+            Span::raw(" apply"),
+        ]);
+
+        let footer = Paragraph::new(footer_text)
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::TOP));
+
+        f.render_widget(footer, chunks[2]);
     }
 
     fn render_help_overlay(&mut self, f: &mut Frame, area: Rect) {

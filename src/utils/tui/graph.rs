@@ -269,6 +269,10 @@ pub struct WalletGraph {
     pub filtered_nodes: std::collections::HashSet<usize>,
     /// Folded nodes by direction (depth, flow_direction) -> vec of filtered node indices
     pub folded_groups: HashMap<(usize, i32), Vec<usize>>,
+    /// Filter modal state for selective node/token display
+    pub filter_modal: FilterModal,
+    /// Whether user-defined filters are active (affects which nodes are rendered)
+    pub user_filter_active: bool,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -289,6 +293,166 @@ pub struct MixerStats {
     pub total_in: f64,        // Total amount received
     pub total_out: f64,       // Total amount sent
     pub unique_tokens: usize, // Number of different tokens
+}
+
+/// Filter modal tab selection
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FilterTab {
+    Wallets,
+    Programs,
+    Tokens,
+}
+
+/// Filter modal state
+#[derive(Debug, Clone)]
+pub struct FilterModal {
+    pub active: bool,
+    pub current_tab: FilterTab,
+    pub selected_index: usize,
+    pub scroll_offset: usize,
+    /// Selected wallets (addresses that are visible)
+    pub selected_wallets: std::collections::HashSet<String>,
+    /// Selected tokens (tokens that are visible)
+    pub selected_tokens: std::collections::HashSet<String>,
+    /// Selected programs/DeFi (program addresses that are visible)
+    pub selected_programs: std::collections::HashSet<String>,
+    /// Cached list of all wallets for display
+    pub all_wallets: Vec<(String, WalletNodeType)>,
+    /// Cached list of all tokens for display
+    pub all_tokens: Vec<String>,
+    /// Cached list of all programs for display
+    pub all_programs: Vec<String>,
+}
+
+impl Default for FilterModal {
+    fn default() -> Self {
+        Self {
+            active: false,
+            current_tab: FilterTab::Wallets,
+            selected_index: 0,
+            scroll_offset: 0,
+            selected_wallets: std::collections::HashSet::new(),
+            selected_tokens: std::collections::HashSet::new(),
+            selected_programs: std::collections::HashSet::new(),
+            all_wallets: Vec::new(),
+            all_tokens: Vec::new(),
+            all_programs: Vec::new(),
+        }
+    }
+}
+
+impl FilterModal {
+    /// Get items for current tab
+    pub fn current_items(&self) -> Vec<(String, bool)> {
+        match self.current_tab {
+            FilterTab::Wallets => {
+                self.all_wallets.iter()
+                    .map(|(addr, _)| (addr.clone(), self.selected_wallets.contains(addr)))
+                    .collect()
+            }
+            FilterTab::Programs => {
+                self.all_programs.iter()
+                    .map(|addr| (addr.clone(), self.selected_programs.contains(addr)))
+                    .collect()
+            }
+            FilterTab::Tokens => {
+                self.all_tokens.iter()
+                    .map(|token| (token.clone(), self.selected_tokens.contains(token)))
+                    .collect()
+            }
+        }
+    }
+
+    /// Toggle selection of current item
+    pub fn toggle_current(&mut self) {
+        let items = self.current_items();
+        if self.selected_index >= items.len() {
+            return;
+        }
+        let (item, _) = &items[self.selected_index];
+
+        match self.current_tab {
+            FilterTab::Wallets => {
+                if self.selected_wallets.contains(item) {
+                    self.selected_wallets.remove(item);
+                } else {
+                    self.selected_wallets.insert(item.clone());
+                }
+            }
+            FilterTab::Programs => {
+                if self.selected_programs.contains(item) {
+                    self.selected_programs.remove(item);
+                } else {
+                    self.selected_programs.insert(item.clone());
+                }
+            }
+            FilterTab::Tokens => {
+                if self.selected_tokens.contains(item) {
+                    self.selected_tokens.remove(item);
+                } else {
+                    self.selected_tokens.insert(item.clone());
+                }
+            }
+        }
+    }
+
+    /// Select all items in current tab
+    pub fn select_all(&mut self) {
+        match self.current_tab {
+            FilterTab::Wallets => {
+                for (addr, _) in &self.all_wallets {
+                    self.selected_wallets.insert(addr.clone());
+                }
+            }
+            FilterTab::Programs => {
+                for addr in &self.all_programs {
+                    self.selected_programs.insert(addr.clone());
+                }
+            }
+            FilterTab::Tokens => {
+                for token in &self.all_tokens {
+                    self.selected_tokens.insert(token.clone());
+                }
+            }
+        }
+    }
+
+    /// Deselect all items in current tab
+    pub fn deselect_all(&mut self) {
+        match self.current_tab {
+            FilterTab::Wallets => {
+                self.selected_wallets.clear();
+            }
+            FilterTab::Programs => {
+                self.selected_programs.clear();
+            }
+            FilterTab::Tokens => {
+                self.selected_tokens.clear();
+            }
+        }
+    }
+
+    /// Next tab
+    pub fn next_tab(&mut self) {
+        self.current_tab = match self.current_tab {
+            FilterTab::Wallets => FilterTab::Programs,
+            FilterTab::Programs => FilterTab::Tokens,
+            FilterTab::Tokens => FilterTab::Wallets,
+        };
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+    }
+
+    /// Previous tab
+    pub fn prev_tab(&mut self) {
+        self.current_tab = match self.current_tab {
+            FilterTab::Wallets => FilterTab::Tokens,
+            FilterTab::Programs => FilterTab::Wallets,
+            FilterTab::Tokens => FilterTab::Programs,
+        };
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+    }
 }
 
 /// Input event for graph navigation
@@ -318,6 +482,14 @@ pub enum GraphInput {
     HopToWallet,  // Re-center graph on selected wallet
     ScrollDetailUp,   // Scroll detail panel up
     ScrollDetailDown, // Scroll detail panel down
+    // Filter modal inputs
+    OpenFilterModal,
+    CloseFilterModal,
+    FilterNextTab,
+    FilterPrevTab,
+    FilterToggleItem,
+    FilterSelectAll,
+    FilterDeselectAll,
 }
 
 impl WalletGraph {
@@ -366,6 +538,8 @@ impl WalletGraph {
             detail_scroll: 0,
             filtered_nodes: std::collections::HashSet::new(),
             folded_groups: HashMap::new(),
+            filter_modal: FilterModal::default(),
+            user_filter_active: false,
         }
     }
 
@@ -701,6 +875,112 @@ impl WalletGraph {
                 self.detail_scroll += 1;
                 None
             }
+            // Filter modal inputs
+            GraphInput::OpenFilterModal => {
+                self.refresh_filter_lists();
+                self.filter_modal.active = true;
+                None
+            }
+            GraphInput::CloseFilterModal => {
+                self.filter_modal.active = false;
+                // Check if any filters are active
+                self.user_filter_active = !self.filter_modal.selected_wallets.is_empty()
+                    || !self.filter_modal.selected_tokens.is_empty()
+                    || !self.filter_modal.selected_programs.is_empty();
+                None
+            }
+            GraphInput::FilterNextTab => {
+                self.filter_modal.next_tab();
+                None
+            }
+            GraphInput::FilterPrevTab => {
+                self.filter_modal.prev_tab();
+                None
+            }
+            GraphInput::FilterToggleItem => {
+                self.filter_modal.toggle_current();
+                None
+            }
+            GraphInput::FilterSelectAll => {
+                self.filter_modal.select_all();
+                None
+            }
+            GraphInput::FilterDeselectAll => {
+                self.filter_modal.deselect_all();
+                None
+            }
+        }
+    }
+
+    /// Refresh the filter lists from current graph data
+    pub fn refresh_filter_lists(&mut self) {
+        // Collect all wallets
+        self.filter_modal.all_wallets = self.nodes.iter()
+            .map(|(addr, node)| (addr.clone(), node.node_type.clone()))
+            .collect();
+
+        // Collect unique tokens from edges
+        let mut tokens: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for (_, _, edge) in &self.connections {
+            tokens.insert(edge.token.clone());
+        }
+        self.filter_modal.all_tokens = tokens.into_iter().collect();
+        self.filter_modal.all_tokens.sort();
+
+        // Collect programs (DeFi nodes)
+        self.filter_modal.all_programs = self.nodes.iter()
+            .filter(|(_, node)| matches!(node.node_type, WalletNodeType::DeFi))
+            .map(|(addr, _)| addr.clone())
+            .collect();
+
+        // If no selections yet, select all by default
+        if self.filter_modal.selected_wallets.is_empty()
+            && self.filter_modal.selected_tokens.is_empty()
+            && self.filter_modal.selected_programs.is_empty() {
+            // Select all wallets
+            for (addr, _) in &self.filter_modal.all_wallets {
+                self.filter_modal.selected_wallets.insert(addr.clone());
+            }
+            // Select all tokens
+            for token in &self.filter_modal.all_tokens {
+                self.filter_modal.selected_tokens.insert(token.clone());
+            }
+            // Select all programs
+            for addr in &self.filter_modal.all_programs {
+                self.filter_modal.selected_programs.insert(addr.clone());
+            }
+        }
+    }
+
+    /// Check if a node passes the current filter
+    pub fn node_passes_filter(&self, node_idx: usize) -> bool {
+        if !self.user_filter_active {
+            return true;
+        }
+
+        if let Some((addr, _)) = self.nodes.get(node_idx) {
+            self.filter_modal.selected_wallets.contains(addr)
+        } else {
+            false
+        }
+    }
+
+    /// Check if an edge passes the current filter (both nodes visible and token selected)
+    pub fn edge_passes_filter(&self, edge_idx: usize) -> bool {
+        if !self.user_filter_active {
+            return true;
+        }
+
+        if let Some((from, to, edge)) = self.connections.get(edge_idx) {
+            // Both endpoints must be visible
+            let from_visible = self.node_passes_filter(*from);
+            let to_visible = self.node_passes_filter(*to);
+            // Token must be selected
+            let token_selected = self.filter_modal.selected_tokens.contains(&edge.token);
+
+            from_visible && to_visible && token_selected
+        } else {
+            false
         }
     }
 
