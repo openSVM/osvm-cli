@@ -651,6 +651,71 @@ null
 ;; ... more blockchain-specific functions
 
 ;; ============================================
+;; SOLANA PROGRAM MACROS (sBPF Compilation)
+;; ============================================
+
+;; --- Struct Operations ---
+(define-struct MyStruct (field1 u64) (field2 pubkey) (field3 u8))
+(struct-size MyStruct)                  ;; -> total bytes
+(struct-offset MyStruct field1)         ;; -> byte offset of field
+(struct-field-size MyStruct field1)     ;; -> byte size of field
+(struct-get MyStruct ptr field1)        ;; -> value at field
+(struct-set MyStruct ptr field1 value)  ;; -> set field value
+(struct-ptr MyStruct ptr field1)        ;; -> pointer to field
+
+;; --- Account Access ---
+(account-data-ptr idx)                  ;; -> pointer to account data
+(account-data-len idx)                  ;; -> length of account data
+(account-lamports idx)                  ;; -> lamport balance
+(is-signer idx)                         ;; -> 1 if signer, 0 if not
+(is-writable idx)                       ;; -> 1 if writable, 0 if not
+(assert-signer idx)                     ;; -> abort if not signer
+(assert-writable idx)                   ;; -> abort if not writable
+(assert-owner idx expected-owner-ptr)   ;; -> abort if owner mismatch
+
+;; --- Zero-Copy Access (Direct Memory) ---
+(zerocopy-load StructName idx field)    ;; -> load field directly from account
+(zerocopy-store StructName idx field v) ;; -> store value directly to account
+
+;; --- CPI (Cross-Program Invocation) ---
+(system-transfer from-idx to-idx lamports)
+(spl-token-transfer prog src dst auth amt)
+(spl-token-transfer-signed prog src dst auth amt seeds)
+(spl-token-mint-to prog mint dest auth amount)
+(spl-token-burn prog source mint auth amount)
+(system-create-account payer new-acct lamports space owner-ptr)
+
+;; --- PDA (Program Derived Address) ---
+(derive-pda program-pk-ptr seeds-ptr bump-ptr)
+(create-pda dest-ptr program-pk-ptr seeds-array)
+(get-ata wallet-ptr token-prog-ptr mint-ptr) ;; -> ATA address
+
+;; --- PDA Bump Caching ---
+(pda-cache-init cache-account-idx)
+(pda-cache-store cache-idx seed-hash bump)
+(pda-cache-lookup cache-idx seed-hash)      ;; -> cached bump or 0
+(derive-pda-cached cache-idx prog seeds bump dest)
+
+;; --- Event Emission ---
+(emit-event EventStruct data-ptr)       ;; -> Anchor-style event with discriminator
+(emit-log "message" val1 val2 val3)     ;; -> log message + up to 5 values
+
+;; --- Sysvar Access ---
+(clock-unix-timestamp sysvar-idx)       ;; -> Unix timestamp
+(clock-epoch sysvar-idx)                ;; -> Current epoch
+(rent-minimum-balance sysvar-idx size)  ;; -> Rent exemption lamports
+
+;; --- Instruction Introspection ---
+(instruction-count sysvar-idx)          ;; -> Number of instructions
+(current-instruction-index sysvar-idx)  ;; -> Current instruction index
+(assert-not-cpi sysvar-idx)             ;; -> Abort if called via CPI
+
+;; --- Borsh Serialization ---
+(borsh-serialize StructName src-ptr dest-ptr) ;; -> bytes written
+(borsh-deserialize StructName src-ptr dest-ptr) ;; -> bytes read
+(borsh-size StructName)                 ;; -> serialized size
+
+;; ============================================
 ;; COMPLETE EXAMPLES
 ;; ============================================
 
