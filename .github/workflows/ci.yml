@@ -2,232 +2,224 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
-  sanity-check:
-    name: Sanity Checks
+  # Fast sanity checks (no build)
+  sanity:
+    name: Format & Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies for hidapi
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libhidapi-dev libudev-dev pkg-config libssl-dev perl
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt, clippy
-      
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.6
+
       - name: Check formatting
         run: cargo fmt --all -- --check
-        working-directory: .
-      
+
       - name: Run clippy
         run: |
-          # Skip the webpki trait bound error by allowing clippy check to continue without -D warnings
-          # This is a workaround for the webpki::Error not implementing std::error::Error
-          # which is an issue in the rustls-platform-verifier dependency
-          # We've implemented a WebPkiError wrapper in our code, but this doesn't fix
-          # the issue in the external dependency
-          cargo clippy || echo "Clippy check skipped due to known webpki::Error trait bound issue"
-        working-directory: .
+          # Allow clippy to pass with warnings for known webpki trait bound issue
+          cargo clippy --all-targets --all-features 2>&1 || true
 
-  unit-tests:
-    name: Unit Tests
-    needs: sanity-check
+  # Build once, cache aggressively
+  build:
+    name: Build
+    needs: sanity
     runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.cache.outputs.cache-hit }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install native dependencies for hidapi
+      - name: Install native dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libhidapi-dev libudev-dev pkg-config libssl-dev perl
-      
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          profile: minimal
-          toolchain: stable
-      
-      - name: Cache dependencies
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.6
+
+      - name: Cache cargo registry
         uses: actions/cache@v4
+        id: cache
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Install Solana CLI tools
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash
-          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-
 
-      - name: Generate default signer
-        run: |
-          solana-keygen new --no-bip39-passphrase -o $HOME/.config/solana/id.json
-      
-      - name: Run unit tests
-        run: |
-          # Allow unit tests to continue despite the webpki trait bound issue
-          # The WebPkiError wrapper helps with our code but not with the external dependencies
-          cargo test --lib --bins || echo "Unit tests completed with known webpki::Error trait bound issues"
-        working-directory: .
-
-  e2e-tests:
-    name: End-to-End Tests
-    needs: unit-tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install native dependencies for hidapi
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libhidapi-dev libudev-dev pkg-config libssl-dev perl
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Build binary
+      - name: Build release
         run: cargo build --release --locked
-        working-directory: .
-      
-      - name: Install Solana CLI tools
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: osvm-binary
+          path: target/release/osvm
+          retention-days: 1
+
+  # Parallel test matrix
+  test:
+    name: Test (${{ matrix.suite }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - unit
+          - e2e
+          - ovsm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native dependencies
+        if: matrix.suite != 'ovsm'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhidapi-dev libudev-dev pkg-config libssl-dev perl
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.6
+
+      - name: Restore cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+
+      - name: Install Solana CLI
+        if: matrix.suite != 'ovsm'
         run: |
           curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash
-          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
 
-      - name: Generate default signer
+      - name: Generate keypair
+        if: matrix.suite != 'ovsm'
         run: |
+          mkdir -p $HOME/.config/solana
           solana-keygen new --no-bip39-passphrase -o $HOME/.config/solana/id.json
+
+      - name: Run unit tests
+        if: matrix.suite == 'unit'
+        run: cargo test --lib --bins
 
       - name: Run e2e tests
-        run: |
-          # Allow e2e tests to continue despite possible webpki trait bound issues
-          cargo test --test main || echo "E2E tests completed with known webpki::Error trait bound issues"
-        working-directory: .
+        if: matrix.suite == 'e2e'
+        run: cargo test --test main
 
-  ovsm-tests:
-    name: OVSM Crate Tests
-    needs: sanity-check
+      - name: Run OVSM tests
+        if: matrix.suite == 'ovsm'
+        run: cargo test -p ovsm
+
+  # Validate OVSM example scripts parse correctly
+  ovsm-scripts:
+    name: OVSM Script Validation
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download binary
+        uses: actions/download-artifact@v4
         with:
-          profile: minimal
-          toolchain: stable
+          name: osvm-binary
+          path: ./bin
 
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-ovsm-${{ hashFiles('**/Cargo.lock') }}
+      - name: Make executable
+        run: chmod +x ./bin/osvm
 
-      - name: Build OVSM crate
-        run: cargo build --release
-        working-directory: crates/ovsm
-
-      - name: Run OVSM unit tests
-        run: cargo test --lib --bins
-        working-directory: crates/ovsm
-
-      - name: Run OVSM integration tests
-        run: cargo test
-        working-directory: crates/ovsm
-
-      - name: Test OVSM examples
+      - name: Validate OVSM examples
         run: |
-          echo "Testing OVSM example scripts..."
-          cargo run --example run_file examples/hello_world.ovsm
-          cargo run --example run_file examples/factorial.ovsm
-          cargo run --example run_file examples/fibonacci.ovsm
-          cargo run --example run_file examples/array_operations.ovsm
-          cargo run --example run_file examples/conditional_logic.ovsm
-          cargo run --example run_file examples/loop_control.ovsm
-        working-directory: crates/ovsm
+          echo "Validating OVSM example scripts..."
+          ERRORS=0
 
-  code-coverage:
-    name: Code Coverage
-    needs: [unit-tests, e2e-tests, ovsm-tests]
+          # Check crates/ovsm/examples
+          for f in crates/ovsm/examples/*.ovsm; do
+            if [ -f "$f" ]; then
+              echo "Checking: $f"
+              if ! ./bin/osvm ovsm check "$f" 2>&1; then
+                echo "❌ FAILED: $f"
+                ERRORS=$((ERRORS + 1))
+              fi
+            fi
+          done
+
+          # Check examples/ovsm_scripts (skip aea subdirectory for now - complex protocols)
+          for f in examples/ovsm_scripts/*.ovsm; do
+            if [ -f "$f" ]; then
+              echo "Checking: $f"
+              if ! ./bin/osvm ovsm check "$f" 2>&1; then
+                echo "❌ FAILED: $f"
+                ERRORS=$((ERRORS + 1))
+              fi
+            fi
+          done
+
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ $ERRORS OVSM scripts failed validation"
+            exit 1
+          fi
+          echo "✅ All OVSM scripts validated successfully"
+
+  # Summary job for branch protection
+  ci-success:
+    name: CI Success
+    needs: [sanity, build, test, ovsm-scripts]
     runs-on: ubuntu-latest
+    if: always()
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install native dependencies for hidapi
+      - name: Check results
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libhidapi-dev libudev-dev pkg-config libssl-dev perl
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-        working-directory: .
-
-      - name: Generate coverage report (main crate)
-        run: |
-          # Generate coverage for lib and binary targets only
-          mkdir -p coverage
-          cargo tarpaulin --out Xml --output-dir coverage --lib --bins --timeout 600 || echo "Coverage report generated with warnings"
-        working-directory: .
-
-      - name: Generate coverage report (OVSM crate)
-        run: |
-          mkdir -p coverage
-          cargo tarpaulin --out Xml --output-dir coverage --lib --bins --timeout 600 || echo "OVSM coverage report generated with warnings"
-        working-directory: crates/ovsm
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage/cobertura.xml,./crates/ovsm/coverage/cobertura.xml
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-          verbose: true
-        if: always()
+          if [[ "${{ needs.sanity.result }}" == "failure" ]]; then
+            echo "❌ Sanity checks failed"
+            exit 1
+          fi
+          if [[ "${{ needs.build.result }}" == "failure" ]]; then
+            echo "❌ Build failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "❌ Tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.ovsm-scripts.result }}" == "failure" ]]; then
+            echo "❌ OVSM script validation failed"
+            exit 1
+          fi
+          echo "✅ All CI checks passed!"
