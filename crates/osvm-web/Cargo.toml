@@ -1,0 +1,59 @@
+[package]
+name = "osvm-web"
+version = "0.1.0"
+edition = "2021"
+description = "OSVM Research TUI in the browser via WebGL2"
+authors = ["OSVM Team"]
+
+# Keep out of main workspace (WASM builds are separate)
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Ratzilla for browser-based ratatui (includes ratatui re-export)
+ratzilla = "0.2"
+
+# WASM bindings
+wasm-bindgen = { version = "0.2", features = ["enable-interning"] }
+wasm-bindgen-futures = "0.4"
+
+# HTTP client for WASM
+gloo-net = "0.6"
+gloo-timers = { version = "0.3", features = ["futures"] }
+
+# Async
+futures = "0.3"
+
+# JSON
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+log = "0.4"
+console_log = "1.0"
+console_error_panic_hook = "0.1"
+
+# Web APIs
+web-sys = { version = "0.3", features = [
+    "Window", "Performance", "Location", "Url", "UrlSearchParams",
+    # Touch events for mobile support
+    "TouchEvent", "TouchList", "Touch", "Document", "Element", "EventTarget",
+    "AddEventListenerOptions",
+    # History API for URL hash state
+    "History"
+] }
+
+# JS closures for event listeners
+js-sys = "0.3"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Link-time optimization
+codegen-units = 1   # Slower compile, faster code
+panic = "abort"     # Remove panic unwinding
+strip = true        # Strip symbols

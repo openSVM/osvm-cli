@@ -4,6 +4,11 @@
 programs/agent-escrow/target/
 programs/*/Cargo.lock
 
+# WASM crate build artifacts
+crates/osvm-web/target/
+crates/osvm-web/dist/
+crates/osvm-web/pkg/
+
 # Compiled binaries in examples
 examples/ovsm_scripts/*.so
 
@@ -84,7 +89,8 @@ audit_reports/
 # Packaging artifacts and test files
 *.deb
 *.tar.gz
-osvm-*/
+# Note: osvm-*/ pattern removed - was blocking crates/osvm-web
+# Packaging extracts go to packaging/ subdirectories instead
 osvm_*/
 temp_*.tar.gz
 debian-packages/
