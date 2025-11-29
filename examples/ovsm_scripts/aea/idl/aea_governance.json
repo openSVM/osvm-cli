@@ -1,0 +1,206 @@
+{
+  "version": "0.1.0",
+  "name": "aea_dao_governance",
+  "instructions": [
+    {
+      "name": "initializeGovernance",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        90
+      ]
+    },
+    {
+      "name": "createProposal",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        92
+      ]
+    },
+    {
+      "name": "transitionToVoting",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        94
+      ]
+    },
+    {
+      "name": "castVote",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        95
+      ]
+    },
+    {
+      "name": "delegateVotes",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        97
+      ]
+    },
+    {
+      "name": "finalizeProposal",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        99
+      ]
+    },
+    {
+      "name": "executeProposal",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        100
+      ]
+    },
+    {
+      "name": "guardianVeto",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        101
+      ]
+    }
+  ]
+}

@@ -1,0 +1,231 @@
+{
+  "version": "0.1.0",
+  "name": "aea_negotiation_protocol",
+  "instructions": [
+    {
+      "name": "createBid",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        70
+      ]
+    },
+    {
+      "name": "createOffer",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        71
+      ]
+    },
+    {
+      "name": "counterBid",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        72
+      ]
+    },
+    {
+      "name": "acceptBid",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        73
+      ]
+    },
+    {
+      "name": "rejectBid",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        74
+      ]
+    },
+    {
+      "name": "cancelBid",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        75
+      ]
+    },
+    {
+      "name": "claimExpiredBid",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        76
+      ]
+    },
+    {
+      "name": "createAutoAcceptRule",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        80
+      ]
+    },
+    {
+      "name": "triggerAutoAccept",
+      "accounts": [
+        {
+          "name": "state",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Program state account"
+          ]
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Transaction signer"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        83
+      ]
+    }
+  ]
+}

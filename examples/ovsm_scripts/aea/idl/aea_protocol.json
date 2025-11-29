@@ -1,0 +1,460 @@
+{
+  "version": "0.1.0",
+  "name": "aea_protocol",
+  "instructions": [
+    {
+      "name": "initializeProtocol",
+      "accounts": [
+        {
+          "name": "signer_1",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 1"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        0
+      ]
+    },
+    {
+      "name": "registerUser",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "signer_2",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "agent_id",
+          "type": "u64"
+        }
+      ],
+      "discriminator": [
+        10
+      ]
+    },
+    {
+      "name": "registerAgent",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "signer_2",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "agent_id",
+          "type": "u64"
+        }
+      ],
+      "discriminator": [
+        11
+      ]
+    },
+    {
+      "name": "registerProvider",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "agent_id",
+          "type": "u64"
+        }
+      ],
+      "discriminator": [
+        12
+      ]
+    },
+    {
+      "name": "registerValidator",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "agent_id",
+          "type": "u64"
+        }
+      ],
+      "discriminator": [
+        13
+      ]
+    },
+    {
+      "name": "updateProfile",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "signer_2",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        14
+      ]
+    },
+    {
+      "name": "startCooldown",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "signer_2",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        15
+      ]
+    },
+    {
+      "name": "createOrder",
+      "accounts": [
+        {
+          "name": "order",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "buyer",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 2"
+          ]
+        },
+        {
+          "name": "provider",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 3"
+          ]
+        },
+        {
+          "name": "service",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 4"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        40
+      ]
+    },
+    {
+      "name": "acceptOrder",
+      "accounts": [
+        {
+          "name": "order",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "provider",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 2"
+          ]
+        },
+        {
+          "name": "signer_3",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 3"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        41
+      ]
+    },
+    {
+      "name": "confirmDelivery",
+      "accounts": [
+        {
+          "name": "order",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "buyer",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        },
+        {
+          "name": "provider",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 3"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        43
+      ]
+    },
+    {
+      "name": "cancelOrder",
+      "accounts": [
+        {
+          "name": "order",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "buyer",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        44
+      ]
+    },
+    {
+      "name": "refundOrder",
+      "accounts": [
+        {
+          "name": "order",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "provider",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        },
+        {
+          "name": "buyer",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 3"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        45
+      ]
+    },
+    {
+      "name": "openDispute",
+      "accounts": [
+        {
+          "name": "order",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "signer_2",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "reason",
+          "type": "u8"
+        }
+      ],
+      "discriminator": [
+        50
+      ]
+    },
+    {
+      "name": "resolveDispute",
+      "accounts": [
+        {
+          "name": "order",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "buyer",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 2"
+          ]
+        },
+        {
+          "name": "provider",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 3"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "reason",
+          "type": "u8"
+        }
+      ],
+      "discriminator": [
+        51
+      ]
+    },
+    {
+      "name": "slashParticipant",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "signer_2",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        61
+      ]
+    },
+    {
+      "name": "suspendParticipant",
+      "accounts": [
+        {
+          "name": "participant",
+          "isMut": true,
+          "isSigner": false,
+          "docs": [
+            "Account index 1"
+          ]
+        },
+        {
+          "name": "signer_2",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Account index 2"
+          ]
+        }
+      ],
+      "args": [],
+      "discriminator": [
+        62
+      ]
+    }
+  ]
+}
