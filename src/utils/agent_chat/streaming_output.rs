@@ -217,6 +217,94 @@ pub async fn stream_claude_style(text: &str) {
     let _ = stdout.flush();
 }
 
+/// Synchronous streaming with typewriter effect for non-async contexts
+/// Uses std::thread::sleep instead of tokio::time::sleep
+pub fn stream_text_sync(text: &str, chars_per_second: f32) {
+    let delay = Duration::from_secs_f32(1.0 / chars_per_second);
+    let mut stdout = io::stdout();
+
+    for ch in text.chars() {
+        print!("{}", ch);
+        let _ = stdout.flush();
+
+        // Variable speed: faster for spaces and punctuation
+        let actual_delay = if ch.is_whitespace() || ch.is_ascii_punctuation() {
+            delay / 2
+        } else {
+            delay
+        };
+        std::thread::sleep(actual_delay);
+    }
+    let _ = stdout.flush();
+}
+
+/// Synchronous Claude Code-style typing effect for non-async contexts
+pub fn stream_claude_style_sync(text: &str) {
+    let mut stdout = io::stdout();
+    let total_chars = text.chars().count();
+
+    if total_chars == 0 {
+        return;
+    }
+
+    // Calculate base delay to complete in ~1-3 seconds for typical messages
+    // Slightly faster than async version for REPL responsiveness
+    let base_time_secs = (total_chars as f32 / 150.0).clamp(0.3, 2.0);
+
+    for (i, ch) in text.chars().enumerate() {
+        print!("{}", ch);
+        let _ = stdout.flush();
+
+        // Variable speed based on position
+        let progress = i as f32 / total_chars as f32;
+        let speed_multiplier = if progress < 0.1 {
+            0.5 // Start moderately slow
+        } else if progress > 0.9 {
+            0.6 // End moderately slow
+        } else {
+            1.0 + (progress - 0.5).abs() * 0.3 // Fastest in middle
+        };
+
+        let char_delay = base_time_secs / (total_chars as f32 * speed_multiplier);
+
+        // Skip delay for spaces for more natural feel
+        if !ch.is_whitespace() {
+            std::thread::sleep(Duration::from_secs_f32(char_delay));
+        }
+    }
+    let _ = stdout.flush();
+}
+
+/// Fast streaming for long output - word-by-word with minimal delay
+pub fn stream_fast_sync(text: &str) {
+    let mut stdout = io::stdout();
+    let total_len = text.len();
+
+    if total_len == 0 {
+        return;
+    }
+
+    // Very fast for long text, skip streaming entirely for very short text
+    if total_len < 20 {
+        print!("{}", text);
+        let _ = stdout.flush();
+        return;
+    }
+
+    // Stream by chunks for long output
+    let delay = Duration::from_micros(500); // 0.5ms per chunk
+    let chunk_size = 5; // 5 chars at a time
+
+    for chunk in text.as_bytes().chunks(chunk_size) {
+        if let Ok(s) = std::str::from_utf8(chunk) {
+            print!("{}", s);
+            let _ = stdout.flush();
+            std::thread::sleep(delay);
+        }
+    }
+    let _ = stdout.flush();
+}
+
 /// Multiline input state
 #[derive(Debug, Default)]
 pub struct MultilineInput {

@@ -30,6 +30,9 @@ pub use programmatic_chat::{
 };
 pub use task_state::TaskState;
 
+// Streaming output for OVSM REPL and other command results
+pub use streaming_output::{stream_claude_style_sync, stream_fast_sync, stream_text_sync};
+
 // Internal re-exports for module communication
 pub(crate) use colors::{Colors, GradientType};
 pub(crate) use fuzzy_matcher::FuzzyMatcher;

@@ -1,5 +1,6 @@
 use crate::services::mcp_service::McpService;
 use crate::services::ovsm_service::OvsmService;
+use crate::utils::agent_chat::{stream_claude_style_sync, stream_fast_sync};
 use crate::utils::mcp_bridge::McpBridgeTool;
 use std::sync::Arc;
 
@@ -85,9 +86,16 @@ pub async fn handle_ovsm_command(
             match service.execute_file(script) {
                 Ok(result) => {
                     if json {
-                        println!("{}", service.format_value_json(&result)?);
+                        // For JSON output, use fast streaming for large results
+                        let json_str = service.format_value_json(&result)?;
+                        stream_fast_sync(&json_str);
+                        println!();
                     } else {
-                        println!("✨ Result: {}", service.format_value(&result));
+                        // Stream the result with a typing effect
+                        let formatted = service.format_value(&result);
+                        print!("✨ Result: ");
+                        stream_claude_style_sync(&formatted);
+                        println!();
                     }
                 }
                 Err(e) => {
@@ -141,7 +149,11 @@ pub async fn handle_ovsm_command(
 
                 match service.execute_code(input) {
                     Ok(result) => {
-                        println!("=> {}", service.format_value(&result));
+                        // Stream the result with a typing effect
+                        let formatted = service.format_value(&result);
+                        print!("=> ");
+                        stream_claude_style_sync(&formatted);
+                        println!();
                     }
                     Err(e) => {
                         eprintln!("❌ Error: {}", e);
@@ -158,9 +170,15 @@ pub async fn handle_ovsm_command(
             match service.execute_code(code) {
                 Ok(result) => {
                     if json {
-                        println!("{}", service.format_value_json(&result)?);
+                        // Fast streaming for JSON output
+                        let json_str = service.format_value_json(&result)?;
+                        stream_fast_sync(&json_str);
+                        println!();
                     } else {
-                        println!("{}", service.format_value(&result));
+                        // Streaming output with typing effect
+                        let formatted = service.format_value(&result);
+                        stream_claude_style_sync(&formatted);
+                        println!();
                     }
                 }
                 Err(e) => {
