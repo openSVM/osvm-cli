@@ -48,6 +48,11 @@ pub struct InputState {
     pub suggestions_suppressed: bool,
     pub sug_win_start: usize,
     pub win_height: usize,
+    // Multiline support
+    pub multiline_mode: bool,
+    pub lines: Vec<String>,
+    pub current_line: usize,
+    pub line_cursor: usize,
 }
 
 impl InputState {
@@ -66,6 +71,11 @@ impl InputState {
             suggestions_suppressed: false,
             sug_win_start: 0,
             win_height: 6,
+            // Multiline support
+            multiline_mode: false,
+            lines: vec![String::new()],
+            current_line: 0,
+            line_cursor: 0,
         }
     }
 
@@ -190,6 +200,179 @@ impl InputState {
         self.original_before_sug = None;
         self.suggestions_suppressed = false;
         self.sug_win_start = 0;
+        // Clear multiline state
+        self.multiline_mode = false;
+        self.lines = vec![String::new()];
+        self.current_line = 0;
+        self.line_cursor = 0;
+    }
+
+    // =====================
+    // Multiline Operations
+    // =====================
+
+    /// Toggle multiline mode
+    pub fn toggle_multiline(&mut self) {
+        if self.multiline_mode {
+            // Exit multiline mode: join all lines with newlines
+            self.input = self.lines.join("\n");
+            self.cursor_pos = self.input.chars().count();
+            self.multiline_mode = false;
+        } else {
+            // Enter multiline mode: split current input by newlines
+            self.lines = if self.input.is_empty() {
+                vec![String::new()]
+            } else {
+                self.input.lines().map(|s| s.to_string()).collect()
+            };
+            if self.lines.is_empty() {
+                self.lines.push(String::new());
+            }
+            self.current_line = self.lines.len() - 1;
+            self.line_cursor = self.lines[self.current_line].chars().count();
+            self.multiline_mode = true;
+        }
+    }
+
+    /// Insert a new line in multiline mode
+    pub fn insert_newline(&mut self) {
+        if !self.multiline_mode {
+            self.toggle_multiline();
+        }
+
+        // Split current line at cursor
+        let current = &self.lines[self.current_line];
+        let byte_pos = current
+            .char_indices()
+            .nth(self.line_cursor)
+            .map(|(i, _)| i)
+            .unwrap_or(current.len());
+
+        let (before, after) = current.split_at(byte_pos);
+        let before_str = before.to_string();
+        let after_str = after.to_string();
+
+        self.lines[self.current_line] = before_str;
+        self.lines.insert(self.current_line + 1, after_str);
+        self.current_line += 1;
+        self.line_cursor = 0;
+
+        // Sync to main input
+        self.sync_from_multiline();
+    }
+
+    /// Move cursor up in multiline mode
+    pub fn multiline_up(&mut self) {
+        if self.current_line > 0 {
+            self.current_line -= 1;
+            // Keep cursor position, but clamp to line length
+            let line_len = self.lines[self.current_line].chars().count();
+            self.line_cursor = self.line_cursor.min(line_len);
+        }
+    }
+
+    /// Move cursor down in multiline mode
+    pub fn multiline_down(&mut self) {
+        if self.current_line < self.lines.len() - 1 {
+            self.current_line += 1;
+            let line_len = self.lines[self.current_line].chars().count();
+            self.line_cursor = self.line_cursor.min(line_len);
+        }
+    }
+
+    /// Insert character in multiline mode
+    pub fn multiline_insert_char(&mut self, ch: char) {
+        if self.lines.is_empty() {
+            self.lines.push(String::new());
+        }
+
+        let line = &mut self.lines[self.current_line];
+        let byte_pos = line
+            .char_indices()
+            .nth(self.line_cursor)
+            .map(|(i, _)| i)
+            .unwrap_or(line.len());
+
+        line.insert(byte_pos, ch);
+        self.line_cursor += 1;
+
+        // Sync to main input
+        self.sync_from_multiline();
+    }
+
+    /// Delete character before cursor in multiline mode
+    pub fn multiline_backspace(&mut self) -> bool {
+        if self.line_cursor > 0 {
+            let line = &mut self.lines[self.current_line];
+            let char_indices: Vec<(usize, char)> = line.char_indices().collect();
+
+            if let Some((byte_pos, ch)) = char_indices.get(self.line_cursor - 1) {
+                let char_len = ch.len_utf8();
+                for _ in 0..char_len {
+                    if *byte_pos < line.len() {
+                        line.remove(*byte_pos);
+                    }
+                }
+                self.line_cursor -= 1;
+                self.sync_from_multiline();
+                return true;
+            }
+        } else if self.current_line > 0 {
+            // Merge with previous line
+            let current_content = self.lines.remove(self.current_line);
+            self.current_line -= 1;
+            self.line_cursor = self.lines[self.current_line].chars().count();
+            self.lines[self.current_line].push_str(&current_content);
+            self.sync_from_multiline();
+            return true;
+        }
+        false
+    }
+
+    /// Sync multiline content to main input field
+    pub fn sync_from_multiline(&mut self) {
+        self.input = self.lines.join("\n");
+        // Calculate cursor position in the flat string
+        let mut pos = 0;
+        for (i, line) in self.lines.iter().enumerate() {
+            if i < self.current_line {
+                pos += line.chars().count() + 1; // +1 for newline
+            } else if i == self.current_line {
+                pos += self.line_cursor;
+            }
+        }
+        self.cursor_pos = pos;
+    }
+
+    /// Get current content as final string (joining all lines)
+    pub fn get_multiline_content(&self) -> String {
+        if self.multiline_mode {
+            self.lines.join("\n")
+        } else {
+            self.input.clone()
+        }
+    }
+
+    /// Get line count
+    pub fn line_count(&self) -> usize {
+        self.lines.len()
+    }
+
+    /// Format multiline input for display
+    pub fn format_multiline_display(&self) -> String {
+        if !self.multiline_mode || self.lines.len() <= 1 {
+            return self.input.clone();
+        }
+
+        self.lines
+            .iter()
+            .enumerate()
+            .map(|(i, line)| {
+                let indicator = if i == self.current_line { "▶" } else { " " };
+                format!("{}{:2}│ {}", indicator, i + 1, line)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// Navigate history up
@@ -515,6 +698,8 @@ pub enum InputChar {
     CtrlC,
     CtrlT,
     CtrlL,
+    CtrlM,    // Toggle multiline mode
+    CtrlEnter, // Insert newline in multiline mode
     Tab,
     Escape,
     Arrow(ArrowKey),
@@ -547,8 +732,10 @@ impl InputHandler {
             b'\n' | b'\r' => Ok(InputChar::Enter),
             0x7f | 0x08 => Ok(InputChar::Backspace),
             0x03 => Ok(InputChar::CtrlC),
-            0x14 => Ok(InputChar::CtrlT),
-            0x0c => Ok(InputChar::CtrlL),
+            0x14 => Ok(InputChar::CtrlT), // Ctrl+T
+            0x0c => Ok(InputChar::CtrlL), // Ctrl+L
+            0x0e => Ok(InputChar::CtrlEnter), // Ctrl+N for newline insert in multiline
+            0x15 => Ok(InputChar::CtrlM), // Ctrl+U for multiline toggle
             b'\t' => Ok(InputChar::Tab),
             0x1b => Self::read_escape_sequence(),
             ch if ch >= 0x20 && ch < 0x7f => Ok(InputChar::Regular(ch as char)),
@@ -627,7 +814,8 @@ impl InputHandler {
                     should_update_suggestions = true;
                     Ok(None)
                 } else {
-                    let result = state.input.clone();
+                    // Get content (handles multiline mode properly)
+                    let result = state.get_multiline_content();
                     state.add_to_history(result.clone());
                     state.clear();
                     should_update_suggestions = true;
@@ -636,7 +824,11 @@ impl InputHandler {
             }
 
             InputChar::Backspace => {
-                if state.delete_before_cursor() {
+                if state.multiline_mode {
+                    if state.multiline_backspace() {
+                        should_update_suggestions = true;
+                    }
+                } else if state.delete_before_cursor() {
                     should_update_suggestions = true;
                 }
                 Ok(None)
@@ -650,7 +842,10 @@ impl InputHandler {
             }
 
             InputChar::Arrow(ArrowKey::Up) => {
-                if state.suggestions.is_empty() {
+                if state.multiline_mode && state.current_line > 0 {
+                    // Navigate up in multiline mode
+                    state.multiline_up();
+                } else if state.suggestions.is_empty() {
                     state.history_up();
                     should_update_suggestions = true;
                 } else {
@@ -662,7 +857,10 @@ impl InputHandler {
             }
 
             InputChar::Arrow(ArrowKey::Down) => {
-                if state.suggestions.is_empty() {
+                if state.multiline_mode && state.current_line < state.lines.len() - 1 {
+                    // Navigate down in multiline mode
+                    state.multiline_down();
+                } else if state.suggestions.is_empty() {
                     state.history_down();
                     should_update_suggestions = true;
                 } else {
@@ -674,17 +872,36 @@ impl InputHandler {
             }
 
             InputChar::Arrow(ArrowKey::Left) => {
-                state.move_cursor_left();
+                if state.multiline_mode {
+                    if state.line_cursor > 0 {
+                        state.line_cursor -= 1;
+                        state.sync_from_multiline();
+                    }
+                } else {
+                    state.move_cursor_left();
+                }
                 Ok(None)
             }
 
             InputChar::Arrow(ArrowKey::Right) => {
-                state.move_cursor_right();
+                if state.multiline_mode {
+                    let line_len = state.lines[state.current_line].chars().count();
+                    if state.line_cursor < line_len {
+                        state.line_cursor += 1;
+                        state.sync_from_multiline();
+                    }
+                } else {
+                    state.move_cursor_right();
+                }
                 Ok(None)
             }
 
             InputChar::Regular(c) => {
-                state.insert_char(c);
+                if state.multiline_mode {
+                    state.multiline_insert_char(c);
+                } else {
+                    state.insert_char(c);
+                }
                 should_update_suggestions = state.should_update_suggestions();
                 Ok(None)
             }
@@ -696,6 +913,27 @@ impl InputHandler {
             }
 
             InputChar::CtrlC => Err(anyhow!("User interrupted")),
+
+            InputChar::CtrlM => {
+                // Toggle multiline mode with Ctrl+U
+                state.toggle_multiline();
+                should_update_suggestions = true;
+                Ok(None)
+            }
+
+            InputChar::CtrlEnter => {
+                // Insert newline in multiline mode with Ctrl+N
+                if state.multiline_mode {
+                    state.insert_newline();
+                    should_update_suggestions = true;
+                } else {
+                    // If not in multiline mode, enter it and add a newline
+                    state.toggle_multiline();
+                    state.insert_newline();
+                    should_update_suggestions = true;
+                }
+                Ok(None)
+            }
 
             InputChar::Mouse => {
                 // Silently ignore mouse events to preserve right-click functionality
