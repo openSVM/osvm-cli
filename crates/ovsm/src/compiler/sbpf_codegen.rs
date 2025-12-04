@@ -32,37 +32,65 @@ mod class {
 
 /// ALU operation codes (bits 4-7)
 pub mod alu {
+    /// Addition operation
     pub const ADD: u8 = 0x00;
+    /// Subtraction operation
     pub const SUB: u8 = 0x10;
+    /// Multiplication operation
     pub const MUL: u8 = 0x20;
+    /// Division operation
     pub const DIV: u8 = 0x30;
+    /// Bitwise OR operation
     pub const OR: u8 = 0x40;
+    /// Bitwise AND operation
     pub const AND: u8 = 0x50;
+    /// Left shift operation
     pub const LSH: u8 = 0x60;
+    /// Logical right shift operation
     pub const RSH: u8 = 0x70;
+    /// Negation operation
     pub const NEG: u8 = 0x80;
+    /// Modulo operation
     pub const MOD: u8 = 0x90;
+    /// Bitwise XOR operation
     pub const XOR: u8 = 0xa0;
+    /// Move operation
     pub const MOV: u8 = 0xb0;
+    /// Arithmetic right shift operation
     pub const ARSH: u8 = 0xc0;
+    /// Byte swap operation
     pub const END: u8 = 0xd0; // Byte swap
 }
 
 /// Jump operation codes
 pub mod jmp {
+    /// Unconditional jump
     pub const JA: u8 = 0x00; // Unconditional
+    /// Jump if equal
     pub const JEQ: u8 = 0x10; // ==
+    /// Jump if greater than (unsigned)
     pub const JGT: u8 = 0x20; // > unsigned
+    /// Jump if greater or equal (unsigned)
     pub const JGE: u8 = 0x30; // >= unsigned
+    /// Jump if bitwise AND is non-zero
     pub const JSET: u8 = 0x40; // & != 0
+    /// Jump if not equal
     pub const JNE: u8 = 0x50; // !=
+    /// Jump if greater than (signed)
     pub const JSGT: u8 = 0x60; // > signed
+    /// Jump if greater or equal (signed)
     pub const JSGE: u8 = 0x70; // >= signed
+    /// Function call
     pub const CALL: u8 = 0x80; // Function call
+    /// Return from function
     pub const EXIT: u8 = 0x90; // Return
+    /// Jump if less than (unsigned)
     pub const JLT: u8 = 0xa0; // < unsigned
+    /// Jump if less or equal (unsigned)
     pub const JLE: u8 = 0xb0; // <= unsigned
+    /// Jump if less than (signed)
     pub const JSLT: u8 = 0xc0; // < signed
+    /// Jump if less or equal (signed)
     pub const JSLE: u8 = 0xd0; // <= signed
 }
 
@@ -104,22 +132,22 @@ const SRC_REG: u8 = 0x08; // Register value
 
 /// Solana sBPF virtual memory layout
 pub mod memory {
-    /// Program code region (read-only)
+    /// Program code region start address (read-only)
     pub const PROGRAM_START: u64 = 0x100000000;
-    /// Stack region (read/write, grows downward)
+    /// Stack region start address (read/write, grows downward)
     pub const STACK_START: u64 = 0x200000000;
-    /// Heap region (read/write)
+    /// Heap region start address (read/write)
     pub const HEAP_START: u64 = 0x300000000;
-    /// Input data region (read-only)
+    /// Input data region start address (read-only)
     pub const INPUT_START: u64 = 0x400000000;
 
-    /// Stack frame size per function call
+    /// Stack frame size per function call (4KB)
     pub const STACK_FRAME_SIZE: u64 = 4096; // 4KB
-    /// Maximum heap size
+    /// Maximum heap size allowed (32KB)
     pub const HEAP_MAX_SIZE: u64 = 32768; // 32KB
-    /// Maximum call depth
+    /// Maximum call depth allowed
     pub const MAX_CALL_DEPTH: usize = 5;
-    /// Maximum instruction count
+    /// Maximum instruction count (512KB bytecode)
     pub const MAX_INSTRUCTIONS: usize = 65536; // 512KB bytecode
 }
 
@@ -195,26 +223,47 @@ pub fn syscall_hash(name: &str) -> u32 {
 pub struct SolanaSymbols;
 
 impl SolanaSymbols {
+    /// Log a UTF-8 message
     pub const SOL_LOG: &'static str = "sol_log_";
+    /// Log five 64-bit values
     pub const SOL_LOG_64: &'static str = "sol_log_64_";
+    /// Log the remaining compute units
     pub const SOL_LOG_COMPUTE_UNITS: &'static str = "sol_log_compute_units_";
+    /// Log a public key
     pub const SOL_LOG_PUBKEY: &'static str = "sol_log_pubkey";
+    /// Panic and abort the program
     pub const SOL_PANIC: &'static str = "sol_panic_";
+    /// Compute SHA-256 hash
     pub const SOL_SHA256: &'static str = "sol_sha256";
+    /// Compute Keccak-256 hash
     pub const SOL_KECCAK256: &'static str = "sol_keccak256";
+    /// Compute BLAKE3 hash
     pub const SOL_BLAKE3: &'static str = "sol_blake3";
+    /// Recover secp256k1 public key from signature
     pub const SOL_SECP256K1_RECOVER: &'static str = "sol_secp256k1_recover";
+    /// Create a program address (PDA)
     pub const SOL_CREATE_PROGRAM_ADDRESS: &'static str = "sol_create_program_address";
+    /// Find a program address (PDA) with bump seed
     pub const SOL_TRY_FIND_PROGRAM_ADDRESS: &'static str = "sol_try_find_program_address";
+    /// Invoke another program with C ABI
     pub const SOL_INVOKE_SIGNED_C: &'static str = "sol_invoke_signed_c";
+    /// Invoke another program with Rust ABI
     pub const SOL_INVOKE_SIGNED_RUST: &'static str = "sol_invoke_signed_rust";
+    /// Allocate or free heap memory
     pub const SOL_ALLOC_FREE: &'static str = "sol_alloc_free_";
+    /// Copy memory regions
     pub const SOL_MEMCPY: &'static str = "sol_memcpy_";
+    /// Move memory regions (overlapping)
     pub const SOL_MEMMOVE: &'static str = "sol_memmove_";
+    /// Compare memory regions
     pub const SOL_MEMCMP: &'static str = "sol_memcmp_";
+    /// Set memory region to value
     pub const SOL_MEMSET: &'static str = "sol_memset_";
+    /// Get clock sysvar data
     pub const SOL_GET_CLOCK_SYSVAR: &'static str = "sol_get_clock_sysvar";
+    /// Get rent sysvar data
     pub const SOL_GET_RENT_SYSVAR: &'static str = "sol_get_rent_sysvar";
+    /// Get epoch schedule sysvar data
     pub const SOL_GET_EPOCH_SCHEDULE_SYSVAR: &'static str = "sol_get_epoch_schedule_sysvar";
 
     /// Build a lookup table of hash -> name for decompilation
@@ -254,24 +303,37 @@ impl SolanaSymbols {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum SbpfReg {
+    /// Return value register
     R0 = 0,   // Return value
+    /// Argument 1 / caller-saved register
     R1 = 1,   // Arg 1 / caller-saved
+    /// Argument 2 / caller-saved register
     R2 = 2,   // Arg 2 / caller-saved
+    /// Argument 3 / caller-saved register
     R3 = 3,   // Arg 3 / caller-saved
+    /// Argument 4 / caller-saved register
     R4 = 4,   // Arg 4 / caller-saved
+    /// Argument 5 / caller-saved register
     R5 = 5,   // Arg 5 / caller-saved
+    /// Callee-saved register
     R6 = 6,   // Callee-saved
+    /// Callee-saved register
     R7 = 7,   // Callee-saved
+    /// Callee-saved register
     R8 = 8,   // Callee-saved
+    /// Callee-saved register
     R9 = 9,   // Callee-saved
+    /// Frame pointer (read-only)
     R10 = 10, // Frame pointer (read-only)
 }
 
 impl SbpfReg {
+    /// Check if this register is callee-saved (must be preserved across calls)
     pub fn is_callee_saved(self) -> bool {
         matches!(self, SbpfReg::R6 | SbpfReg::R7 | SbpfReg::R8 | SbpfReg::R9)
     }
 
+    /// Check if this register is used for function arguments
     pub fn is_arg_reg(self) -> bool {
         matches!(
             self,
@@ -302,7 +364,7 @@ pub struct SbpfInstruction {
 }
 
 impl SbpfInstruction {
-    /// Create a standard 8-byte instruction
+    /// Create a standard 8-byte sBPF instruction with specified fields
     pub fn new(opcode: u8, dst: u8, src: u8, offset: i16, imm: i32) -> Self {
         Self {
             opcode,
@@ -314,7 +376,7 @@ impl SbpfInstruction {
         }
     }
 
-    /// Create a lddw instruction (16 bytes) for 64-bit constant
+    /// Create a lddw instruction (16 bytes) for loading a 64-bit constant
     pub fn lddw(dst: u8, value: u64) -> Self {
         Self {
             opcode: class::LD | size::DW | mode::IMM,
@@ -326,43 +388,42 @@ impl SbpfInstruction {
         }
     }
 
-    /// ALU64 with immediate
+    /// Create a 64-bit ALU operation with immediate operand
     pub fn alu64_imm(op: u8, dst: u8, imm: i32) -> Self {
         Self::new(class::ALU64 | op | SRC_IMM, dst, 0, 0, imm)
     }
 
-    /// ALU64 with register
+    /// Create a 64-bit ALU operation with register operand
     pub fn alu64_reg(op: u8, dst: u8, src: u8) -> Self {
         Self::new(class::ALU64 | op | SRC_REG, dst, src, 0, 0)
     }
 
-    /// Load from memory: dst = *(src + offset)
+    /// Create a load from memory instruction: dst = *(src + offset)
     pub fn ldx(sz: u8, dst: u8, src: u8, offset: i16) -> Self {
         Self::new(class::LDX | sz | mode::MEM, dst, src, offset, 0)
     }
 
-    /// Store to memory: *(dst + offset) = src
+    /// Create a store to memory instruction: *(dst + offset) = src
     pub fn stx(sz: u8, dst: u8, src: u8, offset: i16) -> Self {
         Self::new(class::STX | sz | mode::MEM, dst, src, offset, 0)
     }
 
-    /// Unconditional jump
+    /// Create an unconditional jump instruction
     pub fn ja(offset: i16) -> Self {
         Self::new(class::JMP | jmp::JA, 0, 0, offset, 0)
     }
 
-    /// Conditional jump with immediate
+    /// Create a conditional jump with immediate operand
     pub fn jmp_imm(op: u8, dst: u8, imm: i32, offset: i16) -> Self {
         Self::new(class::JMP | op | SRC_IMM, dst, 0, offset, imm)
     }
 
-    /// Conditional jump with register
+    /// Create a conditional jump with register operand
     pub fn jmp_reg(op: u8, dst: u8, src: u8, offset: i16) -> Self {
         Self::new(class::JMP | op | SRC_REG, dst, src, offset, 0)
     }
 
-    /// Call syscall (V2 uses src=0 for static syscalls)
-    /// Call syscall - version-aware encoding
+    /// Create a syscall instruction with version-aware encoding
     pub fn call_syscall(hash: u32, sbpf_version: super::SbpfVersion) -> Self {
         match sbpf_version {
             super::SbpfVersion::V1 => {
@@ -376,12 +437,12 @@ impl SbpfInstruction {
         }
     }
 
-    /// Call internal function (relative offset)
+    /// Create an internal function call instruction with relative offset
     pub fn call_internal(offset: i32) -> Self {
         Self::new(class::JMP | jmp::CALL | SRC_REG, 0, 1, 0, offset)
     }
 
-    /// Exit/return
+    /// Create a function exit/return instruction
     pub fn exit() -> Self {
         Self::new(class::JMP | jmp::EXIT, 0, 0, 0, 0)
     }
@@ -390,7 +451,7 @@ impl SbpfInstruction {
     // ATOMIC OPERATIONS
     // =========================================================================
 
-    /// Atomic add: *(dst + offset) += src
+    /// Create an atomic add instruction: *(dst + offset) += src
     pub fn atomic_add(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(
             class::STX | size::DW | mode::ATOMIC,
@@ -401,7 +462,7 @@ impl SbpfInstruction {
         )
     }
 
-    /// Atomic fetch-add: tmp = *(dst + offset); *(dst + offset) += src; src = tmp
+    /// Create an atomic fetch-and-add instruction that returns the old value
     pub fn atomic_fetch_add(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(
             class::STX | size::DW | mode::ATOMIC,
@@ -412,7 +473,7 @@ impl SbpfInstruction {
         )
     }
 
-    /// Atomic or: *(dst + offset) |= src
+    /// Create an atomic OR instruction: *(dst + offset) |= src
     pub fn atomic_or(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(
             class::STX | size::DW | mode::ATOMIC,
@@ -423,7 +484,7 @@ impl SbpfInstruction {
         )
     }
 
-    /// Atomic and: *(dst + offset) &= src
+    /// Create an atomic AND instruction: *(dst + offset) &= src
     pub fn atomic_and(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(
             class::STX | size::DW | mode::ATOMIC,
@@ -434,7 +495,7 @@ impl SbpfInstruction {
         )
     }
 
-    /// Atomic xor: *(dst + offset) ^= src
+    /// Create an atomic XOR instruction: *(dst + offset) ^= src
     pub fn atomic_xor(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(
             class::STX | size::DW | mode::ATOMIC,
@@ -445,7 +506,7 @@ impl SbpfInstruction {
         )
     }
 
-    /// Atomic exchange: tmp = *(dst + offset); *(dst + offset) = src; src = tmp
+    /// Create an atomic exchange instruction that swaps values
     pub fn atomic_xchg(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(
             class::STX | size::DW | mode::ATOMIC,
@@ -456,7 +517,7 @@ impl SbpfInstruction {
         )
     }
 
-    /// Atomic compare-and-exchange: if *(dst + offset) == R0 { *(dst + offset) = src }
+    /// Create an atomic compare-and-exchange instruction
     pub fn atomic_cmpxchg(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(
             class::STX | size::DW | mode::ATOMIC,
@@ -471,42 +532,42 @@ impl SbpfInstruction {
     // SIGNED JUMPS (for signed comparison)
     // =========================================================================
 
-    /// Signed greater than with immediate
+    /// Create a signed greater-than jump with immediate operand
     pub fn jsgt_imm(dst: u8, imm: i32, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSGT | SRC_IMM, dst, 0, offset, imm)
     }
 
-    /// Signed greater than with register
+    /// Create a signed greater-than jump with register operand
     pub fn jsgt_reg(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSGT | SRC_REG, dst, src, offset, 0)
     }
 
-    /// Signed greater or equal with immediate
+    /// Create a signed greater-or-equal jump with immediate operand
     pub fn jsge_imm(dst: u8, imm: i32, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSGE | SRC_IMM, dst, 0, offset, imm)
     }
 
-    /// Signed greater or equal with register
+    /// Create a signed greater-or-equal jump with register operand
     pub fn jsge_reg(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSGE | SRC_REG, dst, src, offset, 0)
     }
 
-    /// Signed less than with immediate
+    /// Create a signed less-than jump with immediate operand
     pub fn jslt_imm(dst: u8, imm: i32, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSLT | SRC_IMM, dst, 0, offset, imm)
     }
 
-    /// Signed less than with register
+    /// Create a signed less-than jump with register operand
     pub fn jslt_reg(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSLT | SRC_REG, dst, src, offset, 0)
     }
 
-    /// Signed less or equal with immediate
+    /// Create a signed less-or-equal jump with immediate operand
     pub fn jsle_imm(dst: u8, imm: i32, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSLE | SRC_IMM, dst, 0, offset, imm)
     }
 
-    /// Signed less or equal with register
+    /// Create a signed less-or-equal jump with register operand
     pub fn jsle_reg(dst: u8, src: u8, offset: i16) -> Self {
         Self::new(class::JMP | jmp::JSLE | SRC_REG, dst, src, offset, 0)
     }
@@ -515,32 +576,32 @@ impl SbpfInstruction {
     // BYTESWAP / ENDIANNESS
     // =========================================================================
 
-    /// Byte swap to little-endian (16-bit)
+    /// Create a byte swap instruction to little-endian (16-bit)
     pub fn le16(dst: u8) -> Self {
         Self::new(class::ALU | alu::END | SRC_IMM, dst, 0, 0, 16)
     }
 
-    /// Byte swap to little-endian (32-bit)
+    /// Create a byte swap instruction to little-endian (32-bit)
     pub fn le32(dst: u8) -> Self {
         Self::new(class::ALU | alu::END | SRC_IMM, dst, 0, 0, 32)
     }
 
-    /// Byte swap to little-endian (64-bit)
+    /// Create a byte swap instruction to little-endian (64-bit)
     pub fn le64(dst: u8) -> Self {
         Self::new(class::ALU | alu::END | SRC_IMM, dst, 0, 0, 64)
     }
 
-    /// Byte swap to big-endian (16-bit)
+    /// Create a byte swap instruction to big-endian (16-bit)
     pub fn be16(dst: u8) -> Self {
         Self::new(class::ALU | alu::END | SRC_REG, dst, 0, 0, 16)
     }
 
-    /// Byte swap to big-endian (32-bit)
+    /// Create a byte swap instruction to big-endian (32-bit)
     pub fn be32(dst: u8) -> Self {
         Self::new(class::ALU | alu::END | SRC_REG, dst, 0, 0, 32)
     }
 
-    /// Byte swap to big-endian (64-bit)
+    /// Create a byte swap instruction to big-endian (64-bit)
     pub fn be64(dst: u8) -> Self {
         Self::new(class::ALU | alu::END | SRC_REG, dst, 0, 0, 64)
     }
@@ -549,37 +610,37 @@ impl SbpfInstruction {
     // SHIFT OPERATIONS
     // =========================================================================
 
-    /// Left shift with immediate
+    /// Create a 64-bit left shift instruction with immediate operand
     pub fn lsh64_imm(dst: u8, imm: i32) -> Self {
         Self::new(class::ALU64 | alu::LSH | SRC_IMM, dst, 0, 0, imm)
     }
 
-    /// Left shift with register
+    /// Create a 64-bit left shift instruction with register operand
     pub fn lsh64_reg(dst: u8, src: u8) -> Self {
         Self::new(class::ALU64 | alu::LSH | SRC_REG, dst, src, 0, 0)
     }
 
-    /// Logical right shift with immediate
+    /// Create a 64-bit logical right shift instruction with immediate operand
     pub fn rsh64_imm(dst: u8, imm: i32) -> Self {
         Self::new(class::ALU64 | alu::RSH | SRC_IMM, dst, 0, 0, imm)
     }
 
-    /// Logical right shift with register
+    /// Create a 64-bit logical right shift instruction with register operand
     pub fn rsh64_reg(dst: u8, src: u8) -> Self {
         Self::new(class::ALU64 | alu::RSH | SRC_REG, dst, src, 0, 0)
     }
 
-    /// Arithmetic right shift with immediate (sign-extending)
+    /// Create a 64-bit arithmetic right shift instruction with immediate operand
     pub fn arsh64_imm(dst: u8, imm: i32) -> Self {
         Self::new(class::ALU64 | alu::ARSH | SRC_IMM, dst, 0, 0, imm)
     }
 
-    /// Arithmetic right shift with register (sign-extending)
+    /// Create a 64-bit arithmetic right shift instruction with register operand
     pub fn arsh64_reg(dst: u8, src: u8) -> Self {
         Self::new(class::ALU64 | alu::ARSH | SRC_REG, dst, src, 0, 0)
     }
 
-    /// Encode to bytes (8 or 16 bytes)
+    /// Encode the instruction to bytes (8 or 16 bytes for lddw)
     pub fn encode(&self) -> Vec<u8> {
         let mut bytes = vec![0u8; 8];
         bytes[0] = self.opcode;
@@ -596,7 +657,7 @@ impl SbpfInstruction {
         bytes
     }
 
-    /// Instruction size in bytes
+    /// Get the instruction size in bytes (8 for normal, 16 for lddw)
     pub fn size(&self) -> usize {
         if self.imm64_hi.is_some() {
             16
@@ -605,7 +666,7 @@ impl SbpfInstruction {
         }
     }
 
-    /// Estimate compute units for this instruction
+    /// Estimate compute units consumed by this instruction
     pub fn compute_cost(&self) -> u64 {
         let op_class = self.opcode & 0x07;
         let op_code = self.opcode & 0xf0;
@@ -772,29 +833,34 @@ pub struct StringLoadSite {
     pub rodata_offset: usize,
 }
 
-/// sBPF code generator
+/// sBPF code generator that transforms IR into Solana BPF bytecode
 pub struct SbpfCodegen {
+    /// Generated sBPF instructions
     instructions: Vec<SbpfInstruction>,
+    /// Label name to instruction offset mapping
     labels: HashMap<String, usize>,
+    /// Pending jumps to resolve after all labels are known
     pending_jumps: Vec<(usize, String)>,
+    /// Register allocator for virtual-to-physical mapping
     reg_alloc: RegisterAllocator,
-    /// Syscall name -> hash cache
+    /// Syscall name to hash cache
     syscall_cache: HashMap<String, u32>,
-    /// String literals for rodata section
+    /// Read-only data section for string literals
     pub rodata: Vec<u8>,
-    /// String offsets in rodata
+    /// Offsets of string literals within rodata
     string_offsets: Vec<usize>,
-    /// Syscall call sites for relocation
+    /// Syscall call sites for ELF relocation
     pub syscall_sites: Vec<SyscallCallSite>,
     /// String load sites for rodata address patching
     pub string_load_sites: Vec<StringLoadSite>,
-    /// SBPF version to generate
+    /// sBPF version to generate (V1 or V2)
     sbpf_version: super::SbpfVersion,
     /// Whether to use graph coloring register allocation
     use_graph_coloring: bool,
 }
 
 impl SbpfCodegen {
+    /// Create a new sBPF code generator for the specified version
     pub fn new(sbpf_version: super::SbpfVersion) -> Self {
         Self {
             instructions: Vec::new(),
@@ -811,14 +877,14 @@ impl SbpfCodegen {
         }
     }
 
-    /// Create codegen with graph coloring enabled/disabled
+    /// Create codegen with graph coloring register allocation enabled or disabled
     pub fn with_graph_coloring(sbpf_version: super::SbpfVersion, enabled: bool) -> Self {
         let mut codegen = Self::new(sbpf_version);
         codegen.use_graph_coloring = enabled;
         codegen
     }
 
-    /// Add a string to rodata and return its index
+    /// Add a string literal to rodata section and return its index
     pub fn add_string(&mut self, s: &str) -> usize {
         let idx = self.string_offsets.len();
         let offset = self.rodata.len();
@@ -828,12 +894,12 @@ impl SbpfCodegen {
         idx
     }
 
-    /// Get offset for string index
+    /// Get the byte offset of a string literal in rodata by its index
     pub fn string_offset(&self, idx: usize) -> usize {
         self.string_offsets.get(idx).copied().unwrap_or(0)
     }
 
-    /// Get string length (without null terminator)
+    /// Get the length of a string literal (excluding null terminator)
     pub fn string_len(&self, idx: usize) -> usize {
         if idx >= self.string_offsets.len() {
             return 0;
@@ -847,7 +913,7 @@ impl SbpfCodegen {
         end - start
     }
 
-    /// Generate sBPF from IR
+    /// Generate sBPF instructions from IR program and return the instruction list
     pub fn generate(&mut self, ir: &IrProgram) -> Result<Vec<SbpfInstruction>> {
         // Run graph coloring register allocation if enabled
         if self.use_graph_coloring {

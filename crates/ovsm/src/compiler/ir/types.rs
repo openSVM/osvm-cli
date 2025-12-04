@@ -5,17 +5,26 @@ use std::collections::HashMap;
 /// Primitive field types (fixed-size scalars)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveType {
-    U8,  // 1 byte
-    U16, // 2 bytes
-    U32, // 4 bytes
-    U64, // 8 bytes (default for untyped)
-    I8,  // 1 byte signed
-    I16, // 2 bytes signed
-    I32, // 4 bytes signed
-    I64, // 8 bytes signed (default)
+    /// 8-bit unsigned integer type (1 byte)
+    U8,
+    /// 16-bit unsigned integer type (2 bytes)
+    U16,
+    /// 32-bit unsigned integer type (4 bytes)
+    U32,
+    /// 64-bit unsigned integer type (8 bytes, default for untyped values)
+    U64,
+    /// 8-bit signed integer type (1 byte)
+    I8,
+    /// 16-bit signed integer type (2 bytes)
+    I16,
+    /// 32-bit signed integer type (4 bytes)
+    I32,
+    /// 64-bit signed integer type (8 bytes, default signed type)
+    I64,
 }
 
 impl PrimitiveType {
+    /// Returns the size of this primitive type in bytes
     pub fn size(&self) -> i64 {
         match self {
             PrimitiveType::U8 | PrimitiveType::I8 => 1,
@@ -25,6 +34,7 @@ impl PrimitiveType {
         }
     }
 
+    /// Parses a primitive type from a string representation (e.g., "u8", "i32")
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "u8" => Some(PrimitiveType::U8),
@@ -39,6 +49,7 @@ impl PrimitiveType {
         }
     }
 
+    /// Converts this primitive type to its Anchor IDL type string representation
     pub fn to_idl_type(&self) -> &'static str {
         match self {
             PrimitiveType::U8 => "u8",
@@ -60,7 +71,9 @@ pub enum FieldType {
     Primitive(PrimitiveType),
     /// Fixed-size array: [element_type count], e.g., [u32 10] = 40 bytes
     Array {
+        /// The primitive type of each array element
         element_type: PrimitiveType,
+        /// The number of elements in the array
         count: usize,
     },
     /// Solana public key (32 bytes, special handling)
@@ -130,20 +143,26 @@ impl FieldType {
 /// A field in a struct definition
 #[derive(Debug, Clone)]
 pub struct StructField {
+    /// The name of the field
     pub name: String,
+    /// The type of the field (primitive, array, pubkey, or nested struct)
     pub field_type: FieldType,
+    /// The byte offset of this field from the start of the struct
     pub offset: i64,
-    /// For array types, the element size
+    /// For array types, the element size in bytes
     pub element_size: Option<i64>,
-    /// For array types, the element count
+    /// For array types, the number of elements
     pub array_count: Option<usize>,
 }
 
 /// A struct definition (compile-time metadata)
 #[derive(Debug, Clone)]
 pub struct StructDef {
+    /// The name of the struct
     pub name: String,
+    /// The fields in the struct, with offsets and types
     pub fields: Vec<StructField>,
+    /// The total size of the struct in bytes
     pub total_size: i64,
 }
 

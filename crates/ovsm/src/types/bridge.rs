@@ -52,6 +52,7 @@ pub struct TypeBridge {
 }
 
 impl TypeBridge {
+    /// Creates a new type bridge with heap as the default memory region.
     pub fn new() -> Self {
         TypeBridge {
             struct_cache: HashMap::new(),

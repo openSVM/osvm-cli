@@ -35,6 +35,7 @@ impl StackFrame {
     /// Reserved space for return address + saved registers
     const RESERVED_SIZE: i16 = 40; // 8 bytes each: ret addr + R6-R9
 
+    /// Create a new stack frame with space for callee-saved registers
     pub fn new() -> Self {
         Self {
             next_local_offset: -Self::RESERVED_SIZE - 8,
@@ -119,6 +120,7 @@ pub struct HeapAllocator {
 }
 
 impl HeapAllocator {
+    /// Create a new heap allocator using sol_alloc_free_ syscall
     pub fn new() -> Self {
         Self {
             alloc_hash: syscall_hash(SolanaSymbols::SOL_ALLOC_FREE),
@@ -185,6 +187,7 @@ pub struct StringRuntime {
 }
 
 impl StringRuntime {
+    /// Create a new string runtime with heap allocator and memory syscalls
     pub fn new() -> Self {
         Self {
             heap: HeapAllocator::new(),
@@ -278,6 +281,7 @@ impl ArrayRuntime {
     /// Header size: length + capacity + element_size
     const HEADER_SIZE: i32 = 24;
 
+    /// Create a new array runtime with heap allocator
     pub fn new() -> Self {
         Self {
             heap: HeapAllocator::new(),

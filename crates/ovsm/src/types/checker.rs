@@ -18,6 +18,7 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
+    /// Creates a new type checker with empty context and refinement verifier.
     pub fn new() -> Self {
         TypeChecker {
             ctx: TypeContext::new(),

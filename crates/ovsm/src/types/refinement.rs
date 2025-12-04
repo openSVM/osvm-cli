@@ -54,8 +54,11 @@ pub enum Predicate {
 
     /// Comparison: var op const
     Compare {
+        /// The comparison operator (e.g., <, <=, ==)
         op: CompareOp,
+        /// Left-hand side of the comparison
         left: PredicateExpr,
+        /// Right-hand side of the comparison
         right: PredicateExpr,
     },
 
@@ -98,12 +101,18 @@ pub enum PredicateExpr {
 /// Comparison operators for predicates
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompareOp {
-    Lt,    // <
-    LtEq,  // <=
-    Gt,    // >
-    GtEq,  // >=
-    Eq,    // ==
-    NotEq, // !=
+    /// Less than comparison (<)
+    Lt,
+    /// Less than or equal comparison (<=)
+    LtEq,
+    /// Greater than comparison (>)
+    Gt,
+    /// Greater than or equal comparison (>=)
+    GtEq,
+    /// Equality comparison (==)
+    Eq,
+    /// Inequality comparison (!=)
+    NotEq,
 }
 
 impl RefinementType {
@@ -503,22 +512,27 @@ pub struct PredicateEnv {
 }
 
 impl PredicateEnv {
+    /// Create a new empty predicate environment
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set a known array length for use in predicates
     pub fn set_length(&mut self, name: &str, len: i64) {
         self.lengths.insert(name.to_string(), len);
     }
 
+    /// Get a known array length from the environment
     pub fn get_length(&self, name: &str) -> Option<i64> {
         self.lengths.get(name).copied()
     }
 
+    /// Set a constant value for use in predicates
     pub fn set_constant(&mut self, name: &str, value: i64) {
         self.constants.insert(name.to_string(), value);
     }
 
+    /// Get a constant value from the environment
     pub fn get_constant(&self, name: &str) -> Option<i64> {
         self.constants.get(name).copied()
     }
@@ -548,11 +562,14 @@ pub struct ProofObligation {
 /// Errors during refinement type checking
 #[derive(Debug, Clone)]
 pub struct RefinementError {
+    /// Error message describing what went wrong
     pub message: String,
+    /// Source location (line, column) where the error occurred, if available
     pub location: Option<(usize, usize)>,
 }
 
 impl RefinementChecker {
+    /// Create a new refinement type checker with an empty environment
     pub fn new() -> Self {
         RefinementChecker {
             env: PredicateEnv::new(),

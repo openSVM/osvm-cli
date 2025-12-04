@@ -47,13 +47,18 @@ pub enum MemoryRegion {
 /// Alignment requirements for memory access
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Alignment {
+    /// 1-byte alignment
     Byte1 = 1,
+    /// 2-byte alignment
     Byte2 = 2,
+    /// 4-byte alignment
     Byte4 = 4,
+    /// 8-byte alignment
     Byte8 = 8,
 }
 
 impl Alignment {
+    /// Creates an alignment requirement from a size in bytes
     pub fn from_size(size: i64) -> Self {
         match size {
             1 => Alignment::Byte1,
@@ -63,6 +68,7 @@ impl Alignment {
         }
     }
 
+    /// Returns the alignment value in bytes
     pub fn value(&self) -> i64 {
         *self as i64
     }
@@ -90,6 +96,7 @@ pub enum RegType {
 }
 
 impl RegType {
+    /// Creates an unsigned 64-bit integer value type
     pub fn u64() -> Self {
         RegType::Value {
             size: 8,
@@ -97,6 +104,7 @@ impl RegType {
         }
     }
 
+    /// Creates a signed 64-bit integer value type
     pub fn i64() -> Self {
         RegType::Value {
             size: 8,
@@ -104,6 +112,7 @@ impl RegType {
         }
     }
 
+    /// Creates an unsigned 8-bit integer value type
     pub fn u8() -> Self {
         RegType::Value {
             size: 1,
@@ -111,10 +120,12 @@ impl RegType {
         }
     }
 
+    /// Returns true if this type is a pointer
     pub fn is_pointer(&self) -> bool {
         matches!(self, RegType::Pointer(_))
     }
 
+    /// Returns true if this type is a raw value (not a pointer)
     pub fn is_value(&self) -> bool {
         matches!(self, RegType::Value { .. })
     }
@@ -296,47 +307,77 @@ impl PointerType {
 pub enum MemoryError {
     /// Access would be out of bounds
     OutOfBounds {
+        /// Memory region being accessed
         region: MemoryRegion,
+        /// Offset of the access
         offset: i64,
+        /// Size of the access in bytes
         size: i64,
+        /// Valid bounds (start, length)
         bounds: (i64, i64),
     },
 
     /// Access is misaligned
     MisalignedAccess {
+        /// Memory region being accessed
         region: MemoryRegion,
+        /// Offset of the access
         offset: i64,
+        /// Required alignment in bytes
         required: i64,
+        /// Actual alignment remainder
         actual: i64,
     },
 
     /// Attempting to write to read-only memory
-    ReadOnlyWrite { region: MemoryRegion },
+    ReadOnlyWrite {
+        /// Memory region being written to
+        region: MemoryRegion
+    },
 
     /// Type mismatch: expected pointer but got value (or vice versa)
-    TypeMismatch { expected: String, got: String },
+    TypeMismatch {
+        /// Expected type
+        expected: String,
+        /// Actual type found
+        got: String
+    },
 
     /// Invalid account index
-    InvalidAccountIndex { index: u8, max_accounts: u8 },
+    InvalidAccountIndex {
+        /// Account index that was accessed
+        index: u8,
+        /// Maximum number of accounts available
+        max_accounts: u8
+    },
 
     /// Field not found in struct
     FieldNotFound {
+        /// Name of the struct
         struct_name: String,
+        /// Name of the field that was not found
         field_name: String,
     },
 
     /// Struct not defined
-    StructNotDefined { name: String },
+    StructNotDefined {
+        /// Name of the undefined struct
+        name: String
+    },
 
     /// Pointer arithmetic on incompatible pointers
     IncompatiblePointers {
+        /// Operation being performed
         op: String,
+        /// Left-hand side memory region
         lhs: MemoryRegion,
+        /// Right-hand side memory region
         rhs: MemoryRegion,
     },
 }
 
 impl std::fmt::Display for MemoryError {
+    /// Formats the memory error as a human-readable string
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MemoryError::OutOfBounds {
@@ -416,10 +457,12 @@ pub struct TypedReg {
 }
 
 impl TypedReg {
+    /// Creates a new typed register with the given register ID and type
     pub fn new(reg: super::instruction::IrReg, ty: RegType) -> Self {
         TypedReg { reg, ty }
     }
 
+    /// Creates a typed register holding a value with specified size and signedness
     pub fn value(reg: super::instruction::IrReg, size: i64, signed: bool) -> Self {
         TypedReg {
             reg,
@@ -427,6 +470,7 @@ impl TypedReg {
         }
     }
 
+    /// Creates a typed register holding a pointer with detailed provenance information
     pub fn pointer(reg: super::instruction::IrReg, ptr_type: PointerType) -> Self {
         TypedReg {
             reg,
@@ -434,6 +478,7 @@ impl TypedReg {
         }
     }
 
+    /// Creates a typed register holding a boolean value
     pub fn bool(reg: super::instruction::IrReg) -> Self {
         TypedReg {
             reg,
@@ -441,6 +486,7 @@ impl TypedReg {
         }
     }
 
+    /// Creates a typed register with unknown type information
     pub fn unknown(reg: super::instruction::IrReg) -> Self {
         TypedReg {
             reg,
@@ -449,7 +495,7 @@ impl TypedReg {
     }
 }
 
-/// Register type environment tracking types during code generation
+/// Register type environment for tracking types during code generation and validating memory operations
 pub struct TypeEnv {
     /// Map from register ID to type information
     reg_types: HashMap<u32, RegType>,
@@ -471,6 +517,7 @@ pub struct TypeEnv {
 }
 
 impl TypeEnv {
+    /// Creates a new empty type environment with strict checking enabled
     pub fn new() -> Self {
         TypeEnv {
             reg_types: HashMap::new(),
@@ -735,9 +782,11 @@ pub mod account_layout {
     pub const PADDING: i64 = 4;
     /// Account public key (32 bytes)
     pub const PUBKEY: i64 = 8;
+    /// Length of public key field
     pub const PUBKEY_LEN: i64 = 32;
     /// Account owner (32 bytes)
     pub const OWNER: i64 = 40;
+    /// Length of owner field
     pub const OWNER_LEN: i64 = 32;
     /// Account lamports (8 bytes)
     pub const LAMPORTS: i64 = 72;
@@ -760,14 +809,17 @@ pub mod heap_layout {
     pub const HEAP_BASE: i64 = 0x300000000;
     /// Account offset table (8 bytes per account, max 64 accounts = 512 bytes)
     pub const ACCOUNT_TABLE_OFFSET: i64 = 0;
+    /// Size of account offset table in bytes
     pub const ACCOUNT_TABLE_SIZE: i64 = 512; // 64 accounts * 8 bytes
-    /// CPI data region
+    /// CPI data region offset from heap base
     pub const CPI_OFFSET: i64 = 0x100; // 256 bytes after base
+    /// Size of CPI data region
     pub const CPI_SIZE: i64 = 0xF00; // ~4KB for CPI
-    /// Event buffer region
+    /// Event buffer region offset from heap base
     pub const EVENT_OFFSET: i64 = 0x1000; // 4KB after base
+    /// Size of event buffer region
     pub const EVENT_SIZE: i64 = 0x1000; // 4KB for events
-    /// Scratch space
+    /// Scratch space offset from heap base
     pub const SCRATCH_OFFSET: i64 = 0x2000;
 }
 

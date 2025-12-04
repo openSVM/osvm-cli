@@ -63,16 +63,27 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     // === Primitives ===
+    /// Unsigned 8-bit integer
     U8,
+    /// Unsigned 16-bit integer
     U16,
+    /// Unsigned 32-bit integer
     U32,
+    /// Unsigned 64-bit integer
     U64,
+    /// Signed 8-bit integer
     I8,
+    /// Signed 16-bit integer
     I16,
+    /// Signed 32-bit integer
     I32,
+    /// Signed 64-bit integer
     I64,
+    /// 32-bit floating point
     F32,
+    /// 64-bit floating point
     F64,
+    /// Boolean type
     Bool,
     /// Unit type (void)
     Unit,
@@ -80,7 +91,9 @@ pub enum Type {
     // === Compound Types ===
     /// Fixed-size array: [T; N]
     Array {
+        /// Type of elements in the array
         element: Box<Type>,
+        /// Number of elements in the array
         size: usize,
     },
     /// Tuple: (T1, T2, ...)
@@ -103,7 +116,9 @@ pub enum Type {
     // === Function Type ===
     /// Function: (T1, T2, ...) -> R
     Fn {
+        /// Parameter types of the function
         params: Vec<Type>,
+        /// Return type of the function
         ret: Box<Type>,
     },
 
@@ -273,13 +288,18 @@ impl fmt::Display for Type {
 /// Type error with location information
 #[derive(Debug, Clone)]
 pub struct TypeError {
+    /// Error message describing the type mismatch or problem
     pub message: String,
+    /// Expected type in a type mismatch error
     pub expected: Option<Type>,
+    /// Actual type found in a type mismatch error
     pub found: Option<Type>,
+    /// Source location where the error occurred
     pub location: Option<String>,
 }
 
 impl TypeError {
+    /// Creates a new type error with a custom message
     pub fn new(message: impl Into<String>) -> Self {
         TypeError {
             message: message.into(),
@@ -289,6 +309,7 @@ impl TypeError {
         }
     }
 
+    /// Creates a type mismatch error with expected and found types
     pub fn mismatch(expected: Type, found: Type) -> Self {
         TypeError {
             message: format!("type mismatch: expected {}, found {}", expected, found),
@@ -298,6 +319,7 @@ impl TypeError {
         }
     }
 
+    /// Adds source location information to this error
     pub fn with_location(mut self, loc: impl Into<String>) -> Self {
         self.location = Some(loc.into());
         self
@@ -319,16 +341,22 @@ impl std::error::Error for TypeError {}
 /// Typed struct field definition (mirrors IR but for source level)
 #[derive(Debug, Clone)]
 pub struct TypedField {
+    /// Name of the field
     pub name: String,
+    /// Type of the field
     pub field_type: Type,
+    /// Byte offset of the field within the struct
     pub offset: usize,
 }
 
 /// Typed struct definition
 #[derive(Debug, Clone)]
 pub struct TypedStructDef {
+    /// Name of the struct
     pub name: String,
+    /// List of fields in the struct
     pub fields: Vec<TypedField>,
+    /// Total size of the struct in bytes
     pub total_size: usize,
 }
 
@@ -349,6 +377,7 @@ pub struct TypeContext {
 }
 
 impl TypeContext {
+    /// Creates a new empty type context
     pub fn new() -> Self {
         TypeContext {
             variables: HashMap::new(),
@@ -438,7 +467,8 @@ impl TypeContext {
         }
     }
 
-    /// Unify two types, recording substitutions for type variables
+    /// Unify two types, recording substitutions for type variables.
+    /// Returns the unified type if successful, or a type error if the types are incompatible.
     pub fn unify(&mut self, t1: &Type, t2: &Type) -> Result<Type, TypeError> {
         // Resolve any existing substitutions first
         let t1 = self.resolve(t1);
@@ -587,13 +617,15 @@ impl TypeContext {
         }
     }
 
-    /// Enter a new scope (e.g., for let bindings)
+    /// Enter a new scope (e.g., for let bindings).
+    /// Currently uses flat namespace; could be extended for lexical scoping.
     pub fn push_scope(&mut self) {
         // For now, we use a flat namespace
         // Could implement proper scoping with Vec<HashMap> if needed
     }
 
-    /// Exit a scope
+    /// Exit a scope.
+    /// Currently uses flat namespace; could be extended for lexical scoping.
     pub fn pop_scope(&mut self) {
         // For now, we use a flat namespace
     }

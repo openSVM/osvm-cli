@@ -155,33 +155,61 @@ pub struct CounterExample {
     pub access: MemoryAccess,
 }
 
-/// Details of a memory access
+/// Memory access description for bounds checking
 #[derive(Debug, Clone)]
 pub struct MemoryAccess {
+    /// Register containing the base address
     pub base_register: u32,
+    /// Offset from base address in bytes
     pub offset: i64,
+    /// Size of the memory access in bytes
     pub size: i64,
+    /// True if this is a write operation, false for reads
     pub is_write: bool,
 }
 
 /// SMT constraint representing a memory safety check
 #[derive(Debug, Clone)]
 pub enum SmtConstraint {
-    /// Register equals constant
-    Const { reg: u32, value: i64 },
+    /// Register equals constant value
+    Const {
+        /// Target register number
+        reg: u32,
+        /// Constant value to assign
+        value: i64
+    },
     /// Register equals sum of two registers
-    Add { dst: u32, lhs: u32, rhs: u32 },
-    /// Memory access within bounds
+    Add {
+        /// Destination register for result
+        dst: u32,
+        /// Left-hand side register
+        lhs: u32,
+        /// Right-hand side register
+        rhs: u32
+    },
+    /// Memory access within bounds check
     InBounds {
+        /// Base address register
         base: u32,
+        /// Offset from base in bytes
         offset: i64,
+        /// Access size in bytes
         size: i64,
+        /// Register containing maximum length
         max_len: u32,
     },
-    /// Memory region is writable
-    Writable { base: u32 },
-    /// Branch condition
-    Branch { cond: u32, target: String },
+    /// Memory region is writable check
+    Writable {
+        /// Base address register of region
+        base: u32
+    },
+    /// Branch condition constraint
+    Branch {
+        /// Register containing condition value
+        cond: u32,
+        /// Branch target label
+        target: String
+    },
 }
 
 /// Placeholder for Z3 integration
@@ -194,6 +222,7 @@ pub struct Verifier {
 }
 
 impl Verifier {
+    /// Creates a new formal verifier with empty constraint set
     pub fn new() -> Self {
         Verifier {
             constraints: Vec::new(),

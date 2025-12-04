@@ -96,6 +96,7 @@ fn substitute(ty: &Type, subst: &HashMap<u32, Type>) -> Type {
 }
 
 impl BidirectionalChecker {
+    /// Creates a new bidirectional type checker with gradual typing enabled.
     pub fn new() -> Self {
         BidirectionalChecker {
             ctx: TypeContext::new(),

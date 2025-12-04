@@ -1,4 +1,5 @@
-#![allow(dead_code, unused_imports, unused_variables, missing_docs)]
+#![allow(dead_code, unused_imports, unused_variables)]
+#![warn(missing_docs)]
 //! # OVSM - Open Versatile S-expression Machine
 //!
 //! [![Crates.io](https://img.shields.io/crates/v/ovsm.svg)](https://crates.io/crates/ovsm)

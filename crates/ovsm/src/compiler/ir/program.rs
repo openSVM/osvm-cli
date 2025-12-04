@@ -7,13 +7,18 @@ use std::collections::HashMap;
 /// Basic block in the control flow graph
 #[derive(Debug, Clone)]
 pub struct BasicBlock {
+    /// Label identifying this basic block
     pub label: String,
+    /// IR instructions in this block
     pub instructions: Vec<IrInstruction>,
+    /// Labels of successor blocks
     pub successors: Vec<String>,
+    /// Labels of predecessor blocks
     pub predecessors: Vec<String>,
 }
 
 impl BasicBlock {
+    /// Create a new basic block with the given label
     pub fn new(label: &str) -> Self {
         Self {
             label: label.to_string(),
@@ -40,6 +45,7 @@ pub struct IrProgram {
 }
 
 impl IrProgram {
+    /// Create a new empty IR program
     pub fn new() -> Self {
         Self {
             instructions: Vec::new(),

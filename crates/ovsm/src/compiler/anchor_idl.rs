@@ -32,15 +32,22 @@ use std::collections::HashMap;
 /// Anchor IDL structure (Legacy format)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnchorIdl {
+    /// IDL format version (e.g., "0.1.0")
     pub version: String,
+    /// Program name
     pub name: String,
+    /// List of program instructions/entry points
     pub instructions: Vec<IdlInstruction>,
+    /// Account type definitions
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub accounts: Vec<IdlAccountDef>,
+    /// Custom type definitions
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub types: Vec<IdlTypeDef>,
+    /// Error code definitions
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<IdlError>,
+    /// Program metadata (e.g., deployed address)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IdlMetadata>,
 }
@@ -48,9 +55,13 @@ pub struct AnchorIdl {
 /// Instruction definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlInstruction {
+    /// Instruction name (camelCase)
     pub name: String,
+    /// Required accounts for this instruction
     pub accounts: Vec<IdlAccountMeta>,
+    /// Instruction arguments/parameters
     pub args: Vec<IdlArg>,
+    /// Instruction discriminator bytes (first byte(s) of instruction data)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discriminator: Option<Vec<u8>>,
 }
@@ -59,9 +70,13 @@ pub struct IdlInstruction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlAccountMeta {
+    /// Account name
     pub name: String,
+    /// Whether the account is mutable (writable)
     pub is_mut: bool,
+    /// Whether the account must sign the transaction
     pub is_signer: bool,
+    /// Optional documentation for this account
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub docs: Option<Vec<String>>,
 }
@@ -69,7 +84,9 @@ pub struct IdlAccountMeta {
 /// Argument definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlArg {
+    /// Argument name
     pub name: String,
+    /// Argument type
     #[serde(rename = "type")]
     pub ty: IdlType,
 }
@@ -77,7 +94,9 @@ pub struct IdlArg {
 /// Account definition (data layout)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlAccountDef {
+    /// Account type name
     pub name: String,
+    /// Account type structure (struct or enum)
     #[serde(rename = "type")]
     pub ty: IdlTypeDefTy,
 }
@@ -85,7 +104,9 @@ pub struct IdlAccountDef {
 /// Type definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlTypeDef {
+    /// Custom type name
     pub name: String,
+    /// Type structure (struct or enum)
     #[serde(rename = "type")]
     pub ty: IdlTypeDefTy,
 }
@@ -94,16 +115,26 @@ pub struct IdlTypeDef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum IdlTypeDefTy {
+    /// Struct type with named fields
     #[serde(rename = "struct")]
-    Struct { fields: Vec<IdlField> },
+    Struct {
+        /// Struct field definitions
+        fields: Vec<IdlField>
+    },
+    /// Enum type with variants
     #[serde(rename = "enum")]
-    Enum { variants: Vec<IdlEnumVariant> },
+    Enum {
+        /// Enum variant definitions
+        variants: Vec<IdlEnumVariant>
+    },
 }
 
 /// Field definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlField {
+    /// Field name
     pub name: String,
+    /// Field type
     #[serde(rename = "type")]
     pub ty: IdlType,
 }
@@ -111,7 +142,9 @@ pub struct IdlField {
 /// Enum variant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlEnumVariant {
+    /// Variant name
     pub name: String,
+    /// Optional fields for tuple or struct variants
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fields: Option<Vec<IdlField>>,
 }
@@ -120,18 +153,38 @@ pub struct IdlEnumVariant {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum IdlType {
-    Primitive(String), // "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "bool", "string", "publicKey"
-    Array { array: [Box<IdlType>; 2] }, // [type, length]
-    Vec { vec: Box<IdlType> },
-    Option { option: Box<IdlType> },
-    Defined { defined: String }, // Custom type reference
+    /// Primitive type: "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "bool", "string", "publicKey"
+    Primitive(String),
+    /// Fixed-size array: [type, length]
+    Array {
+        /// Array element type and size
+        array: [Box<IdlType>; 2]
+    },
+    /// Dynamic vector type
+    Vec {
+        /// Vector element type
+        vec: Box<IdlType>
+    },
+    /// Optional/nullable type
+    Option {
+        /// Inner type
+        option: Box<IdlType>
+    },
+    /// Custom type reference (user-defined)
+    Defined {
+        /// Type name
+        defined: String
+    },
 }
 
 /// Error definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlError {
+    /// Error code (typically 6000+ for custom errors)
     pub code: u32,
+    /// Error name (PascalCase)
     pub name: String,
+    /// Optional error message
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msg: Option<String>,
 }
@@ -139,6 +192,7 @@ pub struct IdlError {
 /// Metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdlMetadata {
+    /// Deployed program address (base58 encoded public key)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
 }
@@ -168,19 +222,22 @@ impl<'a> IdlGenerator<'a> {
         }
     }
 
-    /// Set program name (defaults to extracted from comments)
+    /// Set program name (defaults to extracted from comments).
+    /// Returns self for method chaining.
     pub fn with_name(mut self, name: &str) -> Self {
         self.name = name.to_string();
         self
     }
 
-    /// Set version
+    /// Set IDL version string (default: "0.1.0").
+    /// Returns self for method chaining.
     pub fn with_version(mut self, version: &str) -> Self {
         self.version = version.to_string();
         self
     }
 
-    /// Generate the IDL from parsed source
+    /// Generate the IDL structure from parsed OVSM source.
+    /// Extracts instructions, accounts, errors, and types from the source code.
     pub fn generate(&mut self) -> Result<AnchorIdl, String> {
         self.parse_source()?;
 
@@ -199,7 +256,8 @@ impl<'a> IdlGenerator<'a> {
         })
     }
 
-    /// Generate IDL as JSON string
+    /// Generate IDL as pretty-printed JSON string.
+    /// Convenience method that calls generate() and serializes the result.
     pub fn generate_json(&mut self) -> Result<String, String> {
         let idl = self.generate()?;
         serde_json::to_string_pretty(&idl).map_err(|e| format!("JSON serialization failed: {}", e))
@@ -579,7 +637,9 @@ impl<'a> IdlGenerator<'a> {
     }
 }
 
-/// Generate IDL from OVSM source string
+/// Generate Anchor IDL JSON from OVSM source string.
+/// Convenience function that creates a generator, optionally sets the name, and returns JSON.
+/// Returns the IDL as a pretty-printed JSON string.
 pub fn generate_idl(source: &str, name: Option<&str>) -> Result<String, String> {
     let mut generator = IdlGenerator::new(source);
     if let Some(name) = name {

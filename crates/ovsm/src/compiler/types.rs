@@ -26,7 +26,9 @@ pub enum OvsmType {
     Object(HashMap<String, OvsmType>),
     /// Function type: (params) -> return
     Function {
+        /// Parameter types for the function
         params: Vec<OvsmType>,
+        /// Return type of the function
         returns: Box<OvsmType>,
     },
     /// Unknown type (needs inference)
@@ -80,6 +82,7 @@ pub struct TypeEnv {
 }
 
 impl TypeEnv {
+    /// Creates a new type environment with a single global scope
     pub fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()],
@@ -122,21 +125,28 @@ impl Default for TypeEnv {
     }
 }
 
-/// Type-annotated AST node
+/// A complete program with type-annotated statements
 #[derive(Debug, Clone)]
 pub struct TypedProgram {
+    /// All statements in the program with their inferred types
     pub statements: Vec<TypedStatement>,
 }
 
+/// A statement with inferred type information
 #[derive(Debug, Clone)]
 pub struct TypedStatement {
+    /// The original AST statement
     pub statement: Statement,
+    /// The inferred type of this statement
     pub ty: OvsmType,
 }
 
+/// An expression with inferred type information
 #[derive(Debug, Clone)]
 pub struct TypedExpression {
+    /// The original AST expression
     pub expression: Expression,
+    /// The inferred type of this expression
     pub ty: OvsmType,
 }
 
@@ -147,6 +157,7 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
+    /// Creates a new type checker with Solana program builtins pre-defined
     pub fn new() -> Self {
         let mut env = TypeEnv::new();
         // Pre-define Solana program builtins

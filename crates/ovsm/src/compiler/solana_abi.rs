@@ -8,9 +8,13 @@ use std::collections::VecDeque;
 
 /// Solana AccountInfo structure layout (bytes)
 pub const ACCOUNT_INFO_SIZE: usize = 258; // Typical size with padding
+/// Size of a Solana public key in bytes
 pub const PUBKEY_SIZE: usize = 32;
+/// Size of lamports field in bytes
 pub const LAMPORTS_SIZE: usize = 8;
+/// Size of data length field in bytes
 pub const DATA_LEN_SIZE: usize = 8;
+/// Size of owner pubkey in bytes
 pub const OWNER_SIZE: usize = 32;
 
 /// Generate entrypoint wrapper with proper ABI handling
@@ -27,6 +31,7 @@ impl Default for EntrypointGenerator {
 }
 
 impl EntrypointGenerator {
+    /// Create a new entrypoint generator for Solana ABI deserialization
     pub fn new() -> Self {
         Self {
             instructions: VecDeque::new(),

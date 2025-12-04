@@ -23,6 +23,7 @@ pub struct OvsmEmitter<'a> {
 }
 
 impl<'a> OvsmEmitter<'a> {
+    /// Creates a new OVSM code emitter with the given options and optional Anchor IDL.
     pub fn new(options: &'a DecompileOptions, idl: Option<&'a AnchorIdl>) -> Self {
         Self {
             options,

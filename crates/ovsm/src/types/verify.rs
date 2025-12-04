@@ -44,14 +44,17 @@ pub struct VerificationResult {
 }
 
 impl VerificationResult {
+    /// Creates a new empty verification result.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Returns true if any verification errors were recorded.
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
 
+    /// Adds a verification error with message and constraint description.
     pub fn add_error(&mut self, message: impl Into<String>, constraint: impl Into<String>) {
         self.errors.push(VerificationError {
             message: message.into(),
@@ -60,10 +63,12 @@ impl VerificationResult {
         });
     }
 
+    /// Adds a proof obligation that must be verified.
     pub fn add_obligation(&mut self, obligation: ProofObligation) {
         self.obligations.push(obligation);
     }
 
+    /// Merges another verification result into this one.
     pub fn merge(&mut self, other: VerificationResult) {
         self.errors.extend(other.errors);
         self.obligations.extend(other.obligations);
@@ -82,6 +87,7 @@ pub struct RefinementVerifier {
 }
 
 impl RefinementVerifier {
+    /// Creates a new refinement verifier with empty state.
     pub fn new() -> Self {
         Self {
             checker: RefinementChecker::new(),

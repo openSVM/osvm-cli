@@ -5,6 +5,7 @@
 pub struct IrReg(pub u32);
 
 impl IrReg {
+    /// Creates a new virtual register with the given ID
     pub fn new(id: u32) -> Self {
         Self(id)
     }
@@ -26,33 +27,51 @@ pub enum IrInstruction {
     ConstString(IrReg, usize),
 
     // Arithmetic (dst = src1 op src2)
+    /// Addition: dst = lhs + rhs
     Add(IrReg, IrReg, IrReg),
+    /// Subtraction: dst = lhs - rhs
     Sub(IrReg, IrReg, IrReg),
+    /// Multiplication: dst = lhs * rhs
     Mul(IrReg, IrReg, IrReg),
+    /// Division: dst = lhs / rhs
     Div(IrReg, IrReg, IrReg),
+    /// Modulo: dst = lhs % rhs
     Mod(IrReg, IrReg, IrReg),
 
     // Comparison (dst = src1 op src2, result is 0 or 1)
+    /// Equality: dst = (lhs == rhs)
     Eq(IrReg, IrReg, IrReg),
+    /// Not equal: dst = (lhs != rhs)
     Ne(IrReg, IrReg, IrReg),
+    /// Less than: dst = (lhs < rhs)
     Lt(IrReg, IrReg, IrReg),
+    /// Less than or equal: dst = (lhs <= rhs)
     Le(IrReg, IrReg, IrReg),
+    /// Greater than: dst = (lhs > rhs)
     Gt(IrReg, IrReg, IrReg),
+    /// Greater than or equal: dst = (lhs >= rhs)
     Ge(IrReg, IrReg, IrReg),
 
     // Logical
+    /// Logical AND: dst = lhs && rhs
     And(IrReg, IrReg, IrReg),
+    /// Logical OR: dst = lhs || rhs
     Or(IrReg, IrReg, IrReg),
+    /// Logical NOT: dst = !src
     Not(IrReg, IrReg),
 
     // Unary
+    /// Negation: dst = -src
     Neg(IrReg, IrReg),
 
     // Register operations
+    /// Move/copy register: dst = src
     Move(IrReg, IrReg),
 
     // Control flow
+    /// Define a jump target label
     Label(String),
+    /// Unconditional jump to label
     Jump(String),
     /// Jump if register is non-zero
     JumpIf(IrReg, String),
@@ -94,5 +113,6 @@ pub enum IrInstruction {
     Log(IrReg, usize),
 
     // No-op (placeholder, removed by optimizer)
+    /// No operation (placeholder instruction, removed during optimization)
     Nop,
 }

@@ -253,28 +253,36 @@ fn decode_sbpf(opcode: u8, dst: u8, src: u8, off: i16, imm: i32, rest: &[u8]) ->
 /// Track register allocation decisions
 #[derive(Debug, Default)]
 pub struct RegAllocTrace {
+    /// Virtual->physical register allocations with reason
     pub allocations: Vec<(IrReg, SbpfReg, &'static str)>,
+    /// Spilled registers with stack offsets
     pub spills: Vec<(IrReg, i16)>,
+    /// Reloaded registers with stack offset and destination
     pub reloads: Vec<(IrReg, i16, SbpfReg)>,
 }
 
 impl RegAllocTrace {
+    /// Create a new register allocation trace
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Record a virtual-to-physical register allocation
     pub fn record_alloc(&mut self, virt: IrReg, phys: SbpfReg, reason: &'static str) {
         self.allocations.push((virt, phys, reason));
     }
 
+    /// Record a register spill to stack
     pub fn record_spill(&mut self, virt: IrReg, offset: i16) {
         self.spills.push((virt, offset));
     }
 
+    /// Record a register reload from stack
     pub fn record_reload(&mut self, virt: IrReg, offset: i16, into: SbpfReg) {
         self.reloads.push((virt, offset, into));
     }
 
+    /// Print formatted register allocation trace
     pub fn dump(&self) {
         println!("═══════════════════════════════════════════════════════════");
         println!("              REGISTER ALLOCATION TRACE");

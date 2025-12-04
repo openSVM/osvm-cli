@@ -119,6 +119,7 @@ pub struct ElfWriter {
 }
 
 impl ElfWriter {
+    /// Create a new ELF writer with empty string tables
     pub fn new() -> Self {
         Self {
             strtab: vec![0],

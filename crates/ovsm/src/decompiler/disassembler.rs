@@ -82,6 +82,7 @@ pub struct Disassembler {
 }
 
 impl Disassembler {
+    /// Creates a new disassembler with default ELF header size.
     pub fn new() -> Self {
         Self { ehdr_size: 64 }
     }

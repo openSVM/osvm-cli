@@ -2,8 +2,7 @@
 //!
 //! Run with: cargo run --example tui_demo
 
-use osvm::utils::tui::graph::TransferData;
-use osvm::utils::tui::OsvmApp;
+use osvm::utils::tui::{OsvmApp, TransferData};
 
 fn main() -> anyhow::Result<()> {
     // Create TUI app with test wallet
@@ -33,6 +32,7 @@ fn main() -> anyhow::Result<()> {
     app.findings_count = 15;
 
     // Build transfer graph with mock data
+    // TransferData fields: from, to, amount, token, is_defi, timestamp, signature
     let transfers = vec![
         TransferData {
             from: test_wallet.clone(),
@@ -41,16 +41,16 @@ fn main() -> anyhow::Result<()> {
             token: "SLONANA".to_string(),
             is_defi: false,
             timestamp: Some("2025-11-15T03:44:07.000Z".to_string()),
-            signature: Some("5abc123...".to_string()),
+            signature: Some("5abc123def...".to_string()),
         },
         TransferData {
             from: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1".to_string(),
             to: test_wallet.clone(),
             amount: 20580360.009,
             token: "SVMAI".to_string(),
-            is_defi: true,
+            is_defi: true, // DeFi transfers are filtered out in graph building
             timestamp: Some("2025-11-02T18:37:12.000Z".to_string()),
-            signature: Some("6def456...".to_string()),
+            signature: Some("6def456abc...".to_string()),
         },
         TransferData {
             from: "42h8enKo2t2PJ9sjp3juGX1yP5C5TaCdAEYu2q2Wf8rg".to_string(),
@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
             token: "SLON".to_string(),
             is_defi: false,
             timestamp: Some("2025-11-02T02:31:05.000Z".to_string()),
-            signature: Some("7ghi789...".to_string()),
+            signature: Some("7ghi789xyz...".to_string()),
         },
     ];
 

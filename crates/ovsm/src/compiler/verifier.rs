@@ -39,26 +39,78 @@ pub struct ProgramStats {
 /// Verification error types
 #[derive(Debug, Clone)]
 pub enum VerifyError {
-    /// Program exceeds instruction limit
-    TooManyInstructions { count: usize, limit: usize },
-    /// Program exceeds bytecode size limit
-    BytecodeTooLarge { size: usize, limit: usize },
-    /// Call depth exceeds limit
-    CallDepthExceeded { depth: usize, limit: usize },
-    /// Invalid opcode encountered
-    InvalidOpcode { offset: usize, opcode: u8 },
-    /// Jump target out of bounds
-    JumpOutOfBounds { offset: usize, target: i64 },
-    /// Invalid register number
-    InvalidRegister { offset: usize, reg: u8 },
-    /// Division by zero possible
-    PossibleDivisionByZero { offset: usize },
-    /// Memory access out of bounds
-    MemoryAccessOutOfBounds { offset: usize, address: u64 },
-    /// Missing exit instruction
+    /// Program exceeds instruction limit.
+    TooManyInstructions {
+        /// Actual instruction count in the program
+        count: usize,
+        /// Maximum allowed instructions
+        limit: usize,
+    },
+
+    /// Program exceeds bytecode size limit.
+    BytecodeTooLarge {
+        /// Actual bytecode size in bytes
+        size: usize,
+        /// Maximum allowed bytecode size in bytes
+        limit: usize,
+    },
+
+    /// Call depth exceeds limit.
+    CallDepthExceeded {
+        /// Detected call depth
+        depth: usize,
+        /// Maximum allowed call depth
+        limit: usize,
+    },
+
+    /// Invalid opcode encountered.
+    InvalidOpcode {
+        /// Byte offset of the invalid instruction
+        offset: usize,
+        /// The invalid opcode value
+        opcode: u8,
+    },
+
+    /// Jump target out of bounds.
+    JumpOutOfBounds {
+        /// Byte offset of the jump instruction
+        offset: usize,
+        /// Target slot position (negative or beyond program end)
+        target: i64,
+    },
+
+    /// Invalid register number.
+    InvalidRegister {
+        /// Byte offset of the instruction
+        offset: usize,
+        /// Invalid register number (must be 0-10)
+        reg: u8,
+    },
+
+    /// Division by zero possible.
+    PossibleDivisionByZero {
+        /// Byte offset of the division/modulo instruction
+        offset: usize,
+    },
+
+    /// Memory access out of bounds.
+    MemoryAccessOutOfBounds {
+        /// Byte offset of the memory access instruction
+        offset: usize,
+        /// Out-of-bounds memory address
+        address: u64,
+    },
+
+    /// Missing exit instruction.
+    ///
+    /// All sBPF programs must end with an exit instruction (opcode 0x95).
     NoExitInstruction,
-    /// Unreachable code detected
-    UnreachableCode { offset: usize },
+
+    /// Unreachable code detected.
+    UnreachableCode {
+        /// Byte offset of the unreachable code
+        offset: usize,
+    },
 }
 
 impl std::fmt::Display for VerifyError {
@@ -117,6 +169,12 @@ pub struct Verifier {
 }
 
 impl Verifier {
+    /// Creates a new verifier with default Solana runtime limits.
+    ///
+    /// Defaults:
+    /// - `max_instructions`: Set from `memory::MAX_INSTRUCTIONS`
+    /// - `max_call_depth`: Set from `memory::MAX_CALL_DEPTH`
+    /// - `strict`: `false` (warnings don't fail verification)
     pub fn new() -> Self {
         Self {
             max_instructions: memory::MAX_INSTRUCTIONS,

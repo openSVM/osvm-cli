@@ -15,6 +15,7 @@ pub struct Optimizer {
 }
 
 impl Optimizer {
+    /// Create a new optimizer with the specified optimization level (0-3)
     pub fn new(level: u8) -> Self {
         Self { level }
     }

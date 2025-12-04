@@ -284,6 +284,7 @@ impl Default for RegAllocAnalyzer {
 }
 
 impl RegAllocAnalyzer {
+    /// Create a new register allocator analyzer with Solana ABI constraints
     pub fn new() -> Self {
         let mut reserved = HashSet::new();
         reserved.insert(0); // R0 - return value

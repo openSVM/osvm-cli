@@ -19,9 +19,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// Live range for a virtual register
 #[derive(Debug, Clone)]
 pub struct LiveRange {
-    pub def_point: usize,     // Instruction where defined
-    pub last_use: usize,      // Last instruction where used
-    pub is_large_const: bool, // True if 64-bit constant (requires lddw)
+    /// Instruction index where this register is defined
+    pub def_point: usize,
+    /// Last instruction index where this register is used
+    pub last_use: usize,
+    /// True if this holds a 64-bit constant (requires lddw instruction)
+    pub is_large_const: bool,
 }
 
 /// Interference graph edge
@@ -29,6 +32,7 @@ pub struct LiveRange {
 pub struct Edge(pub IrReg, pub IrReg);
 
 impl Edge {
+    /// Create a normalized interference edge between two registers
     pub fn new(a: IrReg, b: IrReg) -> Self {
         // Normalize edge direction for deduplication
         if a.0 < b.0 {
@@ -71,6 +75,7 @@ pub struct GraphColoringAllocator {
 }
 
 impl GraphColoringAllocator {
+    /// Create a new graph coloring allocator with pre-colored ABI registers
     pub fn new() -> Self {
         // Pre-color the ABI registers
         let mut precolored = HashMap::new();

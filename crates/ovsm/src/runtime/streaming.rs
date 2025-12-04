@@ -1,3 +1,5 @@
+//! WebSocket streaming support for real-time blockchain event monitoring.
+
 /// Streaming support for OVSM LISP
 ///
 /// This module provides built-in functions for real-time blockchain event streaming via WebSocket:
@@ -60,20 +62,30 @@ lazy_static::lazy_static! {
 /// Stream connection handle
 #[derive(Clone, Debug)]
 pub struct StreamHandle {
+    /// Unique identifier for this stream connection
     pub id: String,
+    /// WebSocket URL endpoint
     pub url: String,
+    /// Client-side event filtering criteria
     pub filters: StreamFilters,
+    /// Thread-safe buffer of received events
     pub event_buffer: Arc<Mutex<Vec<JsonValue>>>,
+    /// Thread-safe connection status flag
     pub is_connected: Arc<Mutex<bool>>,
 }
 
 /// Stream filtering options
 #[derive(Clone, Debug, Default)]
 pub struct StreamFilters {
+    /// Filter by program aliases or IDs (e.g., ["pumpfun", "raydium"])
     pub programs: Vec<String>,
+    /// Filter by token symbols or mint addresses (e.g., ["USDC", "SOL"])
     pub tokens: Vec<String>,
+    /// Filter by specific account addresses
     pub accounts: Vec<String>,
+    /// Filter by event type strings (e.g., ["token_transfer", "swap"])
     pub event_types: Vec<String>,
+    /// If true, only include successful transactions
     pub success_only: bool,
 }
 

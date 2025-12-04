@@ -76,6 +76,7 @@ pub struct IrGenerator {
 }
 
 impl IrGenerator {
+    /// Create a new IR generator with Solana ABI pre-allocated registers
     pub fn new() -> Self {
         let mut type_env = TypeEnv::new();
 
