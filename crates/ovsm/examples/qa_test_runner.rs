@@ -156,5 +156,6 @@ fn format_value(value: &Value) -> String {
             format!("Multiple([{}])", items.join(", "))
         }
         Value::Macro { params, .. } => format!("Macro({} params)", params.len()),
+        Value::AsyncHandle { .. } => "AsyncHandle".to_string(),
     }
 }

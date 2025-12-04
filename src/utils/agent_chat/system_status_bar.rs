@@ -70,28 +70,33 @@ impl TextCarousel {
 
     /// Update carousel position and return current visible text
     pub fn update(&mut self, max_width: usize) -> String {
-        if self.text.len() <= max_width {
+        // Use character count instead of byte length for Unicode safety
+        let char_count = self.text.chars().count();
+
+        if char_count <= max_width {
             // Text fits, no scrolling needed
             return self.text.clone();
         }
 
         // Check if it's time to scroll
         if self.last_update.elapsed() >= self.scroll_speed {
-            self.position = (self.position + 1) % (self.text.len() + 10); // Add padding
+            self.position = (self.position + 1) % (char_count + 10); // Add padding
             self.last_update = Instant::now();
         }
 
-        // Create scrolling window
+        // Create scrolling window using character-based indexing for Unicode safety
         let extended_text = format!("{}          {}", self.text, self.text); // Add padding and repeat
-        let start_pos = self.position % self.text.len();
+        let extended_chars: Vec<char> = extended_text.chars().collect();
+        let start_pos = self.position % char_count;
 
-        if start_pos + max_width <= extended_text.len() {
-            extended_text[start_pos..start_pos + max_width].to_string()
+        if start_pos + max_width <= extended_chars.len() {
+            extended_chars[start_pos..start_pos + max_width].iter().collect()
         } else {
             // Handle wrap-around
-            let first_part = &extended_text[start_pos..];
-            let remaining = max_width - first_part.len();
-            format!("{}{}", first_part, &extended_text[..remaining])
+            let first_part: String = extended_chars[start_pos..].iter().collect();
+            let remaining = max_width.saturating_sub(extended_chars.len() - start_pos);
+            let second_part: String = extended_chars[..remaining.min(extended_chars.len())].iter().collect();
+            format!("{}{}", first_part, second_part)
         }
     }
 }
@@ -469,8 +474,10 @@ pub struct SystemStatusBarManager {
 impl SystemStatusBarManager {
     pub fn new() -> Self {
         Self {
-            carousel: TextCarousel::new("OSVM System Loading...".to_string()),
-            last_status_update: Instant::now(),
+            // BUG-FIX: Use "Ready" instead of "Loading..." since we're already initialized
+            carousel: TextCarousel::new("OSVM Chat Ready • Type /help for commands".to_string()),
+            // Force immediate update by setting last_update to past
+            last_status_update: Instant::now() - Duration::from_secs(10),
             status_update_interval: Duration::from_secs(5), // Update every 5 seconds
         }
     }

@@ -11,6 +11,7 @@ mod fuzzy_matcher;
 mod input_handler;
 mod programmatic_chat;
 mod responsive_layout;
+mod streaming_output;
 mod suggestions;
 pub mod system_status_bar;
 mod task_state;

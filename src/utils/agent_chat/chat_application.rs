@@ -3,6 +3,9 @@
 //! This module provides a Claude Code-style chat interface that runs embedded
 //! in the terminal session with real-time auto-complete and suggestions.
 
+use super::streaming_output::{
+    stream_claude_style, show_context_bar, ContextTracker,
+};
 use super::system_status_bar::SystemStatusBarManager;
 use super::ui_components::{show_enhanced_status_bar, show_welcome_box};
 use super::*;
@@ -124,10 +127,51 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
     };
 
     if !raw_mode_available {
-        eprintln!("⚠️  Raw mode not available");
-        eprintln!("   Falling back to line-buffered input mode");
-        eprintln!("   (This can happen in non-interactive environments or Ghostty/some terminals)");
-        eprintln!();
+        // BUG-FIX: Clear, friendly message - line-buffered mode is perfectly functional
+        println!();
+        println!(
+            "{}┌─ Input Mode ──────────────────────────────────────────┐{}",
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!(
+            "{}│{} Line-buffered input active (normal for piped/CI mode)  {}│{}",
+            Colors::CYAN,
+            Colors::RESET,
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!(
+            "{}│{} • Type your message, then press {}Enter{} to submit       {}│{}",
+            Colors::CYAN,
+            Colors::RESET,
+            Colors::GREEN,
+            Colors::RESET,
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!(
+            "{}│{} • Press {}Ctrl+C{} to exit at any time                   {}│{}",
+            Colors::CYAN,
+            Colors::RESET,
+            Colors::YELLOW,
+            Colors::RESET,
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!(
+            "{}│{} • Auto-complete disabled (requires raw mode)          {}│{}",
+            Colors::CYAN,
+            Colors::DIM,
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!(
+            "{}└────────────────────────────────────────────────────────┘{}",
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!();
     } else {
         // Disable it for now, will re-enable in input function
         let _ = super::input_handler::disable_raw_mode();
@@ -172,6 +216,9 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
 
     // Track chat history for AI-generated suggestions
     let mut chat_history: Vec<String> = Vec::new();
+
+    // Initialize context tracker for Claude Code-style usage indicator
+    let mut context_tracker = ContextTracker::new();
 
     // Initialize real-time suggestion system
     let (suggestion_tx, mut suggestion_rx) = mpsc::unbounded_channel::<String>();
@@ -243,6 +290,12 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
                 print!("\x1B[2J\x1B[1;1H");
                 show_welcome_box();
                 chat_history.clear();
+                context_tracker.reset(); // Reset context tracking
+                println!(
+                    "{}• Context cleared (0% usage){}",
+                    Colors::GREEN,
+                    Colors::RESET
+                );
                 continue;
             }
             "help" | "/help" => {
@@ -314,11 +367,27 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
                 }
                 continue;
             }
+            // BUG-FIX: Handle unknown slash commands with error feedback
+            cmd if cmd.starts_with('/') => {
+                println!(
+                    "{}✗ Unknown command: {}{}",
+                    Colors::RED,
+                    cmd,
+                    Colors::RESET
+                );
+                println!(
+                    "{}  Type /help to see available commands{}",
+                    Colors::DIM,
+                    Colors::RESET
+                );
+                continue;
+            }
             _ => {}
         }
 
-        // Add to chat history
+        // Add to chat history and track context
         chat_history.push(format!("User: {}", input));
+        context_tracker.add_message(&input);
 
         // Process user message with AI planning - no positioning, just sequential output
         println!(
@@ -329,9 +398,26 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
             Colors::RESET
         );
 
-        if let Err(e) =
-            process_with_realtime_ai(input.to_string(), &ai_service, &mut chat_history).await
-        {
+        // Show context usage after user message
+        show_context_bar(&context_tracker);
+
+        // BUG-FIX: Show thinking indicator for better feedback
+        print!("{}⏳ Thinking...{}", Colors::DIM, Colors::RESET);
+        io::stdout().flush().ok();
+
+        let result = process_with_realtime_ai(
+            input.to_string(),
+            &ai_service,
+            &mut chat_history,
+            &mut context_tracker,
+        ).await;
+
+        // Clear thinking indicator
+        print!("\r{}", " ".repeat(20));
+        print!("\r");
+        io::stdout().flush().ok();
+
+        if let Err(e) = result {
             println!("{}✗ Error: {}{}", Colors::RED, e, Colors::RESET);
         }
 
@@ -1303,11 +1389,12 @@ fn render_markdown_to_terminal(markdown_content: &str) -> Result<()> {
     Ok(())
 }
 
-/// Process message with AI planning
+/// Process message with AI planning and streaming output
 async fn process_with_realtime_ai(
     message: String,
     ai_service: &Arc<AiService>,
     chat_history: &mut Vec<String>,
+    context_tracker: &mut ContextTracker,
 ) -> Result<()> {
     // Try OSVM command planner first
     use crate::utils::osvm_command_planner::OsvmCommandPlanner;
@@ -1478,12 +1565,22 @@ async fn process_with_realtime_ai(
             let fallback_query = format!("Help with this blockchain request: '{}'", message);
             match ai_service.query(&fallback_query).await {
                 Ok(response) => {
-                    // Render AI response as markdown
+                    // Track context for the response
+                    context_tracker.add_message(&response);
+
+                    // Stream the AI response Claude Code-style
+                    print!("{}• AI: {}", Colors::CYAN, Colors::RESET);
+                    stream_claude_style(&response).await;
+                    println!(); // End line after streaming
+
+                    // Render AI response as markdown (for code blocks etc)
                     if let Err(e) = render_markdown_to_terminal(&response) {
-                        // Fallback to plain text if markdown rendering fails
-                        println!("{}", response);
                         debug!("Markdown rendering failed: {}", e);
                     }
+
+                    // Show context bar after response
+                    show_context_bar(context_tracker);
+
                     return Ok(());
                 }
                 Err(_) => {
@@ -1541,9 +1638,14 @@ async fn process_with_realtime_ai(
         }
     }
 
-    // Add to chat history
-    chat_history.push(message);
-    chat_history.push("AI: [processed request]".to_string());
+    // Add to chat history and track context for AI response
+    chat_history.push(message.clone());
+    let ai_response = format!("AI: [processed request for: {}]", &message[..message.len().min(50)]);
+    chat_history.push(ai_response.clone());
+    context_tracker.add_message(&ai_response);
+
+    // Show updated context bar after AI response
+    show_context_bar(context_tracker);
 
     Ok(())
 }

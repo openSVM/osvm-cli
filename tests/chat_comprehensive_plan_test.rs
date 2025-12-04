@@ -1,7 +1,11 @@
 // Comprehensive test of plan generation with various query types
+//
+// NOTE: These tests require MCP tools and AI service to be configured.
+// They are marked as ignored in CI environments.
 use std::collections::HashSet;
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 COMPREHENSIVE PLAN TEST: Multiple query types");
 
@@ -144,6 +148,7 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
 }
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_plan_generation_consistency() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 CONSISTENCY TEST: Same query multiple times");
 
@@ -214,6 +219,7 @@ async fn test_plan_generation_consistency() -> Result<(), Box<dyn std::error::Er
 }
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_complex_multi_tool_query() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 COMPLEX QUERY TEST: Multi-tool planning");
 

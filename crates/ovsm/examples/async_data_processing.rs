@@ -4,14 +4,23 @@
 //!
 //! Run with: cargo run --example async_data_processing
 
-use ovsm::runtime::LispEvaluator;
+use ovsm::{Evaluator, Parser, Scanner, Result, Value};
+
+/// Helper function to execute OVSM code
+fn execute_ovsm(evaluator: &mut Evaluator, code: &str) -> Result<Value> {
+    let mut scanner = Scanner::new(code);
+    let tokens = scanner.scan_tokens()?;
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse()?;
+    evaluator.execute(&program)
+}
 
 fn main() {
     println!("═══════════════════════════════════════");
     println!("  Async Data Processing Examples");
     println!("═══════════════════════════════════════\n");
 
-    let mut evaluator = LispEvaluator::new();
+    let mut evaluator = Evaluator::new();
 
     // Example 1: Batch processing
     println!("Example 1: Batch Data Processing");
@@ -52,7 +61,7 @@ fn main() {
   results)
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(_) => println!("✅ Batch processing completed\n"),
         Err(e) => println!("❌ Error: {}\n", e),
     }
@@ -108,7 +117,7 @@ fn main() {
   total)
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(_) => println!("✅ Map-Reduce completed\n"),
         Err(e) => println!("❌ Error: {}\n", e),
     }
@@ -172,7 +181,7 @@ fn main() {
   final-results)
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(_) => println!("✅ Pipeline completed\n"),
         Err(e) => println!("❌ Error: {}\n", e),
     }
@@ -217,7 +226,7 @@ fn main() {
   total-completed)
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(_) => println!("✅ Fan-out/Fan-in completed\n"),
         Err(e) => println!("❌ Error: {}\n", e),
     }

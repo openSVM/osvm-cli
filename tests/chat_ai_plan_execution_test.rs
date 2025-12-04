@@ -1,5 +1,8 @@
 //! Comprehensive test for AI-driven plan generation and execution
 //! Verifies: Query → AI Plan → Tool Execution → Final Answer
+//!
+//! NOTE: These tests require MCP tools to be configured and an AI service
+//! to be available. They are marked as ignored in CI environments.
 
 use osvm::utils::agent_chat_v2::state::AdvancedChatState;
 use osvm::utils::agent_chat_v2::types::ChatMessage;
@@ -189,6 +192,7 @@ impl TestResult {
 }
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_balance_query_generates_plan() {
     println!("\n════════════════════════════════════════════════════════════════════════════════");
     println!("🚀 TEST 1: Balance Query - Should Generate Plan with get_balance tool");
@@ -236,6 +240,7 @@ async fn test_balance_query_generates_plan() {
 }
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_transaction_query_generates_plan() {
     println!("\n════════════════════════════════════════════════════════════════════════════════");
     println!("🚀 TEST 2: Transaction Query - Should Generate Plan with transaction tools");
@@ -280,6 +285,7 @@ async fn test_transaction_query_generates_plan() {
 }
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_complex_query_generates_multi_tool_plan() {
     println!("\n════════════════════════════════════════════════════════════════════════════════");
     println!("🚀 TEST 3: Complex Query - Should Generate Multi-Tool Plan");
@@ -326,6 +332,7 @@ async fn test_complex_query_generates_multi_tool_plan() {
 }
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_simple_query_may_skip_tools() {
     println!("\n════════════════════════════════════════════════════════════════════════════════");
     println!("🚀 TEST 4: Simple Query - May Skip Tools (Direct AI Response)");
@@ -368,6 +375,7 @@ async fn test_simple_query_may_skip_tools() {
 }
 
 #[tokio::test]
+#[ignore = "requires MCP tools and AI service to be configured"]
 async fn test_plan_execution_matches_plan() {
     println!("\n════════════════════════════════════════════════════════════════════════════════");
     println!("🚀 TEST 5: Verify Executed Tools Match Planned Tools");

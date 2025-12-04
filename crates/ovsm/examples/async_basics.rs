@@ -2,7 +2,16 @@
 //!
 //! Run with: cargo run --example async_basics
 
-use ovsm::{Evaluator, Parser, Scanner};
+use ovsm::{Evaluator, Parser, Result, Scanner, Value};
+
+/// Helper function to execute OVSM code
+fn execute_ovsm(evaluator: &mut Evaluator, code: &str) -> Result<Value> {
+    let mut scanner = Scanner::new(code);
+    let tokens = scanner.scan_tokens()?;
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse()?;
+    evaluator.execute(&program)
+}
 
 fn main() {
     println!("═══════════════════════════════════════");
@@ -29,7 +38,7 @@ fn main() {
   result)
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(result) => println!("✅ Returned: {:?}\n", result),
         Err(e) => println!("❌ Error: {}\n", e),
     }
@@ -62,7 +71,7 @@ fn main() {
   results)
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(result) => println!("✅ Returned: {:?}\n", result),
         Err(e) => println!("❌ Error: {}\n", e),
     }
@@ -86,7 +95,7 @@ fn main() {
   "done")
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(result) => println!("✅ Returned: {:?}\n", result),
         Err(e) => println!("❌ Error: {}\n", e),
     }
@@ -115,7 +124,7 @@ fn main() {
   results)
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(result) => println!("✅ Returned: {:?}\n", result),
         Err(e) => println!("❌ Error: {}\n", e),
     }
@@ -144,7 +153,7 @@ fn main() {
   [r1 r2 r3])
 "#;
 
-    match evaluator.eval_str(code) {
+    match execute_ovsm(&mut evaluator, code) {
         Ok(result) => println!("✅ Returned: {:?}\n", result),
         Err(e) => println!("❌ Error: {}\n", e),
     }
