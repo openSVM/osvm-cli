@@ -45,16 +45,15 @@
 //!    thread, syncing across all federated nodes
 
 use super::{
-    CollabError, CollaborativeSession, SessionConfig,
-    Annotation, AnnotationType, AnnotationSeverity,
-    session::ParticipantColor,
+    session::ParticipantColor, Annotation, AnnotationSeverity, AnnotationType, CollabError,
+    CollaborativeSession, SessionConfig,
 };
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
 
 /// Board name for collaborative session announcements
 pub const COLLAB_SESSIONS_BOARD: &str = "COLLAB_SESSIONS";
@@ -138,7 +137,8 @@ impl FederatedSessionAnnouncement {
     /// Get the WebSocket URL for joining
     pub fn websocket_url(&self) -> String {
         // Convert HTTP address to WebSocket
-        let ws_addr = self.host_address
+        let ws_addr = self
+            .host_address
             .replace("http://", "ws://")
             .replace("https://", "wss://");
         format!("{}/collab/{}", ws_addr, self.session_id)
@@ -333,7 +333,11 @@ impl CollabFederationManager {
     }
 
     /// Create with custom state path
-    pub fn new_with_path(node_id: &str, public_address: &str, state_path: std::path::PathBuf) -> Self {
+    pub fn new_with_path(
+        node_id: &str,
+        public_address: &str,
+        state_path: std::path::PathBuf,
+    ) -> Self {
         // Load existing state
         let state = FederationState::load_from(&state_path);
 
@@ -412,7 +416,10 @@ impl CollabFederationManager {
     }
 
     /// Publish a local session to the federation
-    pub async fn publish_session(&self, session: Arc<CollaborativeSession>) -> Result<(), CollabError> {
+    pub async fn publish_session(
+        &self,
+        session: Arc<CollaborativeSession>,
+    ) -> Result<(), CollabError> {
         let participant_count = session.participant_count().await;
         let announcement = FederatedSessionAnnouncement::from_session(
             &session,
@@ -464,11 +471,7 @@ impl CollabFederationManager {
 
         for (_, peer_address) in peers.iter() {
             let url = format!("{}/api/collab/federation/announce", peer_address);
-            let _ = self.client
-                .post(&url)
-                .json(announcement)
-                .send()
-                .await;
+            let _ = self.client.post(&url).json(announcement).send().await;
         }
     }
 
@@ -484,7 +487,9 @@ impl CollabFederationManager {
     }
 
     /// Discover sessions from all peers
-    pub async fn discover_sessions(&self) -> Result<Vec<FederatedSessionAnnouncement>, CollabError> {
+    pub async fn discover_sessions(
+        &self,
+    ) -> Result<Vec<FederatedSessionAnnouncement>, CollabError> {
         let peers = self.peers.read().await;
         let mut discovered = Vec::new();
 
@@ -493,7 +498,8 @@ impl CollabFederationManager {
 
             match self.client.get(&url).send().await {
                 Ok(response) => {
-                    if let Ok(sessions) = response.json::<Vec<FederatedSessionAnnouncement>>().await {
+                    if let Ok(sessions) = response.json::<Vec<FederatedSessionAnnouncement>>().await
+                    {
                         for session in sessions {
                             if session.host_node_id != self.node_id {
                                 discovered.push(session);
@@ -521,7 +527,8 @@ impl CollabFederationManager {
     /// Get all known sessions (local + remote)
     pub async fn list_all_sessions(&self) -> Vec<FederatedSessionAnnouncement> {
         let sessions = self.sessions.read().await;
-        sessions.values()
+        sessions
+            .values()
             .filter(|s| s.status != FederatedSessionStatus::Ended)
             .cloned()
             .collect()
@@ -530,42 +537,42 @@ impl CollabFederationManager {
     /// Get active joinable sessions
     pub async fn list_joinable_sessions(&self) -> Vec<FederatedSessionAnnouncement> {
         let sessions = self.sessions.read().await;
-        sessions.values()
+        sessions
+            .values()
             .filter(|s| s.is_joinable())
             .cloned()
             .collect()
     }
 
     /// Find a session by invite code (searches all known sessions)
-    pub async fn find_by_invite_code(&self, invite_code: &str) -> Option<FederatedSessionAnnouncement> {
+    pub async fn find_by_invite_code(
+        &self,
+        invite_code: &str,
+    ) -> Option<FederatedSessionAnnouncement> {
         let sessions = self.sessions.read().await;
-        sessions.values()
+        sessions
+            .values()
             .find(|s| s.invite_code.eq_ignore_ascii_case(invite_code))
             .cloned()
     }
 
     /// Publish an annotation to federation
     pub async fn publish_annotation(&self, annotation: &Annotation, session_id: &str) {
-        let federated = FederatedAnnotation::from_annotation(
-            annotation,
-            session_id,
-            &self.node_id,
-        );
+        let federated = FederatedAnnotation::from_annotation(annotation, session_id, &self.node_id);
 
         let peers = self.peers.read().await;
 
         for (_, peer_address) in peers.iter() {
             let url = format!("{}/api/collab/federation/annotations", peer_address);
-            let _ = self.client
-                .post(&url)
-                .json(&federated)
-                .send()
-                .await;
+            let _ = self.client.post(&url).json(&federated).send().await;
         }
     }
 
     /// Sync annotations from a peer for a session
-    pub async fn sync_annotations(&self, session_id: &str) -> Result<Vec<FederatedAnnotation>, CollabError> {
+    pub async fn sync_annotations(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<FederatedAnnotation>, CollabError> {
         let peers = self.peers.read().await;
         let mut annotations = Vec::new();
 
@@ -577,7 +584,8 @@ impl CollabFederationManager {
 
             match self.client.get(&url).send().await {
                 Ok(response) => {
-                    if let Ok(peer_annotations) = response.json::<Vec<FederatedAnnotation>>().await {
+                    if let Ok(peer_annotations) = response.json::<Vec<FederatedAnnotation>>().await
+                    {
                         annotations.extend(peer_annotations);
                     }
                 }
@@ -767,8 +775,14 @@ mod tests {
 
         assert_eq!(manager.node_id(), "!test1234");
 
-        manager.add_peer("!peer1", "http://peer1:8080").await.expect("add peer 1");
-        manager.add_peer("!peer2", "http://peer2:8080").await.expect("add peer 2");
+        manager
+            .add_peer("!peer1", "http://peer1:8080")
+            .await
+            .expect("add peer 1");
+        manager
+            .add_peer("!peer2", "http://peer2:8080")
+            .await
+            .expect("add peer 2");
 
         let peers = manager.list_peers().await;
         assert_eq!(peers.len(), 2);
@@ -778,7 +792,10 @@ mod tests {
         assert_eq!(peers.len(), 1);
 
         // Verify state file was created
-        assert!(state_path.exists(), "State file should exist after peer operations");
+        assert!(
+            state_path.exists(),
+            "State file should exist after peer operations"
+        );
 
         // Cleanup
         let _ = std::fs::remove_file(&state_path);
@@ -788,7 +805,8 @@ mod tests {
     #[tokio::test]
     async fn test_federation_persistence() {
         // Test that peers persist across manager instances
-        let temp_dir = std::env::temp_dir().join(format!("osvm_persist_test_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("osvm_persist_test_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&temp_dir);
         let state_path = temp_dir.join("federation.json");
 
@@ -799,19 +817,29 @@ mod tests {
                 "http://localhost:8080",
                 state_path.clone(),
             );
-            manager.add_peer("!peer1", "http://peer1:8080").await.expect("add peer");
-            manager.add_peer("!peer2", "http://peer2:8080").await.expect("add peer");
+            manager
+                .add_peer("!peer1", "http://peer1:8080")
+                .await
+                .expect("add peer");
+            manager
+                .add_peer("!peer2", "http://peer2:8080")
+                .await
+                .expect("add peer");
         }
 
         // Second instance: peers should still be there
         {
             let manager = CollabFederationManager::new_with_path(
-                "!node1",  // Same node
+                "!node1", // Same node
                 "http://localhost:8080",
                 state_path.clone(),
             );
             let peers = manager.list_peers().await;
-            assert_eq!(peers.len(), 2, "Peers should persist across manager instances");
+            assert_eq!(
+                peers.len(),
+                2,
+                "Peers should persist across manager instances"
+            );
         }
 
         // Cleanup

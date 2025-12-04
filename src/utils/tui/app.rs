@@ -1,24 +1,29 @@
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Rect, Alignment},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Sparkline, Tabs, Wrap, Gauge, BorderType, Clear, BarChart, LineGauge},
+    widgets::{
+        BarChart, Block, BorderType, Borders, Clear, Gauge, LineGauge, List, ListItem, Paragraph,
+        Sparkline, Tabs, Wrap,
+    },
     Frame, Terminal,
 };
 use std::io;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::graph::{WalletGraph, GraphInput};
+use super::graph::{GraphInput, WalletGraph};
 
 /// Response from AI chat processing - supports streaming agent updates
 #[derive(Clone, Debug)]
@@ -35,7 +40,7 @@ pub enum ChatResponseType {
     /// Intermediate thinking step - append to current message
     ThinkingStep,
     /// Tool being called - append to current message
-    ToolCall(String),  // tool name
+    ToolCall(String), // tool name
     /// Tool result received - append to current message
     ToolResult(String), // tool name
     /// Error occurred
@@ -73,29 +78,24 @@ pub enum StreamingUpdate {
     /// New wallet discovered (not yet connected)
     NewWallet {
         address: String,
-        discovered_via: String,  // which wallet led to this one
+        discovered_via: String, // which wallet led to this one
     },
     /// Status update from fetcher
-    Status {
-        message: String,
-        is_error: bool,
-    },
+    Status { message: String, is_error: bool },
     /// Streaming paused/resumed
-    StreamingStateChange {
-        is_active: bool,
-    },
+    StreamingStateChange { is_active: bool },
 }
 
 /// Streaming state for real-time updates
 #[derive(Clone, Debug)]
 pub struct StreamingState {
-    pub is_enabled: bool,           // User toggle for streaming
-    pub is_active: bool,            // Currently fetching
+    pub is_enabled: bool, // User toggle for streaming
+    pub is_active: bool,  // Currently fetching
     pub last_fetch: Option<std::time::Instant>,
-    pub fetch_interval_secs: u64,   // How often to poll (default 30s)
-    pub transfers_received: usize,  // Count since start
-    pub last_signature: Option<String>,  // For pagination
-    pub error_count: usize,         // Consecutive errors
+    pub fetch_interval_secs: u64,  // How often to poll (default 30s)
+    pub transfers_received: usize, // Count since start
+    pub last_signature: Option<String>, // For pagination
+    pub error_count: usize,        // Consecutive errors
 }
 
 impl Default for StreamingState {
@@ -129,9 +129,9 @@ pub struct ConversationTurn {
 #[derive(Clone, Debug, Default)]
 pub struct InvestigationProgress {
     pub is_running: bool,
-    pub cancel_requested: bool,  // Flag to gracefully stop investigation
+    pub cancel_requested: bool, // Flag to gracefully stop investigation
     pub target_wallet: String,
-    pub hypothesis: Option<String>,  // User's hypothesis to test
+    pub hypothesis: Option<String>, // User's hypothesis to test
     pub phase: InvestigationPhaseType,
     pub wallets_explored: usize,
     pub wallets_pending: usize,
@@ -140,7 +140,7 @@ pub struct InvestigationProgress {
     pub max_depth: usize,
     pub transfers_found: usize,
     pub findings: Vec<InvestigationFinding>,
-    pub evidence_for: Vec<String>,    // Evidence supporting hypothesis
+    pub evidence_for: Vec<String>,     // Evidence supporting hypothesis
     pub evidence_against: Vec<String>, // Evidence refuting hypothesis
     pub start_time: Option<std::time::Instant>,
     pub status_message: String,
@@ -168,7 +168,7 @@ pub enum InvestigationPhaseType {
     #[default]
     Idle,
     Initializing,
-    ExploringDepth(usize),  // Current depth level
+    ExploringDepth(usize), // Current depth level
     AnalyzingPatterns,
     GeneratingReport,
     Complete,
@@ -222,13 +222,13 @@ const INVESTIGATION_TRIGGERS: &[&str] = &[
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum TabIndex {
-    Chat = 0,           // NEW: Chat is now the default tab
+    Chat = 0, // NEW: Chat is now the default tab
     Dashboard = 1,
     Graph = 2,
     Logs = 3,
     SearchResults = 4,
-    BBS = 5,            // Meshtastic BBS for agent-human communication
-    Federation = 6,     // Federation network dashboard
+    BBS = 5,        // Meshtastic BBS for agent-human communication
+    Federation = 6, // Federation network dashboard
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -258,7 +258,7 @@ pub struct TransferEvent {
 /// Chat message structure for AI conversation
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ChatMessage {
-    pub role: String,      // "user" or "assistant"
+    pub role: String, // "user" or "assistant"
     pub content: String,
     pub timestamp: String,
     pub status: MessageStatus,
@@ -266,11 +266,11 @@ pub struct ChatMessage {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum MessageStatus {
-    Sending,     // User message being sent
-    Delivered,   // Successfully delivered
-    Streaming,   // Assistant response streaming in
-    Complete,    // Assistant response finished
-    Error,       // Failed to send/receive
+    Sending,   // User message being sent
+    Delivered, // Successfully delivered
+    Streaming, // Assistant response streaming in
+    Complete,  // Assistant response finished
+    Error,     // Failed to send/receive
 }
 
 pub struct OsvmApp {
@@ -304,7 +304,7 @@ pub struct OsvmApp {
     pub log_scroll: usize,
     pub output_scroll: usize,
     pub help_scroll: usize,
-    pub ai_insights_scroll: usize,  // Scroll position for AI Insights panel
+    pub ai_insights_scroll: usize, // Scroll position for AI Insights panel
     // AI insights
     pub ai_insights: Arc<Mutex<Vec<String>>>,
     // Search/Filter
@@ -314,7 +314,7 @@ pub struct OsvmApp {
     // Global search modal
     pub global_search_active: bool,
     pub global_search_query: String,
-    pub search_history: Vec<String>,  // Last 5 searches
+    pub search_history: Vec<String>, // Last 5 searches
     pub search_suggestions: Vec<SearchSuggestion>,
     pub selected_suggestion: usize,
     pub search_loading: bool,
@@ -334,7 +334,7 @@ pub struct OsvmApp {
     pub chat_input: String,
     pub chat_input_active: bool,
     pub chat_scroll: usize,
-    pub chat_auto_scroll: bool,  // Auto-scroll to bottom on new messages
+    pub chat_auto_scroll: bool, // Auto-scroll to bottom on new messages
     // Chat AI integration channels
     pub chat_response_rx: Option<Receiver<ChatResponse>>,
     pub chat_response_tx: Option<Sender<ChatResponse>>,
@@ -440,7 +440,7 @@ pub struct LiveAnnotation {
     pub session_id: String,
     pub author: String,
     pub author_node: String,
-    pub target: String,       // wallet or transaction
+    pub target: String, // wallet or transaction
     pub text: String,
     pub severity: String,
     pub timestamp: String,
@@ -481,14 +481,14 @@ pub struct SearchSuggestion {
     pub text: String,
     pub entity_type: EntityType,
     pub description: String,
-    pub match_score: u8,  // 0-100 relevance score
+    pub match_score: u8, // 0-100 relevance score
 }
 
 #[derive(Clone, Debug)]
 pub struct SearchResult {
     pub entity_type: EntityType,
     pub address: String,
-    pub preview_data: Vec<(String, String)>,  // Key-value pairs for preview
+    pub preview_data: Vec<(String, String)>, // Key-value pairs for preview
     pub timestamp: u64,
 }
 
@@ -498,7 +498,7 @@ pub enum EntityType {
     Token,
     Program,
     Transaction,
-    Recent,  // From history
+    Recent, // From history
 }
 
 impl SearchSuggestion {
@@ -570,9 +570,7 @@ If the question can be answered from conversation history or general knowledge:
 }}
 
 Respond ONLY with valid JSON, no other text."#,
-        target_wallet,
-        history_context,
-        query
+        target_wallet, history_context, query
     );
 
     let plan = match parse_ai_plan(&ai_service, &planning_prompt, &tx).await {
@@ -601,7 +599,8 @@ Respond ONLY with valid JSON, no other text."#,
     }
 
     // Get initial tools
-    let mut pending_tools: Vec<serde_json::Value> = plan.get("tools")
+    let mut pending_tools: Vec<serde_json::Value> = plan
+        .get("tools")
         .and_then(|t| t.as_array())
         .cloned()
         .unwrap_or_default();
@@ -652,7 +651,10 @@ Respond ONLY with valid JSON, no other text."#,
 
         // Execute current batch of tools
         for tool_spec in &pending_tools {
-            let tool_name = tool_spec.get("tool").and_then(|t| t.as_str()).unwrap_or("unknown");
+            let tool_name = tool_spec
+                .get("tool")
+                .and_then(|t| t.as_str())
+                .unwrap_or("unknown");
             let params = tool_spec.get("params").cloned();
 
             let _ = tx.send(ChatResponse {
@@ -722,20 +724,24 @@ Only request additional tools if TRULY necessary. Respond ONLY with JSON."#,
             );
 
             if let Some(reflection) = parse_ai_plan(&ai_service, &reflection_prompt, &tx).await {
-                let have_enough = reflection.get("have_enough_info")
+                let have_enough = reflection
+                    .get("have_enough_info")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(true);
 
                 if have_enough {
                     pending_tools.clear();
                 } else {
-                    pending_tools = reflection.get("additional_tools")
+                    pending_tools = reflection
+                        .get("additional_tools")
                         .and_then(|t| t.as_array())
                         .cloned()
                         .unwrap_or_default();
 
                     if !pending_tools.is_empty() {
-                        if let Some(reasoning) = reflection.get("reasoning").and_then(|r| r.as_str()) {
+                        if let Some(reasoning) =
+                            reflection.get("reasoning").and_then(|r| r.as_str())
+                        {
                             let _ = tx.send(ChatResponse {
                                 content: format!("💭 {}", reasoning),
                                 response_type: ChatResponseType::ThinkingStep,
@@ -777,7 +783,10 @@ Be concise but thorough. Use bullet points for clarity. ALWAYS show full wallet 
         all_tool_results.join("\n\n---\n\n")
     );
 
-    match ai_service.query_osvm_ai_with_options(&synthesis_prompt, None, Some(true), false).await {
+    match ai_service
+        .query_osvm_ai_with_options(&synthesis_prompt, None, Some(true), false)
+        .await
+    {
         Ok(answer) => {
             let _ = tx.send(ChatResponse {
                 content: answer.clone(),
@@ -806,20 +815,23 @@ fn build_conversation_context(history: &Arc<Mutex<Vec<ConversationTurn>>>) -> St
         if turns.is_empty() {
             return String::new();
         }
-        let context: Vec<String> = turns.iter()
+        let context: Vec<String> = turns
+            .iter()
             .rev()
             .take(5) // Last 5 turns
             .rev()
-            .map(|turn| format!(
-                "Previous Q: {}\nPrevious A: {}\n",
-                turn.query,
-                // Truncate long responses
-                if turn.response.len() > 500 {
-                    format!("{}...", &turn.response[..500])
-                } else {
-                    turn.response.clone()
-                }
-            ))
+            .map(|turn| {
+                format!(
+                    "Previous Q: {}\nPrevious A: {}\n",
+                    turn.query,
+                    // Truncate long responses
+                    if turn.response.len() > 500 {
+                        format!("{}...", &turn.response[..500])
+                    } else {
+                        turn.response.clone()
+                    }
+                )
+            })
             .collect();
         if context.is_empty() {
             String::new()
@@ -858,7 +870,10 @@ async fn parse_ai_plan(
     prompt: &str,
     tx: &Sender<ChatResponse>,
 ) -> Option<serde_json::Value> {
-    match ai_service.query_osvm_ai_with_options(prompt, None, Some(true), false).await {
+    match ai_service
+        .query_osvm_ai_with_options(prompt, None, Some(true), false)
+        .await
+    {
         Ok(response) => {
             // Try to parse as JSON
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
@@ -867,7 +882,9 @@ async fn parse_ai_plan(
             // Try to extract JSON from response
             if let Some(start) = response.find('{') {
                 if let Some(end) = response.rfind('}') {
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response[start..=end]) {
+                    if let Ok(json) =
+                        serde_json::from_str::<serde_json::Value>(&response[start..=end])
+                    {
                         return Some(json);
                     }
                 }
@@ -898,38 +915,45 @@ fn update_graph_from_transfers(
     use super::graph::WalletNodeType;
 
     // Try to extract transfers from various response formats
-    let transfers = result.get("transfers")
+    let transfers = result
+        .get("transfers")
         .or_else(|| result.get("data"))
         .or_else(|| result.get("items"))
         .and_then(|v| v.as_array());
 
     if let Some(transfer_list) = transfers {
         if let Ok(mut graph) = wallet_graph.lock() {
-            for transfer in transfer_list.iter().take(50) { // Limit to prevent UI overload
-                let from = transfer.get("from")
+            for transfer in transfer_list.iter().take(50) {
+                // Limit to prevent UI overload
+                let from = transfer
+                    .get("from")
                     .or_else(|| transfer.get("source"))
                     .or_else(|| transfer.get("sender"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                let to = transfer.get("to")
+                let to = transfer
+                    .get("to")
                     .or_else(|| transfer.get("destination"))
                     .or_else(|| transfer.get("receiver"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                let amount = transfer.get("amount")
+                let amount = transfer
+                    .get("amount")
                     .or_else(|| transfer.get("value"))
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
 
-                let token = transfer.get("token")
+                let token = transfer
+                    .get("token")
                     .or_else(|| transfer.get("symbol"))
                     .or_else(|| transfer.get("mint"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("SOL");
 
-                let timestamp = transfer.get("timestamp")
+                let timestamp = transfer
+                    .get("timestamp")
                     .or_else(|| transfer.get("blockTime"))
                     .and_then(|v| v.as_str().map(|s| s.to_string()));
 
@@ -975,7 +999,9 @@ const TRANSFERS_PER_WALLET: usize = 100;
 /// Check if a query triggers autonomous investigation
 fn is_investigation_trigger(query: &str) -> bool {
     let query_lower = query.to_lowercase();
-    INVESTIGATION_TRIGGERS.iter().any(|trigger| query_lower.contains(trigger))
+    INVESTIGATION_TRIGGERS
+        .iter()
+        .any(|trigger| query_lower.contains(trigger))
 }
 
 /// Extract hypothesis from user query if present
@@ -1012,7 +1038,7 @@ async fn run_autonomous_investigation(
     {
         let mut progress = investigation_progress.lock().unwrap();
         progress.is_running = true;
-        progress.cancel_requested = false;  // Reset cancel flag
+        progress.cancel_requested = false; // Reset cancel flag
         progress.target_wallet = target_wallet.clone();
         progress.hypothesis = hypothesis.clone();
         progress.phase = InvestigationPhaseType::Initializing;
@@ -1101,7 +1127,10 @@ async fn run_autonomous_investigation(
         // Check limits
         if visited.len() > MAX_INVESTIGATION_WALLETS {
             let _ = tx.send(ChatResponse {
-                content: format!("⚡ Reached wallet limit ({}). Proceeding to analysis.", MAX_INVESTIGATION_WALLETS),
+                content: format!(
+                    "⚡ Reached wallet limit ({}). Proceeding to analysis.",
+                    MAX_INVESTIGATION_WALLETS
+                ),
                 response_type: ChatResponseType::ThinkingStep,
             });
             break;
@@ -1118,7 +1147,11 @@ async fn run_autonomous_investigation(
             progress.wallets_explored = visited.len();
             progress.wallets_pending = queue.len();
             progress.current_depth = depth;
-            progress.status_message = format!("Exploring {} (depth {})", &current_wallet[..8.min(current_wallet.len())], depth);
+            progress.status_message = format!(
+                "Exploring {} (depth {})",
+                &current_wallet[..8.min(current_wallet.len())],
+                depth
+            );
         }
 
         let _ = tx.send(ChatResponse {
@@ -1134,15 +1167,17 @@ async fn run_autonomous_investigation(
         });
 
         // Fetch transfers for this wallet
-        let result = mcp_service.call_tool(
-            &server_id,
-            "get_account_transfers",
-            Some(serde_json::json!({
-                "address": current_wallet,
-                "limit": TRANSFERS_PER_WALLET,
-                "compress": true
-            }))
-        ).await;
+        let result = mcp_service
+            .call_tool(
+                &server_id,
+                "get_account_transfers",
+                Some(serde_json::json!({
+                    "address": current_wallet,
+                    "limit": TRANSFERS_PER_WALLET,
+                    "compress": true
+                })),
+            )
+            .await;
 
         match result {
             Ok(data) => {
@@ -1150,7 +1185,8 @@ async fn run_autonomous_investigation(
                 update_graph_from_transfers(&wallet_graph, &data, &target_wallet);
 
                 // Extract connected wallets
-                let transfers = data.get("transfers")
+                let transfers = data
+                    .get("transfers")
                     .or_else(|| data.get("data"))
                     .or_else(|| data.get("items"))
                     .and_then(|v| v.as_array());
@@ -1169,15 +1205,18 @@ async fn run_autonomous_investigation(
 
                     // Add connected wallets to queue
                     for transfer in transfer_list {
-                        let from = transfer.get("from")
+                        let from = transfer
+                            .get("from")
                             .or_else(|| transfer.get("source"))
                             .and_then(|v| v.as_str());
-                        let to = transfer.get("to")
+                        let to = transfer
+                            .get("to")
                             .or_else(|| transfer.get("destination"))
                             .and_then(|v| v.as_str());
 
                         for addr in [from, to].into_iter().flatten() {
-                            if !visited.contains(addr) && visited.len() < MAX_INVESTIGATION_WALLETS {
+                            if !visited.contains(addr) && visited.len() < MAX_INVESTIGATION_WALLETS
+                            {
                                 visited.insert(addr.to_string());
                                 queue.push_back((addr.to_string(), depth + 1));
                             }
@@ -1252,7 +1291,8 @@ async fn run_autonomous_investigation(
 
     // Build hypothesis section if provided
     let hypothesis_section = if let Some(ref h) = hypothesis {
-        format!(r#"
+        format!(
+            r#"
 
 HYPOTHESIS TO TEST: "{}"
 
@@ -1261,7 +1301,9 @@ You MUST include a dedicated "Hypothesis Verdict" section with:
 - Evidence supporting the hypothesis
 - Evidence against the hypothesis
 - Confidence level (High/Medium/Low)
-"#, h)
+"#,
+            h
+        )
     } else {
         String::new()
     };
@@ -1295,19 +1337,44 @@ Be specific. Use actual wallet addresses (never truncate). Include amounts where
         visited.len(),
         all_transfers.len(),
         MAX_INVESTIGATION_DEPTH,
-        findings.iter().map(|f| format!("• [{}] {}: {}", severity_str(&f.severity), f.title, f.description)).collect::<Vec<_>>().join("\n"),
+        findings
+            .iter()
+            .map(|f| format!(
+                "• [{}] {}: {}",
+                severity_str(&f.severity),
+                f.title,
+                f.description
+            ))
+            .collect::<Vec<_>>()
+            .join("\n"),
         wallet_summaries.join("\n"),
-        if hypothesis.is_some() { "\n6. **Hypothesis Verdict** (SUPPORTED/REFUTED/INCONCLUSIVE with evidence)" } else { "" }
+        if hypothesis.is_some() {
+            "\n6. **Hypothesis Verdict** (SUPPORTED/REFUTED/INCONCLUSIVE with evidence)"
+        } else {
+            ""
+        }
     );
 
-    let report = match ai_service.query_osvm_ai_with_options(&analysis_prompt, None, Some(true), false).await {
+    let report = match ai_service
+        .query_osvm_ai_with_options(&analysis_prompt, None, Some(true), false)
+        .await
+    {
         Ok(response) => response,
-        Err(e) => format!("AI analysis failed: {}. Raw findings:\n{}", e,
-            findings.iter().map(|f| format!("• {}: {}", f.title, f.description)).collect::<Vec<_>>().join("\n"))
+        Err(e) => format!(
+            "AI analysis failed: {}. Raw findings:\n{}",
+            e,
+            findings
+                .iter()
+                .map(|f| format!("• {}: {}", f.title, f.description))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
     };
 
     // Generate final report
-    let elapsed = investigation_progress.lock().unwrap()
+    let elapsed = investigation_progress
+        .lock()
+        .unwrap()
         .start_time
         .map(|t| t.elapsed().as_secs())
         .unwrap_or(0);
@@ -1407,13 +1474,14 @@ fn generate_html_report(target_wallet: &str, markdown_report: &str) -> String {
         .replace("\n### ", "</h2>\n<h3>")
         .replace("\n**", "\n<strong>")
         .replace("**\n", "</strong>\n")
-        .replace("**", "</strong><strong>")  // Handle inline bold
+        .replace("**", "</strong><strong>") // Handle inline bold
         .replace("`", "<code>")
         .replace("• ", "<li>")
         .replace("\n- ", "\n<li>")
         .replace("---", "<hr>");
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1503,15 +1571,18 @@ fn analyze_investigation_patterns(
     let mut wallet_counterparties: HashMap<String, HashSet<String>> = HashMap::new();
 
     for transfer in transfers {
-        let from = transfer.get("from")
+        let from = transfer
+            .get("from")
             .or_else(|| transfer.get("source"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let to = transfer.get("to")
+        let to = transfer
+            .get("to")
             .or_else(|| transfer.get("destination"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let amount = transfer.get("amount")
+        let amount = transfer
+            .get("amount")
             .or_else(|| transfer.get("value"))
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
@@ -1520,10 +1591,12 @@ fn analyze_investigation_patterns(
             *wallet_outflows.entry(from.to_string()).or_insert(0.0) += amount;
             *wallet_inflows.entry(to.to_string()).or_insert(0.0) += amount;
 
-            wallet_counterparties.entry(from.to_string())
+            wallet_counterparties
+                .entry(from.to_string())
                 .or_insert_with(HashSet::new)
                 .insert(to.to_string());
-            wallet_counterparties.entry(to.to_string())
+            wallet_counterparties
+                .entry(to.to_string())
                 .or_insert_with(HashSet::new)
                 .insert(from.to_string());
         }
@@ -1536,7 +1609,11 @@ fn analyze_investigation_patterns(
             category: FindingCategory::FundingSource,
             severity: FindingSeverity::Info,
             title: "Funding Sources Identified".to_string(),
-            description: format!("Target wallet received total inflow of {:.4} across {} transfers", target_inflow, transfers.len()),
+            description: format!(
+                "Target wallet received total inflow of {:.4} across {} transfers",
+                target_inflow,
+                transfers.len()
+            ),
             wallets_involved: vec![target_wallet.to_string()],
             evidence: format!("Total inflow: {:.4}", target_inflow),
         });
@@ -1544,20 +1621,32 @@ fn analyze_investigation_patterns(
 
     // Finding 2: Large transfers (>100 SOL equivalent)
     for transfer in transfers {
-        let amount = transfer.get("amount")
+        let amount = transfer
+            .get("amount")
             .or_else(|| transfer.get("value"))
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
 
         if amount > 100.0 {
-            let from = transfer.get("from").and_then(|v| v.as_str()).unwrap_or("unknown");
-            let to = transfer.get("to").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let from = transfer
+                .get("from")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let to = transfer
+                .get("to")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
 
             findings.push(InvestigationFinding {
                 category: FindingCategory::LargeTransfer,
                 severity: FindingSeverity::Medium,
                 title: "Large Transfer Detected".to_string(),
-                description: format!("{:.2} transferred from {} to {}", amount, &from[..8.min(from.len())], &to[..8.min(to.len())]),
+                description: format!(
+                    "{:.2} transferred from {} to {}",
+                    amount,
+                    &from[..8.min(from.len())],
+                    &to[..8.min(to.len())]
+                ),
                 wallets_involved: vec![from.to_string(), to.to_string()],
                 evidence: format!("Amount: {:.4}", amount),
             });
@@ -1571,7 +1660,11 @@ fn analyze_investigation_patterns(
                 category: FindingCategory::HighActivity,
                 severity: FindingSeverity::Low,
                 title: "High Activity Wallet".to_string(),
-                description: format!("Wallet {} has {} counterparties", &wallet[..8.min(wallet.len())], counterparties.len()),
+                description: format!(
+                    "Wallet {} has {} counterparties",
+                    &wallet[..8.min(wallet.len())],
+                    counterparties.len()
+                ),
                 wallets_involved: vec![wallet.clone()],
                 evidence: format!("Counterparty count: {}", counterparties.len()),
             });
@@ -1582,10 +1675,12 @@ fn analyze_investigation_patterns(
     let mut cluster_candidates: Vec<(String, String, usize)> = Vec::new();
     let wallets: Vec<_> = wallet_counterparties.keys().collect();
     for i in 0..wallets.len() {
-        for j in (i+1)..wallets.len() {
+        for j in (i + 1)..wallets.len() {
             let w1 = wallets[i];
             let w2 = wallets[j];
-            if let (Some(c1), Some(c2)) = (wallet_counterparties.get(w1), wallet_counterparties.get(w2)) {
+            if let (Some(c1), Some(c2)) =
+                (wallet_counterparties.get(w1), wallet_counterparties.get(w2))
+            {
                 let shared = c1.intersection(c2).count();
                 if shared > 3 {
                     cluster_candidates.push((w1.clone(), w2.clone(), shared));
@@ -1601,8 +1696,12 @@ fn analyze_investigation_patterns(
             category: FindingCategory::ClusterDetected,
             severity: FindingSeverity::High,
             title: "Potential Wallet Cluster".to_string(),
-            description: format!("Wallets {} and {} share {} common counterparties - possible same owner",
-                &top.0[..8.min(top.0.len())], &top.1[..8.min(top.1.len())], top.2),
+            description: format!(
+                "Wallets {} and {} share {} common counterparties - possible same owner",
+                &top.0[..8.min(top.0.len())],
+                &top.1[..8.min(top.1.len())],
+                top.2
+            ),
             wallets_involved: vec![top.0.clone(), top.1.clone()],
             evidence: format!("Shared counterparties: {}", top.2),
         });
@@ -1613,8 +1712,12 @@ fn analyze_investigation_patterns(
         category: FindingCategory::FundingSource,
         severity: FindingSeverity::Info,
         title: "Investigation Summary".to_string(),
-        description: format!("Explored {} wallets, found {} transfers, identified {} findings",
-            visited_wallets.len(), transfers.len(), findings.len()),
+        description: format!(
+            "Explored {} wallets, found {} transfers, identified {} findings",
+            visited_wallets.len(),
+            transfers.len(),
+            findings.len()
+        ),
         wallets_involved: vec![target_wallet.to_string()],
         evidence: "Automated BFS exploration complete".to_string(),
     });
@@ -1645,7 +1748,7 @@ fn update_investigation_failed(progress: &Arc<Mutex<InvestigationProgress>>, rea
 impl OsvmApp {
     pub fn new(target_wallet: String) -> Self {
         Self {
-            active_tab: TabIndex::Chat,  // Chat is the default tab
+            active_tab: TabIndex::Chat, // Chat is the default tab
             agent_output: Arc::new(Mutex::new(Vec::new())),
             wallet_graph: Arc::new(Mutex::new(WalletGraph::new(target_wallet.clone()))),
             token_volumes: Arc::new(Mutex::new(Vec::new())),
@@ -1705,14 +1808,16 @@ impl OsvmApp {
             // Autonomous investigation - starts idle
             investigation_progress: Arc::new(Mutex::new(InvestigationProgress::default())),
             // BBS interface initialization
-            bbs_state: Arc::new(Mutex::new(crate::utils::bbs::tui_widgets::BBSTuiState::new())),
+            bbs_state: Arc::new(Mutex::new(
+                crate::utils::bbs::tui_widgets::BBSTuiState::new(),
+            )),
             // Federation dashboard initialization
             federation_state: Arc::new(Mutex::new(FederationDashboardState::default())),
             federation_scroll: 0,
             federation_selected_peer: None,
             federation_input_active: false,
             federation_input_buffer: String::new(),
-            federation_refresh_pending: true,  // Load on first tick
+            federation_refresh_pending: true, // Load on first tick
             federation_add_pending: None,
             federation_delete_pending: None,
             federation_selected_session: None,
@@ -1781,8 +1886,13 @@ impl OsvmApp {
     }
 
     /// Get handles for background thread to update analytics
-    pub fn get_analytics_handles(&self) -> (Arc<Mutex<Vec<TokenVolume>>>, Arc<Mutex<Vec<TransferEvent>>>) {
-        (Arc::clone(&self.token_volumes), Arc::clone(&self.transfer_events))
+    pub fn get_analytics_handles(
+        &self,
+    ) -> (Arc<Mutex<Vec<TokenVolume>>>, Arc<Mutex<Vec<TransferEvent>>>) {
+        (
+            Arc::clone(&self.token_volumes),
+            Arc::clone(&self.transfer_events),
+        )
     }
 
     /// Get a clone of the wallet_graph Arc for sharing with background threads
@@ -1817,25 +1927,29 @@ impl OsvmApp {
         let state = FederationState::load();
         let mut fed_state = FederationDashboardState {
             node_id: state.node_id.clone(),
-            peers: state.peers.iter().map(|(node_id, address)| {
-                FederationPeerInfo {
+            peers: state
+                .peers
+                .iter()
+                .map(|(node_id, address)| FederationPeerInfo {
                     node_id: node_id.clone(),
                     address: address.clone(),
                     status: PeerStatus::Unknown,
                     latency_ms: None,
                     sessions_hosted: 0,
                     last_seen: None,
-                }
-            }).collect(),
-            sessions: state.known_sessions.iter().map(|s| {
-                FederationSessionInfo {
+                })
+                .collect(),
+            sessions: state
+                .known_sessions
+                .iter()
+                .map(|s| FederationSessionInfo {
                     session_id: s.session_id.clone(),
                     name: s.name.clone(),
                     host_node_id: s.host_node_id.clone(),
                     participant_count: s.participant_count,
                     status: format!("{:?}", s.status),
-                }
-            }).collect(),
+                })
+                .collect(),
             last_refresh: Some(std::time::Instant::now()),
             total_annotations: 0,
             connection_graph: Vec::new(),
@@ -1933,8 +2047,10 @@ impl OsvmApp {
 
                 if let Ok(perf_samples) = client.get_recent_performance_samples(Some(1)) {
                     if let Some(sample) = perf_samples.first() {
-                        updated_stats.tps = sample.num_transactions as f64 / sample.sample_period_secs as f64;
-                        updated_stats.block_time_ms = ((sample.sample_period_secs as u64 * 1000) / sample.num_slots.max(1) as u64);
+                        updated_stats.tps =
+                            sample.num_transactions as f64 / sample.sample_period_secs as f64;
+                        updated_stats.block_time_ms = ((sample.sample_period_secs as u64 * 1000)
+                            / sample.num_slots.max(1) as u64);
                         updated_stats.total_transactions = sample.num_transactions;
                     }
                 }
@@ -1960,24 +2076,34 @@ impl OsvmApp {
                         for tx_with_meta in block.transactions.iter().take(10) {
                             if let Some(transaction) = &tx_with_meta.transaction.decode() {
                                 if let Some(meta) = &tx_with_meta.meta {
-                                    let sig = transaction.signatures.first()
+                                    let sig = transaction
+                                        .signatures
+                                        .first()
                                         .map(|s| s.to_string())
                                         .unwrap_or_else(|| "unknown".to_string());
 
-                                    let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                                    let timestamp =
+                                        chrono::Local::now().format("%H:%M:%S").to_string();
                                     let success = meta.status.is_ok();
-                                    let amount_sol = meta.post_balances.first()
+                                    let amount_sol = meta
+                                        .post_balances
+                                        .first()
                                         .zip(meta.pre_balances.first())
-                                        .map(|(post, pre)| (*post as i64 - *pre as i64).abs() as f64 / 1_000_000_000.0)
+                                        .map(|(post, pre)| {
+                                            (*post as i64 - *pre as i64).abs() as f64
+                                                / 1_000_000_000.0
+                                        })
                                         .unwrap_or(0.0);
 
-                                    let tx_type = if transaction.message.instructions().is_empty() {
-                                        "Unknown"
-                                    } else if amount_sol > 0.0 {
-                                        "Transfer"
-                                    } else {
-                                        "Contract"
-                                    }.to_string();
+                                    let tx_type =
+                                        if transaction.message.instructions().is_empty() {
+                                            "Unknown"
+                                        } else if amount_sol > 0.0 {
+                                            "Transfer"
+                                        } else {
+                                            "Contract"
+                                        }
+                                        .to_string();
 
                                     live_txs.push(LiveTransaction {
                                         signature: sig[..8].to_string(), // Truncate for display
@@ -2014,7 +2140,9 @@ impl OsvmApp {
                 // Read current peers
                 let peers_to_check: Vec<(String, String)> = {
                     let state = federation_handle.lock().unwrap();
-                    state.peers.iter()
+                    state
+                        .peers
+                        .iter()
                         .map(|p| (p.node_id.clone(), p.address.clone()))
                         .collect()
                 };
@@ -2034,7 +2162,10 @@ impl OsvmApp {
                             } else {
                                 // Try root URL
                                 match client.get(&address).send() {
-                                    Ok(_) => (PeerStatus::Online, Some(start.elapsed().as_millis() as u64)),
+                                    Ok(_) => (
+                                        PeerStatus::Online,
+                                        Some(start.elapsed().as_millis() as u64),
+                                    ),
                                     Err(_) => (PeerStatus::Offline, None),
                                 }
                             }
@@ -2042,7 +2173,9 @@ impl OsvmApp {
                         Err(_) => {
                             // Try root URL as fallback
                             match client.get(&address).send() {
-                                Ok(_) => (PeerStatus::Online, Some(start.elapsed().as_millis() as u64)),
+                                Ok(_) => {
+                                    (PeerStatus::Online, Some(start.elapsed().as_millis() as u64))
+                                }
                                 Err(_) => (PeerStatus::Offline, None),
                             }
                         }
@@ -2159,9 +2292,13 @@ impl OsvmApp {
         }
 
         // Token symbol (short uppercase)
-        if query_original.len() <= 10 && query_original.chars().all(|c| c.is_ascii_uppercase() || c.is_numeric() || c == '-') {
+        if query_original.len() <= 10
+            && query_original
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_numeric() || c == '-')
+        {
             let score = if query_original.len() >= 3 && query_original.len() <= 5 {
-                95  // Common token length
+                95 // Common token length
             } else {
                 70
             };
@@ -2197,9 +2334,7 @@ impl OsvmApp {
         }
 
         // Fuzzy matching - count matching chars
-        let matching_chars = query.chars()
-            .filter(|c| target.contains(*c))
-            .count();
+        let matching_chars = query.chars().filter(|c| target.contains(*c)).count();
 
         let score = ((matching_chars as f32 / query.len() as f32) * 50.0) as u8;
         score.max(10)
@@ -2240,16 +2375,31 @@ impl OsvmApp {
         let total_matches = self.search_results_data.lock().unwrap().total_matches;
         let log_msg = match suggestion.entity_type {
             EntityType::Wallet => {
-                format!("🔍 Found {} matches for wallet: {}", total_matches, Self::truncate_address(&suggestion.text))
+                format!(
+                    "🔍 Found {} matches for wallet: {}",
+                    total_matches,
+                    Self::truncate_address(&suggestion.text)
+                )
             }
             EntityType::Token => {
-                format!("🪙 Found {} token matches for: {}", total_matches, suggestion.text)
+                format!(
+                    "🪙 Found {} token matches for: {}",
+                    total_matches, suggestion.text
+                )
             }
             EntityType::Program => {
-                format!("⚙️  Found {} program matches for: {}", total_matches, Self::truncate_address(&suggestion.text))
+                format!(
+                    "⚙️  Found {} program matches for: {}",
+                    total_matches,
+                    Self::truncate_address(&suggestion.text)
+                )
             }
             EntityType::Transaction => {
-                format!("📜 Found {} transaction matches for: {}", total_matches, Self::truncate_address(&suggestion.text))
+                format!(
+                    "📜 Found {} transaction matches for: {}",
+                    total_matches,
+                    Self::truncate_address(&suggestion.text)
+                )
             }
             EntityType::Recent => {
                 format!("🕒 Re-searching: {} matches found", total_matches)
@@ -2283,12 +2433,15 @@ impl OsvmApp {
         // 🔥 LIVE BLOCKCHAIN FETCH: Check if query looks like a transaction signature
         // Pattern: base58 encoded string, 87-88 characters (Solana transaction signature format)
         // This works REGARDLESS of entity_type - we detect based on string pattern
-        let looks_like_signature = query.len() >= 87 && query.len() <= 88 &&
-                                   query.chars().all(|c| c.is_alphanumeric());
+        let looks_like_signature =
+            query.len() >= 87 && query.len() <= 88 && query.chars().all(|c| c.is_alphanumeric());
 
         if looks_like_signature {
             // Log attempt
-            eprintln!("🔍 Detected potential transaction signature: {} chars", query.len());
+            eprintln!(
+                "🔍 Detected potential transaction signature: {} chars",
+                query.len()
+            );
 
             if let Some(ref rpc_url) = self.rpc_url {
                 // Extract domain from URL for cleaner logging
@@ -2317,8 +2470,9 @@ impl OsvmApp {
         {
             let graph = self.wallet_graph.lock().unwrap();
             for (address, node) in graph.nodes_iter() {
-                if address.to_lowercase().contains(&query_lower) ||
-                   node.label.to_lowercase().contains(&query_lower) {
+                if address.to_lowercase().contains(&query_lower)
+                    || node.label.to_lowercase().contains(&query_lower)
+                {
                     results.wallets_found.push(WalletMatch {
                         address: address.clone(),
                         balance_sol: node.amount.unwrap_or(0.0),
@@ -2334,8 +2488,9 @@ impl OsvmApp {
         {
             let events = self.transfer_events.lock().unwrap();
             for event in events.iter() {
-                if event.token.to_lowercase().contains(&query_lower) ||
-                   event.timestamp.contains(query) {
+                if event.token.to_lowercase().contains(&query_lower)
+                    || event.timestamp.contains(query)
+                {
                     // This is a simplified match - in real implementation, extract addresses
                     results.transactions_found.push(TransactionMatch {
                         signature: format!("tx_{}", results.transactions_found.len()),
@@ -2364,16 +2519,20 @@ impl OsvmApp {
             }
         }
 
-        results.total_matches = results.wallets_found.len() +
-                                results.transactions_found.len() +
-                                results.tokens_found.len();
+        results.total_matches = results.wallets_found.len()
+            + results.transactions_found.len()
+            + results.tokens_found.len();
 
         results
     }
 
     /// Fetch transaction details from the blockchain via RPC
     /// Returns TransactionMatch if found, None if not found or error
-    fn fetch_transaction_from_blockchain(&self, signature: &str, rpc_url: &str) -> Option<TransactionMatch> {
+    fn fetch_transaction_from_blockchain(
+        &self,
+        signature: &str,
+        rpc_url: &str,
+    ) -> Option<TransactionMatch> {
         use solana_client::rpc_client::RpcClient;
         use solana_commitment_config::CommitmentConfig;
         use solana_sdk::signature::Signature;
@@ -2389,10 +2548,14 @@ impl OsvmApp {
         };
 
         // Create RPC client
-        let client = RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
+        let client =
+            RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
 
         // Fetch transaction details with full encoding
-        let tx = match client.get_transaction(&sig, solana_transaction_status::UiTransactionEncoding::JsonParsed) {
+        let tx = match client.get_transaction(
+            &sig,
+            solana_transaction_status::UiTransactionEncoding::JsonParsed,
+        ) {
             Ok(t) => t,
             Err(e) => {
                 eprintln!("❌ RPC error fetching transaction: {}", e);
@@ -2405,10 +2568,13 @@ impl OsvmApp {
         let transaction = tx.transaction.transaction.decode()?;
 
         // Get timestamp (block time)
-        let timestamp = tx.block_time
-            .map(|bt| chrono::DateTime::from_timestamp(bt, 0)
-                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                .unwrap_or_else(|| "Unknown".to_string()))
+        let timestamp = tx
+            .block_time
+            .map(|bt| {
+                chrono::DateTime::from_timestamp(bt, 0)
+                    .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                    .unwrap_or_else(|| "Unknown".to_string())
+            })
             .unwrap_or_else(|| "Unknown".to_string());
 
         // Get fee in SOL
@@ -2416,13 +2582,17 @@ impl OsvmApp {
         let fee_sol = fee_lamports as f64 / 1_000_000_000.0;
 
         // Get signer (first account key)
-        let from = transaction.message.static_account_keys()
+        let from = transaction
+            .message
+            .static_account_keys()
             .get(0)
             .map(|k| k.to_string())
             .unwrap_or_else(|| "Unknown".to_string());
 
         // Try to detect recipient (simplified - would need full parsing for accuracy)
-        let to = transaction.message.static_account_keys()
+        let to = transaction
+            .message
+            .static_account_keys()
             .get(1)
             .map(|k| k.to_string())
             .unwrap_or_else(|| "Unknown".to_string());
@@ -2433,8 +2603,11 @@ impl OsvmApp {
 
         // Calculate SOL amount transferred (simplified - sum of pre/post balance changes)
         let mut amount_sol = 0.0;
-        if let (Some(pre_balances), Some(post_balances)) = (meta.pre_balances.first(), meta.post_balances.first()) {
-            let change = (*post_balances as i64 - *pre_balances as i64).abs() as f64 / 1_000_000_000.0;
+        if let (Some(pre_balances), Some(post_balances)) =
+            (meta.pre_balances.first(), meta.post_balances.first())
+        {
+            let change =
+                (*post_balances as i64 - *pre_balances as i64).abs() as f64 / 1_000_000_000.0;
             amount_sol = change;
         }
 
@@ -2444,7 +2617,10 @@ impl OsvmApp {
             amount_sol,
             from,
             to,
-            match_reason: format!("Live blockchain fetch - {} - Fee: {:.6} SOL", status_str, fee_sol),
+            match_reason: format!(
+                "Live blockchain fetch - {} - Fee: {:.6} SOL",
+                status_str, fee_sol
+            ),
         })
     }
 
@@ -2477,7 +2653,7 @@ impl OsvmApp {
     /// Truncate address for display
     fn truncate_address(addr: &str) -> String {
         if addr.len() > 16 {
-            format!("{}...{}", &addr[..8], &addr[addr.len()-4..])
+            format!("{}...{}", &addr[..8], &addr[addr.len() - 4..])
         } else {
             addr.to_string()
         }
@@ -2485,7 +2661,11 @@ impl OsvmApp {
 
     pub fn add_log(&mut self, message: String) {
         let mut logs = self.logs.lock().unwrap();
-        logs.push(format!("[{}] {}", chrono::Local::now().format("%H:%M:%S"), message));
+        logs.push(format!(
+            "[{}] {}",
+            chrono::Local::now().format("%H:%M:%S"),
+            message
+        ));
         if logs.len() > 1000 {
             logs.remove(0);
         }
@@ -2540,7 +2720,8 @@ impl OsvmApp {
 
             if is_investigation {
                 // Check if investigation is already running
-                let already_running = investigation_progress.lock()
+                let already_running = investigation_progress
+                    .lock()
                     .map(|p| p.is_running)
                     .unwrap_or(false);
 
@@ -2570,12 +2751,20 @@ impl OsvmApp {
                         investigation_progress,
                         wallet_graph,
                         conversation_history,
-                    ).await;
+                    )
+                    .await;
                 });
             } else {
                 handle.spawn(async move {
                     // Run the regular agent loop with conversation history and graph updates
-                    run_chat_agent_loop(tx, query, target_wallet, conversation_history, wallet_graph).await;
+                    run_chat_agent_loop(
+                        tx,
+                        query,
+                        target_wallet,
+                        conversation_history,
+                        wallet_graph,
+                    )
+                    .await;
                 });
             }
         } else {
@@ -2607,12 +2796,14 @@ impl OsvmApp {
                                     if last.content == "Thinking..." {
                                         last.content = response.content;
                                     } else {
-                                        last.content = format!("{}\n{}", last.content, response.content);
+                                        last.content =
+                                            format!("{}\n{}", last.content, response.content);
                                     }
                                 }
                                 ChatResponseType::ToolCall(_) | ChatResponseType::ToolResult(_) => {
                                     // Append tool status to existing content
-                                    last.content = format!("{}\n{}", last.content, response.content);
+                                    last.content =
+                                        format!("{}\n{}", last.content, response.content);
                                 }
                                 ChatResponseType::FinalAnswer => {
                                     // Replace with final answer
@@ -2627,7 +2818,8 @@ impl OsvmApp {
                                 ChatResponseType::GraphUpdate(_) => {
                                     // Graph updates are handled directly in the agent loop
                                     // Just append a note to the chat
-                                    last.content = format!("{}\n📊 Graph visualization updated", last.content);
+                                    last.content =
+                                        format!("{}\n📊 Graph visualization updated", last.content);
                                 }
                             }
                             last.timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
@@ -2648,7 +2840,14 @@ impl OsvmApp {
             while let Ok(update) = rx.try_recv() {
                 updates_processed += 1;
                 match update {
-                    StreamingUpdate::Transfer { from, to, amount, token, timestamp, signature } => {
+                    StreamingUpdate::Transfer {
+                        from,
+                        to,
+                        amount,
+                        token,
+                        timestamp,
+                        signature,
+                    } => {
                         // Add transfer to graph using add_connection
                         // Enable streaming mode to prevent full relayout on each update
                         if let Ok(mut graph) = self.wallet_graph.lock() {
@@ -2660,12 +2859,12 @@ impl OsvmApp {
                             // add_connection needs addresses to already exist in nodes
                             // Use add_wallet with proper signature
                             let from_label = if from.len() > 12 {
-                                format!("{}...{}", &from[..6], &from[from.len()-4..])
+                                format!("{}...{}", &from[..6], &from[from.len() - 4..])
                             } else {
                                 from.clone()
                             };
                             let to_label = if to.len() > 12 {
-                                format!("{}...{}", &to[..6], &to[to.len()-4..])
+                                format!("{}...{}", &to[..6], &to[to.len() - 4..])
                             } else {
                                 to.clone()
                             };
@@ -2683,7 +2882,14 @@ impl OsvmApp {
                                 None,
                                 None,
                             );
-                            graph.add_connection(&from, &to, amount, token.clone(), timestamp, signature);
+                            graph.add_connection(
+                                &from,
+                                &to,
+                                amount,
+                                token.clone(),
+                                timestamp,
+                                signature,
+                            );
                         }
                         self.streaming_state.transfers_received += 1;
 
@@ -2701,7 +2907,10 @@ impl OsvmApp {
                             }
                         }
                     }
-                    StreamingUpdate::NewWallet { address, discovered_via } => {
+                    StreamingUpdate::NewWallet {
+                        address,
+                        discovered_via,
+                    } => {
                         // Add new wallet to graph with proper signature
                         if let Ok(mut graph) = self.wallet_graph.lock() {
                             // Enable streaming mode if not already enabled
@@ -2710,7 +2919,7 @@ impl OsvmApp {
                             }
 
                             let label = if address.len() > 12 {
-                                format!("{}...{}", &address[..6], &address[address.len()-4..])
+                                format!("{}...{}", &address[..6], &address[address.len() - 4..])
                             } else {
                                 address.clone()
                             };
@@ -2723,8 +2932,15 @@ impl OsvmApp {
                             );
                         }
                         if let Ok(mut logs) = self.logs.lock() {
-                            let short = if address.len() > 8 { &address[..8] } else { &address };
-                            logs.push(format!("🔴 New wallet: {}... (via {})", short, discovered_via));
+                            let short = if address.len() > 8 {
+                                &address[..8]
+                            } else {
+                                &address
+                            };
+                            logs.push(format!(
+                                "🔴 New wallet: {}... (via {})",
+                                short, discovered_via
+                            ));
                         }
                     }
                     StreamingUpdate::Status { message, is_error } => {
@@ -2778,7 +2994,9 @@ impl OsvmApp {
         }
 
         // Update activity history based on current state
-        let (nodes, edges) = self.wallet_graph.lock()
+        let (nodes, edges) = self
+            .wallet_graph
+            .lock()
             .map(|g| (g.node_count(), g.edge_count()))
             .unwrap_or((0, 0));
 
@@ -2816,10 +3034,7 @@ impl OsvmApp {
         let result = self.event_loop(&mut terminal, on_tick);
 
         disable_raw_mode()?;
-        execute!(
-            terminal.backend_mut(),
-            LeaveAlternateScreen
-        )?;
+        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
         terminal.show_cursor()?;
 
         result
@@ -2853,10 +3068,7 @@ impl OsvmApp {
         let result = self.event_loop_with_web_input(&mut terminal, &mut web_input, on_tick);
 
         disable_raw_mode()?;
-        execute!(
-            terminal.backend_mut(),
-            LeaveAlternateScreen
-        )?;
+        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
         terminal.show_cursor()?;
 
         result
@@ -2904,7 +3116,8 @@ impl OsvmApp {
     fn handle_key_event(&mut self, key: KeyEvent) {
         // Check if filter modal is active first
         let filter_modal_active = if self.active_tab == TabIndex::Graph {
-            self.wallet_graph.lock()
+            self.wallet_graph
+                .lock()
                 .map(|g| g.filter_modal.active)
                 .unwrap_or(false)
         } else {
@@ -2972,9 +3185,15 @@ impl OsvmApp {
                     self.help_scroll = self.help_scroll.saturating_sub(1);
                 } else {
                     match self.active_tab {
-                        TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_sub(1); }
-                        TabIndex::Dashboard => { self.ai_insights_scroll = self.ai_insights_scroll.saturating_sub(1); }
-                        TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_sub(1); }
+                        TabIndex::Chat => {
+                            self.chat_scroll = self.chat_scroll.saturating_sub(1);
+                        }
+                        TabIndex::Dashboard => {
+                            self.ai_insights_scroll = self.ai_insights_scroll.saturating_sub(1);
+                        }
+                        TabIndex::Logs => {
+                            self.log_scroll = self.log_scroll.saturating_sub(1);
+                        }
                         TabIndex::Graph => {
                             if let Ok(mut graph) = self.wallet_graph.lock() {
                                 graph.handle_input(GraphInput::Up);
@@ -2990,9 +3209,15 @@ impl OsvmApp {
                     self.help_scroll = self.help_scroll.saturating_add(1);
                 } else {
                     match self.active_tab {
-                        TabIndex::Chat => { self.chat_scroll = self.chat_scroll.saturating_add(1); }
-                        TabIndex::Dashboard => { self.ai_insights_scroll = self.ai_insights_scroll.saturating_add(1); }
-                        TabIndex::Logs => { self.log_scroll = self.log_scroll.saturating_add(1); }
+                        TabIndex::Chat => {
+                            self.chat_scroll = self.chat_scroll.saturating_add(1);
+                        }
+                        TabIndex::Dashboard => {
+                            self.ai_insights_scroll = self.ai_insights_scroll.saturating_add(1);
+                        }
+                        TabIndex::Logs => {
+                            self.log_scroll = self.log_scroll.saturating_add(1);
+                        }
                         TabIndex::Graph => {
                             if let Ok(mut graph) = self.wallet_graph.lock() {
                                 graph.handle_input(GraphInput::Down);
@@ -3092,25 +3317,41 @@ impl OsvmApp {
                 }
             }
             // Graph trail mode toggle (T key)
-            KeyCode::Char('t') | KeyCode::Char('T') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+            KeyCode::Char('t') | KeyCode::Char('T')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::ToggleTrailMode);
                 }
             }
             // Fork trail (F key)
-            KeyCode::Char('f') | KeyCode::Char('F') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+            KeyCode::Char('f') | KeyCode::Char('F')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::ForkTrail);
                 }
             }
             // Compare mode toggle (C key)
-            KeyCode::Char('c') | KeyCode::Char('C') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+            KeyCode::Char('c') | KeyCode::Char('C')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::ToggleCompareMode);
                 }
             }
+            // Trail-only mode toggle (\ key)
+            KeyCode::Char('\\')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
+                if let Ok(mut graph) = self.wallet_graph.lock() {
+                    graph.handle_input(GraphInput::ToggleTrailOnlyMode);
+                }
+            }
             // Delete trail branch (X key)
-            KeyCode::Char('x') | KeyCode::Char('X') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+            KeyCode::Char('x') | KeyCode::Char('X')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::DeleteTrailBranch);
                 }
@@ -3127,13 +3368,19 @@ impl OsvmApp {
                 }
             }
             // Ctrl+S - save trails
-            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) && self.active_tab == TabIndex::Graph => {
+            KeyCode::Char('s')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_tab == TabIndex::Graph =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::SaveTrails);
                 }
             }
             // Ctrl+L - load trails
-            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) && self.active_tab == TabIndex::Graph => {
+            KeyCode::Char('l')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_tab == TabIndex::Graph =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::LoadTrails);
                 }
@@ -3162,19 +3409,25 @@ impl OsvmApp {
                 }
             }
             // Layout toggle (L key) - switch between force-directed and hierarchical
-            KeyCode::Char('l') | KeyCode::Char('L') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+            KeyCode::Char('l') | KeyCode::Char('L')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::ToggleLayout);
                 }
             }
             // Minimap toggle (M key)
-            KeyCode::Char('m') | KeyCode::Char('M') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+            KeyCode::Char('m') | KeyCode::Char('M')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::ToggleMinimap);
                 }
             }
             // Heatmap toggle (H key) - switch minimap between node view and density heatmap
-            KeyCode::Char('h') | KeyCode::Char('H') if self.active_tab == TabIndex::Graph && !self.chat_input_active => {
+            KeyCode::Char('h') | KeyCode::Char('H')
+                if self.active_tab == TabIndex::Graph && !self.chat_input_active =>
+            {
                 if let Ok(mut graph) = self.wallet_graph.lock() {
                     graph.handle_input(GraphInput::ToggleHeatmap);
                 }
@@ -3260,8 +3513,11 @@ impl OsvmApp {
                     if graph.filter_modal.selected_index < max_idx {
                         graph.filter_modal.selected_index += 1;
                         // Adjust scroll offset if needed (assume 10 visible items)
-                        if graph.filter_modal.selected_index >= graph.filter_modal.scroll_offset + 15 {
-                            graph.filter_modal.scroll_offset = graph.filter_modal.selected_index.saturating_sub(14);
+                        if graph.filter_modal.selected_index
+                            >= graph.filter_modal.scroll_offset + 15
+                        {
+                            graph.filter_modal.scroll_offset =
+                                graph.filter_modal.selected_index.saturating_sub(14);
                         }
                     }
                 }
@@ -3322,7 +3578,7 @@ impl OsvmApp {
                                 self.global_search_active = false;
                             } else if self.show_help {
                                 self.show_help = false;
-                                self.help_scroll = 0;  // Reset scroll when closing
+                                self.help_scroll = 0; // Reset scroll when closing
                             } else if self.active_tab == TabIndex::Graph {
                                 // Check if search is active in graph
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
@@ -3386,12 +3642,18 @@ impl OsvmApp {
                             }
                         }
                         // Paste from clipboard (Ctrl+V) into search
-                        KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) && self.global_search_active => {
+                        KeyCode::Char('v')
+                            if key.modifiers.contains(KeyModifiers::CONTROL)
+                                && self.global_search_active =>
+                        {
                             if let Ok(mut clipboard) = arboard::Clipboard::new() {
                                 if let Ok(text) = clipboard.get_text() {
                                     self.global_search_query.push_str(&text);
                                     self.update_search_suggestions();
-                                    self.add_log(format!("📋 Pasted {} chars from clipboard", text.len()));
+                                    self.add_log(format!(
+                                        "📋 Pasted {} chars from clipboard",
+                                        text.len()
+                                    ));
                                 }
                             }
                         }
@@ -3407,10 +3669,17 @@ impl OsvmApp {
                             }
                         }
                         // CHAT INPUT HANDLING
-                        KeyCode::Char('i') if self.active_tab == TabIndex::Chat && !self.chat_input_active && !self.global_search_active => {
+                        KeyCode::Char('i')
+                            if self.active_tab == TabIndex::Chat
+                                && !self.chat_input_active
+                                && !self.global_search_active =>
+                        {
                             // Activate chat input mode
                             self.chat_input_active = true;
-                            self.add_log("Chat input activated (press Enter to send, Esc to cancel)".to_string());
+                            self.add_log(
+                                "Chat input activated (press Enter to send, Esc to cancel)"
+                                    .to_string(),
+                            );
                         }
                         KeyCode::Char(c) if self.chat_input_active => {
                             if !key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -3435,33 +3704,46 @@ impl OsvmApp {
                         }
                         // Ctrl+X to cancel running investigation
                         KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            let was_running = if let Ok(mut progress) = self.investigation_progress.lock() {
-                                if progress.is_running && !progress.cancel_requested {
-                                    progress.cancel_requested = true;
-                                    progress.status_message = "Cancellation requested...".to_string();
-                                    true
+                            let was_running =
+                                if let Ok(mut progress) = self.investigation_progress.lock() {
+                                    if progress.is_running && !progress.cancel_requested {
+                                        progress.cancel_requested = true;
+                                        progress.status_message =
+                                            "Cancellation requested...".to_string();
+                                        true
+                                    } else {
+                                        false
+                                    }
                                 } else {
                                     false
-                                }
-                            } else {
-                                false
-                            };
+                                };
                             if was_running {
-                                self.add_log("🛑 Investigation cancellation requested (Ctrl+X)".to_string());
+                                self.add_log(
+                                    "🛑 Investigation cancellation requested (Ctrl+X)".to_string(),
+                                );
                             }
                         }
                         // Chat scrolling (j/k when not in input mode)
-                        KeyCode::Char('j') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
+                        KeyCode::Char('j')
+                            if self.active_tab == TabIndex::Chat && !self.chat_input_active =>
+                        {
                             self.chat_scroll = self.chat_scroll.saturating_add(1);
                         }
-                        KeyCode::Char('k') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
+                        KeyCode::Char('k')
+                            if self.active_tab == TabIndex::Chat && !self.chat_input_active =>
+                        {
                             self.chat_scroll = self.chat_scroll.saturating_sub(1);
                         }
                         // BBS INPUT HANDLING (when input is active) - must come BEFORE 'i' handler!
-                        KeyCode::Char(c) if self.active_tab == TabIndex::BBS && {
-                            // Check if input is active (need to peek at state for guard)
-                            self.bbs_state.lock().map(|bbs| bbs.input_active).unwrap_or(false)
-                        } => {
+                        KeyCode::Char(c)
+                            if self.active_tab == TabIndex::BBS && {
+                                // Check if input is active (need to peek at state for guard)
+                                self.bbs_state
+                                    .lock()
+                                    .map(|bbs| bbs.input_active)
+                                    .unwrap_or(false)
+                            } =>
+                        {
                             if let Ok(mut bbs) = self.bbs_state.lock() {
                                 if !key.modifiers.contains(KeyModifiers::CONTROL) {
                                     bbs.input_buffer.push(c);
@@ -3479,7 +3761,10 @@ impl OsvmApp {
                                 }
                             }
                             if should_log {
-                                self.add_log("BBS input activated (press Enter to send, Esc to cancel)".to_string());
+                                self.add_log(
+                                    "BBS input activated (press Enter to send, Esc to cancel)"
+                                        .to_string(),
+                                );
                             }
                         }
                         KeyCode::Backspace if self.active_tab == TabIndex::BBS => {
@@ -3497,7 +3782,10 @@ impl OsvmApp {
                                     // Actually post the message to the database
                                     match bbs.post_message(&message) {
                                         Ok(post_id) => {
-                                            result_msg = Some(format!("📬 Posted (ID: {}): {}", post_id, message));
+                                            result_msg = Some(format!(
+                                                "📬 Posted (ID: {}): {}",
+                                                post_id, message
+                                            ));
                                             // Refresh posts to show the new message
                                             let _ = bbs.load_posts();
                                         }
@@ -3554,7 +3842,8 @@ impl OsvmApp {
                                         bbs.selected_board_index = Some(board_idx);
                                         let _ = bbs.load_posts();
                                         bbs.scroll_offset = 0;
-                                        log_msg = Some(format!("📋 Switched to board: {}", board_name));
+                                        log_msg =
+                                            Some(format!("📋 Switched to board: {}", board_name));
                                     }
                                 }
                             }
@@ -3581,52 +3870,77 @@ impl OsvmApp {
                         // FEDERATION: Refresh (r key triggers async health check)
                         KeyCode::Char('r') if self.active_tab == TabIndex::Federation => {
                             self.federation_refresh_pending = true;
-                            self.add_log("🔄 Refreshing federation with health checks...".to_string());
+                            self.add_log(
+                                "🔄 Refreshing federation with health checks...".to_string(),
+                            );
                         }
                         // FEDERATION: Scroll sessions (j/k)
-                        KeyCode::Char('j') | KeyCode::Down if self.active_tab == TabIndex::Federation => {
+                        KeyCode::Char('j') | KeyCode::Down
+                            if self.active_tab == TabIndex::Federation =>
+                        {
                             self.federation_scroll = self.federation_scroll.saturating_add(1);
                         }
-                        KeyCode::Char('k') | KeyCode::Up if self.active_tab == TabIndex::Federation => {
+                        KeyCode::Char('k') | KeyCode::Up
+                            if self.active_tab == TabIndex::Federation =>
+                        {
                             self.federation_scroll = self.federation_scroll.saturating_sub(1);
                         }
                         // FEDERATION: Navigate peer selection
-                        KeyCode::Char('n') | KeyCode::Char('N') if self.active_tab == TabIndex::Federation => {
+                        KeyCode::Char('n') | KeyCode::Char('N')
+                            if self.active_tab == TabIndex::Federation =>
+                        {
                             // Select next peer
-                            let peer_count = self.federation_state.lock()
+                            let peer_count = self
+                                .federation_state
+                                .lock()
                                 .map(|s| s.peers.len())
                                 .unwrap_or(0);
                             if peer_count > 0 {
                                 self.federation_selected_peer = Some(
                                     self.federation_selected_peer
                                         .map(|i| (i + 1) % peer_count)
-                                        .unwrap_or(0)
+                                        .unwrap_or(0),
                                 );
                             }
                         }
-                        KeyCode::Char('p') | KeyCode::Char('P') if self.active_tab == TabIndex::Federation => {
+                        KeyCode::Char('p') | KeyCode::Char('P')
+                            if self.active_tab == TabIndex::Federation =>
+                        {
                             // Select previous peer
-                            let peer_count = self.federation_state.lock()
+                            let peer_count = self
+                                .federation_state
+                                .lock()
                                 .map(|s| s.peers.len())
                                 .unwrap_or(0);
                             if peer_count > 0 {
                                 self.federation_selected_peer = Some(
                                     self.federation_selected_peer
                                         .map(|i| if i == 0 { peer_count - 1 } else { i - 1 })
-                                        .unwrap_or(peer_count - 1)
+                                        .unwrap_or(peer_count - 1),
                                 );
                             }
                         }
                         // FEDERATION: Add peer (a key opens input mode)
-                        KeyCode::Char('a') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                        KeyCode::Char('a')
+                            if self.active_tab == TabIndex::Federation
+                                && !self.federation_input_active =>
+                        {
                             self.federation_input_active = true;
                             self.federation_input_buffer.clear();
-                            self.add_log("Adding peer - enter address (e.g., http://192.168.1.100:8080)".to_string());
+                            self.add_log(
+                                "Adding peer - enter address (e.g., http://192.168.1.100:8080)"
+                                    .to_string(),
+                            );
                         }
                         // FEDERATION: Delete selected peer (d key)
-                        KeyCode::Char('d') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                        KeyCode::Char('d')
+                            if self.active_tab == TabIndex::Federation
+                                && !self.federation_input_active =>
+                        {
                             if let Some(idx) = self.federation_selected_peer {
-                                let node_id = self.federation_state.lock()
+                                let node_id = self
+                                    .federation_state
+                                    .lock()
                                     .ok()
                                     .and_then(|s| s.peers.get(idx).map(|p| p.node_id.clone()));
                                 if let Some(node_id) = node_id {
@@ -3636,80 +3950,132 @@ impl OsvmApp {
                             }
                         }
                         // FEDERATION: Input handling
-                        KeyCode::Char(c) if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                        KeyCode::Char(c)
+                            if self.active_tab == TabIndex::Federation
+                                && self.federation_input_active =>
+                        {
                             self.federation_input_buffer.push(c);
                         }
-                        KeyCode::Backspace if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                        KeyCode::Backspace
+                            if self.active_tab == TabIndex::Federation
+                                && self.federation_input_active =>
+                        {
                             self.federation_input_buffer.pop();
                         }
-                        KeyCode::Enter if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                        KeyCode::Enter
+                            if self.active_tab == TabIndex::Federation
+                                && self.federation_input_active =>
+                        {
                             if !self.federation_input_buffer.trim().is_empty() {
-                                self.federation_add_pending = Some(self.federation_input_buffer.clone());
-                                self.add_log(format!("➕ Adding peer {}...", self.federation_input_buffer));
+                                self.federation_add_pending =
+                                    Some(self.federation_input_buffer.clone());
+                                self.add_log(format!(
+                                    "➕ Adding peer {}...",
+                                    self.federation_input_buffer
+                                ));
                             }
                             self.federation_input_buffer.clear();
                             self.federation_input_active = false;
                         }
-                        KeyCode::Esc if self.active_tab == TabIndex::Federation && self.federation_input_active => {
+                        KeyCode::Esc
+                            if self.active_tab == TabIndex::Federation
+                                && self.federation_input_active =>
+                        {
                             self.federation_input_buffer.clear();
                             self.federation_input_active = false;
                             self.add_log("Add peer cancelled".to_string());
                         }
                         // FEDERATION: Session selection (s to select next, S to select prev)
-                        KeyCode::Char('s') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
-                            let session_count = self.federation_state.lock()
+                        KeyCode::Char('s')
+                            if self.active_tab == TabIndex::Federation
+                                && !self.federation_input_active =>
+                        {
+                            let session_count = self
+                                .federation_state
+                                .lock()
                                 .map(|s| s.sessions.len())
                                 .unwrap_or(0);
                             if session_count > 0 {
                                 self.federation_selected_session = Some(
                                     self.federation_selected_session
                                         .map(|i| (i + 1) % session_count)
-                                        .unwrap_or(0)
+                                        .unwrap_or(0),
                                 );
                             }
                         }
-                        KeyCode::Char('S') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
-                            let session_count = self.federation_state.lock()
+                        KeyCode::Char('S')
+                            if self.active_tab == TabIndex::Federation
+                                && !self.federation_input_active =>
+                        {
+                            let session_count = self
+                                .federation_state
+                                .lock()
                                 .map(|s| s.sessions.len())
                                 .unwrap_or(0);
                             if session_count > 0 {
                                 self.federation_selected_session = Some(
                                     self.federation_selected_session
                                         .map(|i| if i == 0 { session_count - 1 } else { i - 1 })
-                                        .unwrap_or(session_count - 1)
+                                        .unwrap_or(session_count - 1),
                                 );
                             }
                         }
                         // FEDERATION: Join selected session (J key)
-                        KeyCode::Char('J') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                        KeyCode::Char('J')
+                            if self.active_tab == TabIndex::Federation
+                                && !self.federation_input_active =>
+                        {
                             if let Some(idx) = self.federation_selected_session {
-                                let session_info = self.federation_state.lock()
+                                let session_info = self
+                                    .federation_state
+                                    .lock()
                                     .ok()
                                     .and_then(|s| s.sessions.get(idx).cloned());
                                 if let Some(session) = session_info {
                                     // Show join command
-                                    self.add_log(format!("📌 Session: {} ({})", session.name, session.session_id));
-                                    self.add_log(format!("👤 Host: {} | Users: {}", session.host_node_id, session.participant_count));
-                                    self.add_log(format!("🔗 Join: osvm collab join {}", session.session_id));
-                                    self.add_log("   (Copy command and run in new terminal to join)".to_string());
+                                    self.add_log(format!(
+                                        "📌 Session: {} ({})",
+                                        session.name, session.session_id
+                                    ));
+                                    self.add_log(format!(
+                                        "👤 Host: {} | Users: {}",
+                                        session.host_node_id, session.participant_count
+                                    ));
+                                    self.add_log(format!(
+                                        "🔗 Join: osvm collab join {}",
+                                        session.session_id
+                                    ));
+                                    self.add_log(
+                                        "   (Copy command and run in new terminal to join)"
+                                            .to_string(),
+                                    );
                                 }
                             } else {
-                                self.add_log("⚠️ Select a session first (s/S to navigate)".to_string());
+                                self.add_log(
+                                    "⚠️ Select a session first (s/S to navigate)".to_string(),
+                                );
                             }
                         }
                         // FEDERATION: Toggle annotation stream display (A key)
-                        KeyCode::Char('A') if self.active_tab == TabIndex::Federation && !self.federation_input_active => {
+                        KeyCode::Char('A')
+                            if self.active_tab == TabIndex::Federation
+                                && !self.federation_input_active =>
+                        {
                             self.federation_show_annotations = !self.federation_show_annotations;
                             if self.federation_show_annotations {
                                 // Show annotations from selected session (or all)
-                                let annotations = self.federation_state.lock()
+                                let annotations = self
+                                    .federation_state
+                                    .lock()
                                     .map(|s| s.live_annotations.clone())
                                     .unwrap_or_default();
 
                                 if annotations.is_empty() {
                                     self.add_log("📝 ANNOTATION STREAM ENABLED".to_string());
                                     self.add_log("   No annotations yet. To add:".to_string());
-                                    self.add_log("   osvm collab annotate <wallet> \"Note\"".to_string());
+                                    self.add_log(
+                                        "   osvm collab annotate <wallet> \"Note\"".to_string(),
+                                    );
                                 } else {
                                     self.add_log("📝 LIVE ANNOTATIONS:".to_string());
                                     for ann in annotations.iter().take(10) {
@@ -3720,7 +4086,10 @@ impl OsvmApp {
                                             "question" => "❓",
                                             _ => "ℹ️",
                                         };
-                                        self.add_log(format!("   {} {} @{}: {}", severity_icon, ann.timestamp, ann.author, ann.text));
+                                        self.add_log(format!(
+                                            "   {} {} @{}: {}",
+                                            severity_icon, ann.timestamp, ann.author, ann.text
+                                        ));
                                         self.add_log(format!("      Target: {}", ann.target));
                                     }
                                 }
@@ -3731,7 +4100,7 @@ impl OsvmApp {
                         KeyCode::Char('?') | KeyCode::F(1) => {
                             self.show_help = !self.show_help;
                             if !self.show_help {
-                                self.help_scroll = 0;  // Reset scroll when closing
+                                self.help_scroll = 0; // Reset scroll when closing
                             }
                         }
                         KeyCode::Tab => self.next_tab(),
@@ -3762,7 +4131,8 @@ impl OsvmApp {
                         KeyCode::Char('j') | KeyCode::Down => {
                             if self.global_search_active {
                                 if !self.search_suggestions.is_empty() {
-                                    self.selected_suggestion = (self.selected_suggestion + 1) % self.search_suggestions.len();
+                                    self.selected_suggestion = (self.selected_suggestion + 1)
+                                        % self.search_suggestions.len();
                                 }
                             } else if self.show_help {
                                 self.help_scroll = self.help_scroll.saturating_add(1);
@@ -3945,30 +4315,53 @@ impl OsvmApp {
                                 // Copy all search results to clipboard
                                 let (output, total_matches) = {
                                     let results = self.search_results_data.lock().unwrap();
-                                    let mut output = format!("Search Results for: {}\n", results.query);
-                                    output.push_str(&format!("Total Matches: {}\n", results.total_matches));
-                                    output.push_str(&format!("Timestamp: {}\n\n", results.search_timestamp));
+                                    let mut output =
+                                        format!("Search Results for: {}\n", results.query);
+                                    output.push_str(&format!(
+                                        "Total Matches: {}\n",
+                                        results.total_matches
+                                    ));
+                                    output.push_str(&format!(
+                                        "Timestamp: {}\n\n",
+                                        results.search_timestamp
+                                    ));
 
                                     if !results.wallets_found.is_empty() {
-                                        output.push_str(&format!("=== WALLETS ({}) ===\n", results.wallets_found.len()));
+                                        output.push_str(&format!(
+                                            "=== WALLETS ({}) ===\n",
+                                            results.wallets_found.len()
+                                        ));
                                         for w in &results.wallets_found {
-                                            output.push_str(&format!("{}\n  Balance: {:.4} SOL\n  Transfers: {}\n\n",
-                                                w.address, w.balance_sol, w.transfer_count));
+                                            output.push_str(&format!(
+                                                "{}\n  Balance: {:.4} SOL\n  Transfers: {}\n\n",
+                                                w.address, w.balance_sol, w.transfer_count
+                                            ));
                                         }
                                     }
 
                                     if !results.tokens_found.is_empty() {
-                                        output.push_str(&format!("=== TOKENS ({}) ===\n", results.tokens_found.len()));
+                                        output.push_str(&format!(
+                                            "=== TOKENS ({}) ===\n",
+                                            results.tokens_found.len()
+                                        ));
                                         for t in &results.tokens_found {
-                                            output.push_str(&format!("{}\n  Volume: {:.2}\n\n", t.symbol, t.volume));
+                                            output.push_str(&format!(
+                                                "{}\n  Volume: {:.2}\n\n",
+                                                t.symbol, t.volume
+                                            ));
                                         }
                                     }
 
                                     if !results.transactions_found.is_empty() {
-                                        output.push_str(&format!("=== TRANSACTIONS ({}) ===\n", results.transactions_found.len()));
+                                        output.push_str(&format!(
+                                            "=== TRANSACTIONS ({}) ===\n",
+                                            results.transactions_found.len()
+                                        ));
                                         for tx in &results.transactions_found {
-                                            output.push_str(&format!("{}\n  Time: {}\n  Amount: {:.4} SOL\n\n",
-                                                tx.signature, tx.timestamp, tx.amount_sol));
+                                            output.push_str(&format!(
+                                                "{}\n  Time: {}\n  Amount: {:.4} SOL\n\n",
+                                                tx.signature, tx.timestamp, tx.amount_sol
+                                            ));
                                         }
                                     }
 
@@ -3977,7 +4370,10 @@ impl OsvmApp {
 
                                 if let Ok(mut clipboard) = arboard::Clipboard::new() {
                                     if clipboard.set_text(&output).is_ok() {
-                                        self.add_log(format!("📋 Copied {} search results to clipboard", total_matches));
+                                        self.add_log(format!(
+                                            "📋 Copied {} search results to clipboard",
+                                            total_matches
+                                        ));
                                     }
                                 }
                             }
@@ -4070,7 +4466,8 @@ impl OsvmApp {
 
         // Render filter modal if active (only on Graph tab)
         let show_filter_modal = if self.active_tab == TabIndex::Graph {
-            self.wallet_graph.lock()
+            self.wallet_graph
+                .lock()
                 .map(|g| g.filter_modal.active)
                 .unwrap_or(false)
         } else {
@@ -4095,7 +4492,9 @@ impl OsvmApp {
     /// btop-style dashboard with all panels visible
     fn render_dashboard(&mut self, f: &mut Frame, area: Rect) {
         // Check if investigation is running or has data
-        let show_investigation_panel = self.investigation_progress.lock()
+        let show_investigation_panel = self
+            .investigation_progress
+            .lock()
             .map(|p| p.is_running || p.wallets_explored > 0)
             .unwrap_or(false);
 
@@ -4103,10 +4502,10 @@ impl OsvmApp {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Header with tabs
-                Constraint::Length(if show_investigation_panel { 7 } else { 5 }),   // Investigation or network stats
-                Constraint::Min(0),      // Content
-                Constraint::Length(2),   // Status bar (btop style)
+                Constraint::Length(3), // Header with tabs
+                Constraint::Length(if show_investigation_panel { 7 } else { 5 }), // Investigation or network stats
+                Constraint::Min(0),                                               // Content
+                Constraint::Length(2), // Status bar (btop style)
             ])
             .split(area);
 
@@ -4129,8 +4528,8 @@ impl OsvmApp {
         let left_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(60),  // Activity feed
-                Constraint::Percentage(40),  // Mini graph preview
+                Constraint::Percentage(60), // Activity feed
+                Constraint::Percentage(40), // Mini graph preview
             ])
             .split(content_chunks[0]);
 
@@ -4141,10 +4540,10 @@ impl OsvmApp {
         let right_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(7),   // Progress gauges (btop CPU style)
-                Constraint::Length(9),   // Token volumes with bars
+                Constraint::Length(7),      // Progress gauges (btop CPU style)
+                Constraint::Length(9),      // Token volumes with bars
                 Constraint::Percentage(40), // AI insights - flexible but capped at 40% of available space
-                Constraint::Min(8),      // Transfer list - minimum 8 lines, takes remaining space
+                Constraint::Min(8), // Transfer list - minimum 8 lines, takes remaining space
             ])
             .split(content_chunks[1]);
 
@@ -4162,10 +4561,10 @@ impl OsvmApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Header with tabs
-                Constraint::Min(0),      // Chat messages area
-                Constraint::Length(3),   // Input box
-                Constraint::Length(2),   // Status bar
+                Constraint::Length(3), // Header with tabs
+                Constraint::Min(0),    // Chat messages area
+                Constraint::Length(3), // Input box
+                Constraint::Length(2), // Status bar
             ])
             .split(area);
 
@@ -4191,8 +4590,12 @@ impl OsvmApp {
         for msg in messages.iter() {
             // Message header with timestamp and role
             let role_style = match msg.role.as_str() {
-                "user" => Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-                "assistant" => Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                "user" => Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+                "assistant" => Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
                 _ => Style::default(),
             };
 
@@ -4276,7 +4679,7 @@ impl OsvmApp {
     /// Render chat input box
     fn render_chat_input(&self, f: &mut Frame, area: Rect) {
         let input_text = if self.chat_input_active {
-            format!("{}█", self.chat_input)  // Show cursor
+            format!("{}█", self.chat_input) // Show cursor
         } else {
             if self.chat_input.is_empty() {
                 "Press 'i' to start typing...".to_string()
@@ -4286,7 +4689,9 @@ impl OsvmApp {
         };
 
         let input_style = if self.chat_input_active {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         };
@@ -4297,15 +4702,13 @@ impl OsvmApp {
             Style::default().fg(Color::DarkGray)
         };
 
-        let paragraph = Paragraph::new(input_text)
-            .style(input_style)
-            .block(
-                Block::default()
-                    .title(" 📝 Input ")
-                    .borders(Borders::ALL)
-                    .border_style(border_style)
-                    .border_type(BorderType::Rounded),
-            );
+        let paragraph = Paragraph::new(input_text).style(input_style).block(
+            Block::default()
+                .title(" 📝 Input ")
+                .borders(Borders::ALL)
+                .border_style(border_style)
+                .border_type(BorderType::Rounded),
+        );
 
         f.render_widget(paragraph, area);
     }
@@ -4334,34 +4737,63 @@ impl OsvmApp {
         let tabs: Vec<Span> = vec![
             Span::styled("│", Style::default().fg(Color::DarkGray)),
             if self.active_tab == TabIndex::Chat {
-                Span::styled(" ▣ Chat ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                Span::styled(
+                    " ▣ Chat ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 Span::styled(" □ Chat ", Style::default().fg(Color::DarkGray))
             },
             if self.active_tab == TabIndex::Dashboard {
-                Span::styled(" ▣ Dashboard ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                Span::styled(
+                    " ▣ Dashboard ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 Span::styled(" □ Dashboard ", Style::default().fg(Color::DarkGray))
             },
             if self.active_tab == TabIndex::Graph {
-                Span::styled(" ▣ Graph ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                Span::styled(
+                    " ▣ Graph ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 Span::styled(" □ Graph ", Style::default().fg(Color::DarkGray))
             },
             if self.active_tab == TabIndex::Logs {
-                Span::styled(" ▣ Logs ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                Span::styled(
+                    " ▣ Logs ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 Span::styled(" □ Logs ", Style::default().fg(Color::DarkGray))
             },
             if self.active_tab == TabIndex::BBS {
-                Span::styled(" ▣ BBS ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                Span::styled(
+                    " ▣ BBS ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 Span::styled(" □ BBS ", Style::default().fg(Color::DarkGray))
             },
         ];
 
         let target_short = if self.target_wallet.len() > 12 {
-            format!("{}…{}", &self.target_wallet[..4], &self.target_wallet[self.target_wallet.len()-4..])
+            format!(
+                "{}…{}",
+                &self.target_wallet[..4],
+                &self.target_wallet[self.target_wallet.len() - 4..]
+            )
         } else {
             self.target_wallet.clone()
         };
@@ -4369,31 +4801,55 @@ impl OsvmApp {
         let mut header_spans = vec![
             Span::styled(" ", Style::default()),
             Span::styled(spinner, Style::default().fg(Color::Cyan)),
-            Span::styled(" osvm", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " osvm",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" wallet-explorer ", Style::default().fg(Color::White)),
         ];
         header_spans.extend(tabs);
         header_spans.extend(vec![
             Span::styled("│", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!(" {} ", phase_str), Style::default().fg(phase_color).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{}:{:02}", mins, secs), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!(" {} ", phase_str),
+                Style::default()
+                    .fg(phase_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{}:{:02}", mins, secs),
+                Style::default().fg(Color::Yellow),
+            ),
             Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
             Span::styled("🎯 ", Style::default()),
             Span::styled(target_short, Style::default().fg(Color::Magenta)),
         ]);
 
-        let header = Paragraph::new(Line::from(header_spans))
-            .block(Block::default()
+        let header = Paragraph::new(Line::from(header_spans)).block(
+            Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Cyan)));
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
 
         f.render_widget(header, area);
     }
 
     fn render_btop_statusbar(&self, f: &mut Frame, area: Rect) {
-        let (nodes, edges, current_depth, max_depth, layout_mode) = self.wallet_graph.lock()
-            .map(|g| (g.node_count(), g.edge_count(), g.current_depth, g.max_depth, g.layout_mode.name()))
+        let (nodes, edges, current_depth, max_depth, layout_mode) = self
+            .wallet_graph
+            .lock()
+            .map(|g| {
+                (
+                    g.node_count(),
+                    g.edge_count(),
+                    g.current_depth,
+                    g.max_depth,
+                    g.layout_mode.name(),
+                )
+            })
             .unwrap_or((0, 0, 0, 0, "Force"));
 
         let logs_len = self.logs.lock().map(|l| l.len()).unwrap_or(0);
@@ -4402,82 +4858,205 @@ impl OsvmApp {
         let line1 = Line::from(vec![
             Span::styled(" ", Style::default()),
             // Tab indicators with active highlighting
-            Span::styled(if self.active_tab == TabIndex::Chat { "▐Chat▌" } else { " Chat " },
-                Style::default().fg(if self.active_tab == TabIndex::Chat { Color::Cyan } else { Color::DarkGray })),
-            Span::styled(if self.active_tab == TabIndex::Dashboard { "▐Dash▌" } else { " Dash " },
-                Style::default().fg(if self.active_tab == TabIndex::Dashboard { Color::Cyan } else { Color::DarkGray })),
-            Span::styled(if self.active_tab == TabIndex::Graph { "▐Graph▌" } else { " Graph " },
-                Style::default().fg(if self.active_tab == TabIndex::Graph { Color::Green } else { Color::DarkGray })),
-            Span::styled(if self.active_tab == TabIndex::Logs { "▐Logs▌" } else { " Logs " },
-                Style::default().fg(if self.active_tab == TabIndex::Logs { Color::Cyan } else { Color::DarkGray })),
+            Span::styled(
+                if self.active_tab == TabIndex::Chat {
+                    "▐Chat▌"
+                } else {
+                    " Chat "
+                },
+                Style::default().fg(if self.active_tab == TabIndex::Chat {
+                    Color::Cyan
+                } else {
+                    Color::DarkGray
+                }),
+            ),
+            Span::styled(
+                if self.active_tab == TabIndex::Dashboard {
+                    "▐Dash▌"
+                } else {
+                    " Dash "
+                },
+                Style::default().fg(if self.active_tab == TabIndex::Dashboard {
+                    Color::Cyan
+                } else {
+                    Color::DarkGray
+                }),
+            ),
+            Span::styled(
+                if self.active_tab == TabIndex::Graph {
+                    "▐Graph▌"
+                } else {
+                    " Graph "
+                },
+                Style::default().fg(if self.active_tab == TabIndex::Graph {
+                    Color::Green
+                } else {
+                    Color::DarkGray
+                }),
+            ),
+            Span::styled(
+                if self.active_tab == TabIndex::Logs {
+                    "▐Logs▌"
+                } else {
+                    " Logs "
+                },
+                Style::default().fg(if self.active_tab == TabIndex::Logs {
+                    Color::Cyan
+                } else {
+                    Color::DarkGray
+                }),
+            ),
             Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
             // Network stats
-            Span::styled(format!("{}w ", nodes), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{}tx ", edges), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{}log ", logs_len), Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("{}w ", nodes),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{}tx ", edges),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{}log ", logs_len),
+                Style::default()
+                    .fg(Color::Blue)
+                    .add_modifier(Modifier::BOLD),
+            ),
             // Depth indicator with visual bar
             Span::styled("│ d:", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{}/{} ", current_depth, max_depth), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("[{}] ", layout_mode), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!("{}/{} ", current_depth, max_depth),
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("[{}] ", layout_mode),
+                Style::default().fg(Color::Yellow),
+            ),
         ]);
 
         // Context-sensitive hints based on active tab
         let context_hints: Vec<Span> = match self.active_tab {
             TabIndex::Chat => vec![
                 Span::styled(" [", Style::default().fg(Color::DarkGray)),
-                Span::styled("i", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "i",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("type ", Style::default().fg(Color::DarkGray)),
                 Span::styled("[", Style::default().fg(Color::DarkGray)),
-                Span::styled("Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Enter",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("send ", Style::default().fg(Color::DarkGray)),
                 Span::styled("[", Style::default().fg(Color::DarkGray)),
-                Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "j/k",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("scroll ", Style::default().fg(Color::DarkGray)),
             ],
             TabIndex::Graph => vec![
                 Span::styled(" [", Style::default().fg(Color::DarkGray)),
-                Span::styled("j/k", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "j/k",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("select ", Style::default().fg(Color::DarkGray)),
                 Span::styled("[", Style::default().fg(Color::DarkGray)),
-                Span::styled("WASD", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "WASD",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("pan ", Style::default().fg(Color::DarkGray)),
                 Span::styled("[", Style::default().fg(Color::DarkGray)),
-                Span::styled("+/-", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "+/-",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("zoom ", Style::default().fg(Color::DarkGray)),
                 Span::styled("[", Style::default().fg(Color::DarkGray)),
-                Span::styled("L", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "L",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("layout ", Style::default().fg(Color::DarkGray)),
             ],
             TabIndex::Dashboard => vec![
                 Span::styled(" [", Style::default().fg(Color::DarkGray)),
-                Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "j/k",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("scroll insights ", Style::default().fg(Color::DarkGray)),
                 Span::styled("[", Style::default().fg(Color::DarkGray)),
-                Span::styled("3", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "3",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("→ full graph ", Style::default().fg(Color::DarkGray)),
             ],
             TabIndex::Logs => vec![
                 Span::styled(" [", Style::default().fg(Color::DarkGray)),
-                Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "j/k",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("scroll ", Style::default().fg(Color::DarkGray)),
                 Span::styled("[", Style::default().fg(Color::DarkGray)),
-                Span::styled("Home/End", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Home/End",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("top/bottom ", Style::default().fg(Color::DarkGray)),
             ],
             _ => vec![
                 Span::styled(" [", Style::default().fg(Color::DarkGray)),
-                Span::styled("Tab", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Tab",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]", Style::default().fg(Color::DarkGray)),
                 Span::styled("switch views ", Style::default().fg(Color::DarkGray)),
             ],
@@ -4487,11 +5066,19 @@ impl OsvmApp {
         line2_spans.extend(vec![
             Span::styled("│ ", Style::default().fg(Color::DarkGray)),
             Span::styled("[", Style::default().fg(Color::DarkGray)),
-            Span::styled("?", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "?",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("]", Style::default().fg(Color::DarkGray)),
             Span::styled("help ", Style::default().fg(Color::DarkGray)),
             Span::styled("[", Style::default().fg(Color::DarkGray)),
-            Span::styled("q", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "q",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("]", Style::default().fg(Color::DarkGray)),
             Span::styled("quit", Style::default().fg(Color::DarkGray)),
         ]);
@@ -4516,19 +5103,28 @@ impl OsvmApp {
             .rev()
             .take((area.height as usize).saturating_sub(if self.search_active { 3 } else { 2 }))
             .map(|line| {
-                let (icon, color) = if line.contains("✅") || line.contains("Found") || line.contains("SUCCESS") {
-                    ("▶", Color::Green)
-                } else if line.contains("⚠") || line.contains("ERROR") || line.contains("error") || line.contains("Failed") {
-                    ("▶", Color::Red)
-                } else if line.contains("🔍") || line.contains("Exploring") || line.contains("Fetching") || line.contains("Analyzing") {
-                    ("▶", Color::Blue)
-                } else if line.contains("→") || line.contains("transfer") {
-                    ("◆", Color::Yellow)
-                } else if line.contains("Phase") || line.contains("Step") {
-                    ("●", Color::Magenta)
-                } else {
-                    ("○", Color::DarkGray)
-                };
+                let (icon, color) =
+                    if line.contains("✅") || line.contains("Found") || line.contains("SUCCESS") {
+                        ("▶", Color::Green)
+                    } else if line.contains("⚠")
+                        || line.contains("ERROR")
+                        || line.contains("error")
+                        || line.contains("Failed")
+                    {
+                        ("▶", Color::Red)
+                    } else if line.contains("🔍")
+                        || line.contains("Exploring")
+                        || line.contains("Fetching")
+                        || line.contains("Analyzing")
+                    {
+                        ("▶", Color::Blue)
+                    } else if line.contains("→") || line.contains("transfer") {
+                        ("◆", Color::Yellow)
+                    } else if line.contains("Phase") || line.contains("Step") {
+                        ("●", Color::Magenta)
+                    } else {
+                        ("○", Color::DarkGray)
+                    };
 
                 // Truncate long lines
                 let max_len = (area.width as usize).saturating_sub(5);
@@ -4550,10 +5146,20 @@ impl OsvmApp {
             FilterMode::Transfers => " [TRANSFERS]",
         };
 
-        let title = format!(" ◉ Activity{} ({}/{}) ", filter_indicator, filtered.len(), output.len());
+        let title = format!(
+            " ◉ Activity{} ({}/{}) ",
+            filter_indicator,
+            filtered.len(),
+            output.len()
+        );
 
         let block = Block::default()
-            .title(Span::styled(title, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ))
             .title_alignment(Alignment::Left)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -4580,12 +5186,15 @@ impl OsvmApp {
 
     /// Mini graph preview in dashboard (btop style overview)
     fn render_mini_graph(&self, f: &mut Frame, area: Rect) {
-        let (nodes, edges) = self.wallet_graph.lock()
+        let (nodes, edges) = self
+            .wallet_graph
+            .lock()
             .map(|g| (g.node_count(), g.edge_count()))
             .unwrap_or((0, 0));
 
         // Get wallet type breakdown
-        let (funding, recipients, defi, target_count) = if let Ok(graph) = self.wallet_graph.lock() {
+        let (funding, recipients, defi, target_count) = if let Ok(graph) = self.wallet_graph.lock()
+        {
             let mut fund = 0usize;
             let mut recv = 0usize;
             let mut dex = 0usize;
@@ -4608,13 +5217,18 @@ impl OsvmApp {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3),  // Sparkline
-                Constraint::Min(0),     // Stats
+                Constraint::Length(3), // Sparkline
+                Constraint::Min(0),    // Stats
             ])
             .split(area);
 
         let block = Block::default()
-            .title(Span::styled(" ◎ Network Overview ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                " ◎ Network Overview ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::DarkGray));
@@ -4631,20 +5245,33 @@ impl OsvmApp {
         let text = vec![
             Line::from(vec![
                 Span::styled("🔴", Style::default()),
-                Span::styled(format!(" Target: {} ", target_count), Style::default().fg(Color::Red)),
+                Span::styled(
+                    format!(" Target: {} ", target_count),
+                    Style::default().fg(Color::Red),
+                ),
                 Span::styled("🟢", Style::default()),
-                Span::styled(format!(" Fund: {} ", funding), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!(" Fund: {} ", funding),
+                    Style::default().fg(Color::Green),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("🔵", Style::default()),
-                Span::styled(format!(" Recv: {} ", recipients), Style::default().fg(Color::Blue)),
+                Span::styled(
+                    format!(" Recv: {} ", recipients),
+                    Style::default().fg(Color::Blue),
+                ),
                 Span::styled("🟣", Style::default()),
-                Span::styled(format!(" DeFi: {} ", defi), Style::default().fg(Color::Magenta)),
+                Span::styled(
+                    format!(" DeFi: {} ", defi),
+                    Style::default().fg(Color::Magenta),
+                ),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled(format!("Total: {} nodes, {} edges", nodes, edges), Style::default().fg(Color::DarkGray)),
-            ]),
+            Line::from(vec![Span::styled(
+                format!("Total: {} nodes, {} edges", nodes, edges),
+                Style::default().fg(Color::DarkGray),
+            )]),
         ];
 
         let stats = Paragraph::new(text);
@@ -4653,7 +5280,9 @@ impl OsvmApp {
 
     /// btop-style progress gauges (like CPU meters)
     fn render_progress_gauges(&self, f: &mut Frame, area: Rect) {
-        let (nodes, edges) = self.wallet_graph.lock()
+        let (nodes, edges) = self
+            .wallet_graph
+            .lock()
             .map(|g| (g.node_count(), g.edge_count()))
             .unwrap_or((0, 0));
 
@@ -4672,7 +5301,12 @@ impl OsvmApp {
             .split(area);
 
         let block = Block::default()
-            .title(Span::styled(" ◈ Progress ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                " ◈ Progress ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::DarkGray));
@@ -4697,12 +5331,21 @@ impl OsvmApp {
             Span::styled("Time: ", Style::default().fg(Color::DarkGray)),
             Span::styled(format!("{}s", elapsed), Style::default().fg(Color::Cyan)),
             Span::styled(" │ Events: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{}", events_count), Style::default().fg(Color::Blue)),
+            Span::styled(
+                format!("{}", events_count),
+                Style::default().fg(Color::Blue),
+            ),
         ]));
         f.render_widget(time_text, inner[3]);
     }
 
-    fn render_gauge_line(&self, label: &str, value: usize, max: usize, color: Color) -> Paragraph<'static> {
+    fn render_gauge_line(
+        &self,
+        label: &str,
+        value: usize,
+        max: usize,
+        color: Color,
+    ) -> Paragraph<'static> {
         let pct = ((value as f64 / max as f64) * 100.0).min(100.0);
         let bar_width = 20;
         let filled = ((pct / 100.0) * bar_width as f64) as usize;
@@ -4713,7 +5356,10 @@ impl OsvmApp {
         Paragraph::new(Line::from(vec![
             Span::styled(format!("{:<10}", label), Style::default().fg(Color::White)),
             Span::styled(bar, Style::default().fg(color)),
-            Span::styled(format!(" {:>4}/{:<4}", value, max), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!(" {:>4}/{:<4}", value, max),
+                Style::default().fg(Color::DarkGray),
+            ),
         ]))
     }
 
@@ -4721,29 +5367,61 @@ impl OsvmApp {
     fn render_investigation_progress(&self, f: &mut Frame, area: Rect) {
         let progress = self.investigation_progress.lock().ok();
 
-        let (is_running, phase, wallets_explored, wallets_pending, max_wallets,
-             current_depth, max_depth, transfers_found, findings_count, elapsed_secs, status) =
-            progress.map(|p| (
-                p.is_running,
-                format!("{:?}", p.phase),
-                p.wallets_explored,
-                p.wallets_pending,
-                p.max_wallets,
-                p.current_depth,
-                p.max_depth,
-                p.transfers_found,
-                p.findings.len(),
-                p.start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0),
-                p.status_message.clone(),
-            )).unwrap_or((false, "Idle".to_string(), 0, 0, 50, 0, 3, 0, 0, 0, "No investigation".to_string()));
+        let (
+            is_running,
+            phase,
+            wallets_explored,
+            wallets_pending,
+            max_wallets,
+            current_depth,
+            max_depth,
+            transfers_found,
+            findings_count,
+            elapsed_secs,
+            status,
+        ) = progress
+            .map(|p| {
+                (
+                    p.is_running,
+                    format!("{:?}", p.phase),
+                    p.wallets_explored,
+                    p.wallets_pending,
+                    p.max_wallets,
+                    p.current_depth,
+                    p.max_depth,
+                    p.transfers_found,
+                    p.findings.len(),
+                    p.start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0),
+                    p.status_message.clone(),
+                )
+            })
+            .unwrap_or((
+                false,
+                "Idle".to_string(),
+                0,
+                0,
+                50,
+                0,
+                3,
+                0,
+                0,
+                0,
+                "No investigation".to_string(),
+            ));
 
         let title_style = if is_running {
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK)
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK)
         } else {
             Style::default().fg(Color::DarkGray)
         };
 
-        let border_color = if is_running { Color::Green } else { Color::DarkGray };
+        let border_color = if is_running {
+            Color::Green
+        } else {
+            Color::DarkGray
+        };
 
         let block = Block::default()
             .title(Span::styled(" 🔬 Investigation ", title_style))
@@ -4759,8 +5437,12 @@ impl OsvmApp {
             let hint = Paragraph::new(Line::from(vec![
                 Span::styled("Type ", Style::default().fg(Color::DarkGray)),
                 Span::styled("\"investigate\"", Style::default().fg(Color::Yellow)),
-                Span::styled(" to start autonomous forensics", Style::default().fg(Color::DarkGray)),
-            ])).alignment(Alignment::Center);
+                Span::styled(
+                    " to start autonomous forensics",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]))
+            .alignment(Alignment::Center);
             f.render_widget(hint, inner);
             return;
         }
@@ -4769,11 +5451,11 @@ impl OsvmApp {
         let content_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),  // Status line
-                Constraint::Length(1),  // Wallets progress
-                Constraint::Length(1),  // Depth progress
-                Constraint::Length(1),  // Stats line
-                Constraint::Min(0),     // Padding
+                Constraint::Length(1), // Status line
+                Constraint::Length(1), // Wallets progress
+                Constraint::Length(1), // Depth progress
+                Constraint::Length(1), // Stats line
+                Constraint::Min(0),    // Padding
             ])
             .split(inner);
 
@@ -4789,48 +5471,90 @@ impl OsvmApp {
         };
         let status_line = Paragraph::new(Line::from(vec![
             Span::styled(format!("{} ", phase_icon), Style::default()),
-            Span::styled(&status, Style::default().fg(if is_running { Color::Cyan } else { Color::Green })),
+            Span::styled(
+                &status,
+                Style::default().fg(if is_running {
+                    Color::Cyan
+                } else {
+                    Color::Green
+                }),
+            ),
         ]));
         f.render_widget(status_line, content_chunks[0]);
 
         // Wallets progress bar
-        let wallet_pct = if max_wallets > 0 { (wallets_explored as f64 / max_wallets as f64 * 100.0).min(100.0) } else { 0.0 };
+        let wallet_pct = if max_wallets > 0 {
+            (wallets_explored as f64 / max_wallets as f64 * 100.0).min(100.0)
+        } else {
+            0.0
+        };
         let wallet_bar_width = inner.width.saturating_sub(20) as usize;
         let wallet_filled = ((wallet_pct / 100.0) * wallet_bar_width as f64) as usize;
         let wallet_empty = wallet_bar_width.saturating_sub(wallet_filled);
         let wallet_line = Paragraph::new(Line::from(vec![
             Span::styled("Wallets  ", Style::default().fg(Color::White)),
             Span::styled("█".repeat(wallet_filled), Style::default().fg(Color::Green)),
-            Span::styled("░".repeat(wallet_empty), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!(" {}/{}", wallets_explored, max_wallets), Style::default().fg(Color::Cyan)),
+            Span::styled(
+                "░".repeat(wallet_empty),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!(" {}/{}", wallets_explored, max_wallets),
+                Style::default().fg(Color::Cyan),
+            ),
         ]));
         f.render_widget(wallet_line, content_chunks[1]);
 
         // Depth progress bar
-        let depth_pct = if max_depth > 0 { (current_depth as f64 / max_depth as f64 * 100.0).min(100.0) } else { 0.0 };
+        let depth_pct = if max_depth > 0 {
+            (current_depth as f64 / max_depth as f64 * 100.0).min(100.0)
+        } else {
+            0.0
+        };
         let depth_bar_width = inner.width.saturating_sub(20) as usize;
         let depth_filled = ((depth_pct / 100.0) * depth_bar_width as f64) as usize;
         let depth_empty = depth_bar_width.saturating_sub(depth_filled);
         let depth_line = Paragraph::new(Line::from(vec![
             Span::styled("Depth    ", Style::default().fg(Color::White)),
-            Span::styled("█".repeat(depth_filled), Style::default().fg(Color::Magenta)),
-            Span::styled("░".repeat(depth_empty), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!(" {}/{}", current_depth, max_depth), Style::default().fg(Color::Cyan)),
+            Span::styled(
+                "█".repeat(depth_filled),
+                Style::default().fg(Color::Magenta),
+            ),
+            Span::styled(
+                "░".repeat(depth_empty),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!(" {}/{}", current_depth, max_depth),
+                Style::default().fg(Color::Cyan),
+            ),
         ]));
         f.render_widget(depth_line, content_chunks[2]);
 
         // Stats line
         let stats_line = Paragraph::new(Line::from(vec![
             Span::styled("📨 ", Style::default()),
-            Span::styled(format!("{}", transfers_found), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!("{}", transfers_found),
+                Style::default().fg(Color::Yellow),
+            ),
             Span::styled(" transfers │ ", Style::default().fg(Color::DarkGray)),
             Span::styled("🔎 ", Style::default()),
-            Span::styled(format!("{}", findings_count), Style::default().fg(Color::Red)),
+            Span::styled(
+                format!("{}", findings_count),
+                Style::default().fg(Color::Red),
+            ),
             Span::styled(" findings │ ", Style::default().fg(Color::DarkGray)),
             Span::styled("⏱ ", Style::default()),
-            Span::styled(format!("{}s", elapsed_secs), Style::default().fg(Color::Blue)),
+            Span::styled(
+                format!("{}s", elapsed_secs),
+                Style::default().fg(Color::Blue),
+            ),
             if wallets_pending > 0 {
-                Span::styled(format!(" │ 📋 {} queued", wallets_pending), Style::default().fg(Color::DarkGray))
+                Span::styled(
+                    format!(" │ 📋 {} queued", wallets_pending),
+                    Style::default().fg(Color::DarkGray),
+                )
             } else {
                 Span::raw("")
             },
@@ -4841,10 +5565,22 @@ impl OsvmApp {
     /// Token volume bars (btop memory style)
     fn render_volume_bars(&self, f: &mut Frame, area: Rect) {
         let volumes = self.token_volumes.lock().ok();
-        let colors = [Color::Yellow, Color::Green, Color::Cyan, Color::Magenta, Color::Blue, Color::Red];
+        let colors = [
+            Color::Yellow,
+            Color::Green,
+            Color::Cyan,
+            Color::Magenta,
+            Color::Blue,
+            Color::Red,
+        ];
 
         let block = Block::default()
-            .title(Span::styled(" ◇ Token Volumes ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                " ◇ Token Volumes ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::DarkGray));
@@ -4856,7 +5592,10 @@ impl OsvmApp {
 
         if let Some(vols) = volumes {
             if vols.is_empty() {
-                lines.push(Line::from(Span::styled("  Collecting data...", Style::default().fg(Color::DarkGray))));
+                lines.push(Line::from(Span::styled(
+                    "  Collecting data...",
+                    Style::default().fg(Color::DarkGray),
+                )));
             } else {
                 let max_vol = vols.iter().map(|v| v.amount).fold(0.0_f64, f64::max);
                 let bar_width = (inner_area.width as usize).saturating_sub(20);
@@ -4865,7 +5604,9 @@ impl OsvmApp {
                 for (i, vol) in vols.iter().take(7).enumerate() {
                     let bar_len = if max_vol > 0.0 {
                         ((vol.amount / max_vol) * bar_width as f64) as usize
-                    } else { 0 };
+                    } else {
+                        0
+                    };
                     let bar = "▓".repeat(bar_len.max(1));
                     let pad = "░".repeat(bar_width.saturating_sub(bar_len));
 
@@ -4878,15 +5619,26 @@ impl OsvmApp {
                     };
 
                     lines.push(Line::from(vec![
-                        Span::styled(format!("{:>6} ", vol.symbol), Style::default().fg(colors[i % colors.len()]).add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            format!("{:>6} ", vol.symbol),
+                            Style::default()
+                                .fg(colors[i % colors.len()])
+                                .add_modifier(Modifier::BOLD),
+                        ),
                         Span::styled(bar, Style::default().fg(colors[i % colors.len()])),
                         Span::styled(pad, Style::default().fg(Color::DarkGray)),
-                        Span::styled(format!(" {:>7}", amount_str), Style::default().fg(Color::White)),
+                        Span::styled(
+                            format!(" {:>7}", amount_str),
+                            Style::default().fg(Color::White),
+                        ),
                     ]));
                 }
             }
         } else {
-            lines.push(Line::from(Span::styled("  No data", Style::default().fg(Color::DarkGray))));
+            lines.push(Line::from(Span::styled(
+                "  No data",
+                Style::default().fg(Color::DarkGray),
+            )));
         }
 
         let volume_widget = Paragraph::new(lines);
@@ -4898,7 +5650,10 @@ impl OsvmApp {
         let live_txs = self.live_transactions.lock().ok();
 
         let block = Block::default()
-            .title(Span::styled(" 🔴 LIVE Transactions ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                " 🔴 LIVE Transactions ",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Red));
@@ -4910,9 +5665,15 @@ impl OsvmApp {
 
         if let Some(txs) = live_txs {
             if txs.is_empty() {
-                items.push(ListItem::new("  🔄 Fetching live transactions...").style(Style::default().fg(Color::Yellow)));
+                items.push(
+                    ListItem::new("  🔄 Fetching live transactions...")
+                        .style(Style::default().fg(Color::Yellow)),
+                );
             } else {
-                for tx in txs.iter().take((inner_area.height as usize).saturating_sub(1)) {
+                for tx in txs
+                    .iter()
+                    .take((inner_area.height as usize).saturating_sub(1))
+                {
                     let (icon, color) = if tx.success {
                         ("✓", Color::Green)
                     } else {
@@ -4927,14 +5688,26 @@ impl OsvmApp {
 
                     items.push(ListItem::new(vec![
                         Line::from(vec![
-                            Span::styled(format!(" {} ", icon), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                            Span::styled(
+                                format!(" {} ", icon),
+                                Style::default().fg(color).add_modifier(Modifier::BOLD),
+                            ),
                             Span::styled(type_icon, Style::default()),
-                            Span::styled(format!(" {}", tx.signature), Style::default().fg(Color::Cyan)),
+                            Span::styled(
+                                format!(" {}", tx.signature),
+                                Style::default().fg(Color::Cyan),
+                            ),
                         ]),
                         Line::from(vec![
                             Span::styled("    ", Style::default()),
-                            Span::styled(format!("{} • ", tx.timestamp), Style::default().fg(Color::DarkGray)),
-                            Span::styled(format!("{:.4} SOL", tx.amount_sol), Style::default().fg(Color::Yellow)),
+                            Span::styled(
+                                format!("{} • ", tx.timestamp),
+                                Style::default().fg(Color::DarkGray),
+                            ),
+                            Span::styled(
+                                format!("{:.4} SOL", tx.amount_sol),
+                                Style::default().fg(Color::Yellow),
+                            ),
                         ]),
                     ]));
                 }
@@ -4950,9 +5723,9 @@ impl OsvmApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),   // Mini header
-                Constraint::Min(0),      // Graph + info
-                Constraint::Length(2),   // Status bar
+                Constraint::Length(1), // Mini header
+                Constraint::Min(0),    // Graph + info
+                Constraint::Length(2), // Status bar
             ])
             .split(area);
 
@@ -4967,32 +5740,54 @@ impl OsvmApp {
             let n = graph.node_count();
             let e = graph.edge_count();
             graph.render(f, graph_chunks[0]);
-            let info = graph.get_selected_info()
+            let info = graph
+                .get_selected_info()
                 .unwrap_or_else(|| "j/k to navigate".to_string());
             (n, e, info)
         } else {
             // Lock busy - show placeholder
-            let placeholder = Paragraph::new("Loading...")
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+            let placeholder = Paragraph::new("Loading...").block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::DarkGray)),
+            );
             f.render_widget(placeholder, graph_chunks[0]);
             (0, 0, "Graph updating...".to_string())
         };
 
         // Mini header
         let header = Paragraph::new(Line::from(vec![
-            Span::styled(" GRAPH ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{}w {}tx ", nodes, edges), Style::default().fg(Color::Green)),
-            Span::styled("│ j/k nav Enter toggle", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                " GRAPH ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{}w {}tx ", nodes, edges),
+                Style::default().fg(Color::Green),
+            ),
+            Span::styled(
+                "│ j/k nav Enter toggle",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]));
         f.render_widget(header, chunks[0]);
 
         // Info panel with styling
         let info = Paragraph::new(info_text)
-            .block(Block::default()
-                .title(Span::styled(" Node Info ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Cyan)))
+            .block(
+                Block::default()
+                    .title(Span::styled(
+                        " Node Info ",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
             .wrap(Wrap { trim: false });
         f.render_widget(info, graph_chunks[1]);
 
@@ -5034,27 +5829,42 @@ impl OsvmApp {
                         Color::DarkGray
                     };
                     ListItem::new(Line::from(vec![
-                        Span::styled(format!("{:>4} ", line_num), Style::default().fg(Color::DarkGray)),
+                        Span::styled(
+                            format!("{:>4} ", line_num),
+                            Style::default().fg(Color::DarkGray),
+                        ),
                         Span::styled(line.clone(), Style::default().fg(color)),
                     ]))
                 })
                 .collect();
             (items, total)
         } else {
-            (vec![ListItem::new("  Loading logs...").style(Style::default().fg(Color::DarkGray))], 0)
+            (
+                vec![ListItem::new("  Loading logs...").style(Style::default().fg(Color::DarkGray))],
+                0,
+            )
         };
 
         let header = Paragraph::new(Line::from(vec![
-            Span::styled(" LOGS ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("│ {} entries │ j/k scroll", total_logs), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                " LOGS ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("│ {} entries │ j/k scroll", total_logs),
+                Style::default().fg(Color::DarkGray),
+            ),
         ]));
         f.render_widget(header, chunks[0]);
 
-        let list = List::new(items)
-            .block(Block::default()
+        let list = List::new(items).block(
+            Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::DarkGray)));
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
         f.render_widget(list, chunks[1]);
 
         self.render_btop_statusbar(f, chunks[2]);
@@ -5078,19 +5888,40 @@ impl OsvmApp {
 
         // Header with gradient effect
         lines.push(Line::from(vec![
-            Span::styled(" ⚡ ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled("GLOBAL BLOCKCHAIN SEARCH", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(" ⚡", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " ⚡ ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "GLOBAL BLOCKCHAIN SEARCH",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " ⚡",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]));
 
         lines.push(Line::from(Span::styled(
             " Search wallets • tokens • programs • transactions across Solana ",
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
         )));
         lines.push(Line::from(""));
 
         // Search input with animated cursor
-        let cursor_char = if (self.iteration / 10) % 2 == 0 { "█" } else { "▌" };
+        let cursor_char = if (self.iteration / 10) % 2 == 0 {
+            "█"
+        } else {
+            "▌"
+        };
         lines.push(Line::from(vec![
             Span::styled(" 🔍 ", Style::default().fg(Color::Yellow)),
             Span::styled(
@@ -5100,8 +5931,16 @@ impl OsvmApp {
                     &self.global_search_query
                 },
                 Style::default()
-                    .fg(if self.global_search_query.is_empty() { Color::DarkGray } else { Color::White })
-                    .add_modifier(if !self.global_search_query.is_empty() { Modifier::BOLD } else { Modifier::ITALIC })
+                    .fg(if self.global_search_query.is_empty() {
+                        Color::DarkGray
+                    } else {
+                        Color::White
+                    })
+                    .add_modifier(if !self.global_search_query.is_empty() {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::ITALIC
+                    }),
             ),
             Span::styled(cursor_char, Style::default().fg(Color::Cyan)),
         ]));
@@ -5110,7 +5949,10 @@ impl OsvmApp {
         // Error display
         if let Some(ref error) = self.search_error {
             lines.push(Line::from(vec![
-                Span::styled(" ❌ Error: ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " ❌ Error: ",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(error, Style::default().fg(Color::LightRed)),
             ]));
             lines.push(Line::from(""));
@@ -5120,10 +5962,12 @@ impl OsvmApp {
         if self.search_loading {
             let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
             let spinner_char = spinner[(self.iteration / 5) % spinner.len()];
-            lines.push(Line::from(vec![
-                Span::styled(format!(" {} Searching blockchain...", spinner_char),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!(" {} Searching blockchain...", spinner_char),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]));
             lines.push(Line::from(""));
         }
 
@@ -5132,12 +5976,17 @@ impl OsvmApp {
             let results_text = if self.global_search_query.is_empty() {
                 " ━━━ Recent Searches ━━━".to_string()
             } else {
-                format!(" ━━━ {} Smart Suggestions ━━━", self.search_suggestions.len())
+                format!(
+                    " ━━━ {} Smart Suggestions ━━━",
+                    self.search_suggestions.len()
+                )
             };
 
             lines.push(Line::from(Span::styled(
                 results_text,
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             )));
             lines.push(Line::from(""));
 
@@ -5161,20 +6010,37 @@ impl OsvmApp {
 
                 // Main suggestion line with truncation for long addresses
                 let display_text = if suggestion.text.len() > 60 {
-                    format!("{}...{}", &suggestion.text[..28], &suggestion.text[suggestion.text.len()-28..])
+                    format!(
+                        "{}...{}",
+                        &suggestion.text[..28],
+                        &suggestion.text[suggestion.text.len() - 28..]
+                    )
                 } else {
                     suggestion.text.clone()
                 };
 
                 lines.push(Line::from(vec![
-                    Span::styled(prefix, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        prefix,
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                     Span::raw(icon),
                     Span::raw(" "),
                     Span::styled(
                         display_text,
                         Style::default()
-                            .fg(if is_selected { Color::White } else { Color::Gray })
-                            .add_modifier(if is_selected { Modifier::BOLD | Modifier::UNDERLINED } else { Modifier::empty() })
+                            .fg(if is_selected {
+                                Color::White
+                            } else {
+                                Color::Gray
+                            })
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD | Modifier::UNDERLINED
+                            } else {
+                                Modifier::empty()
+                            }),
                     ),
                 ]));
 
@@ -5183,21 +6049,32 @@ impl OsvmApp {
                     Span::raw("     "),
                     Span::styled(
                         &suggestion.description,
-                        Style::default().fg(if is_selected { Color::White } else { Color::DarkGray })
+                        Style::default().fg(if is_selected {
+                            Color::White
+                        } else {
+                            Color::DarkGray
+                        }),
                     ),
                     Span::raw("  "),
                     Span::styled(score_bar, Style::default().fg(type_color)),
                     Span::styled(score_empty, Style::default().fg(Color::DarkGray)),
-                    Span::styled(format!(" {}%", suggestion.match_score),
-                        Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!(" {}%", suggestion.match_score),
+                        Style::default().fg(Color::DarkGray),
+                    ),
                 ]));
                 lines.push(Line::from(""));
             }
 
             if self.search_suggestions.len() > 10 {
                 lines.push(Line::from(Span::styled(
-                    format!(" ... and {} more results", self.search_suggestions.len() - 10),
-                    Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+                    format!(
+                        " ... and {} more results",
+                        self.search_suggestions.len() - 10
+                    ),
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC),
                 )));
             }
         } else if !self.global_search_query.is_empty() {
@@ -5207,15 +6084,15 @@ impl OsvmApp {
             ]));
             lines.push(Line::from(Span::styled(
                 "    • Full wallet address (32-44 chars)",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
             lines.push(Line::from(Span::styled(
                 "    • Token symbol (e.g., SOL, USDC, BONK)",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
             lines.push(Line::from(Span::styled(
                 "    • Program ID or transaction signature",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
         }
 
@@ -5226,28 +6103,62 @@ impl OsvmApp {
             Style::default().fg(Color::DarkGray)
         )));
         lines.push(Line::from(vec![
-            Span::styled(" ↑↓", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " ↑↓",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" Navigate  ", Style::default().fg(Color::White)),
-            Span::styled("⏎", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "⏎",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" Select  ", Style::default().fg(Color::White)),
-            Span::styled("ESC", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "ESC",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" Close  ", Style::default().fg(Color::White)),
-            Span::styled("Ctrl+K", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Ctrl+K",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" Search Anywhere", Style::default().fg(Color::White)),
         ]));
 
         let search_widget = Paragraph::new(lines)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Double)
-                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-                .title(vec![
-                    Span::raw(" "),
-                    Span::styled("⌕", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                    Span::raw(" "),
-                    Span::styled("OSVM Search", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::raw(" "),
-                ]))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Double)
+                    .border_style(
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .title(vec![
+                        Span::raw(" "),
+                        Span::styled(
+                            "⌕",
+                            Style::default()
+                                .fg(Color::Yellow)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(
+                            "OSVM Search",
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(" "),
+                    ]),
+            )
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(search_widget, modal_area);
@@ -5282,8 +6193,12 @@ impl OsvmApp {
         };
 
         // Center the modal (50% width, 60% height)
-        let width = (area.width * 60 / 100).max(50).min(area.width.saturating_sub(4));
-        let height = (area.height * 70 / 100).max(20).min(area.height.saturating_sub(4));
+        let width = (area.width * 60 / 100)
+            .max(50)
+            .min(area.width.saturating_sub(4));
+        let height = (area.height * 70 / 100)
+            .max(20)
+            .min(area.height.saturating_sub(4));
         let x = (area.width.saturating_sub(width)) / 2;
         let y = (area.height.saturating_sub(height)) / 2;
         let modal_area = Rect::new(x, y, width, height);
@@ -5294,7 +6209,11 @@ impl OsvmApp {
         // Create main block
         let block = Block::default()
             .title(" 🔍 Filter Graph ")
-            .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan))
             .style(Style::default().bg(Color::Black));
@@ -5330,7 +6249,11 @@ impl OsvmApp {
             .block(Block::default().borders(Borders::BOTTOM))
             .select(tab_idx)
             .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            );
 
         f.render_widget(tabs_widget, chunks[0]);
 
@@ -5344,7 +6267,10 @@ impl OsvmApp {
             .map(|(idx, (name, selected))| {
                 let checkbox = if *selected { "☑" } else { "☐" };
                 let style = if idx == selected_index {
-                    Style::default().fg(Color::Yellow).bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD)
                 } else if *selected {
                     Style::default().fg(Color::Green)
                 } else {
@@ -5353,7 +6279,7 @@ impl OsvmApp {
 
                 // Truncate long addresses
                 let display_name = if name.len() > 50 {
-                    format!("{}...{}", &name[..20], &name[name.len()-20..])
+                    format!("{}...{}", &name[..20], &name[name.len() - 20..])
                 } else {
                     name.clone()
                 };
@@ -5365,8 +6291,7 @@ impl OsvmApp {
             })
             .collect();
 
-        let list = List::new(display_items)
-            .block(Block::default());
+        let list = List::new(display_items).block(Block::default());
 
         f.render_widget(list, chunks[1]);
 
@@ -5407,10 +6332,21 @@ impl OsvmApp {
 
         let help_lines = vec![
             Line::from(""),
-            Line::from(Span::styled(" osvm wallet-explorer ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-            Line::from(Span::styled(" Real-time blockchain investigation TUI ", Style::default().fg(Color::DarkGray))),
+            Line::from(Span::styled(
+                " osvm wallet-explorer ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                " Real-time blockchain investigation TUI ",
+                Style::default().fg(Color::DarkGray),
+            )),
             Line::from(""),
-            Line::from(Span::styled(" ─── Navigation ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── Navigation ──────────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   0-6          Switch views (Chat/Dash/Graph/Logs/Search/BBS/Fed)"),
             Line::from("   Tab          Cycle through views"),
             Line::from("   ?/F1         Toggle this help"),
@@ -5418,7 +6354,10 @@ impl OsvmApp {
             Line::from("   Ctrl+C       Force quit"),
             Line::from("   Ctrl+V       Paste from clipboard (in search modal)"),
             Line::from(""),
-            Line::from(Span::styled(" ─── Graph View ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── Graph View ──────────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   j/k/↑/↓      Select node up/down"),
             Line::from("   h/l/←/→      Navigate left/right (h/l also pan when no selection)"),
             Line::from("   W/A/S/D      Pan viewport up/left/down/right"),
@@ -5436,7 +6375,10 @@ impl OsvmApp {
             Line::from("   Space        Expand or collapse node"),
             Line::from("   `            Open filter modal (wallets/programs/tokens)"),
             Line::from(""),
-            Line::from(Span::styled(" ─── Trail Mode (when T active) ──────────────────────────────", Style::default().fg(Color::Magenta))),
+            Line::from(Span::styled(
+                " ─── Trail Mode (when T active) ──────────────────────────────",
+                Style::default().fg(Color::Magenta),
+            )),
             Line::from("   ←/→          Navigate trail edges (select next/prev hop)"),
             Line::from("   Enter        Confirm edge selection and advance trail"),
             Line::from("   F            Fork current trail (create branch from here)"),
@@ -5447,19 +6389,31 @@ impl OsvmApp {
             Line::from("   Ctrl+S       Save all trails to disk (~/.osvm/trails/)"),
             Line::from("   Ctrl+L       Load trails from disk"),
             Line::from(""),
-            Line::from(Span::styled(" ─── Chat View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── Chat View ───────────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   i            Activate chat input mode"),
             Line::from("   Enter        Send message (when in input mode)"),
             Line::from("   Esc          Cancel input"),
             Line::from("   j/k          Scroll chat history (when not typing)"),
             Line::from(""),
-            Line::from(Span::styled(" ─── Dashboard View ──────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── Dashboard View ──────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   j/k          Scroll AI Insights panel"),
             Line::from(""),
-            Line::from(Span::styled(" ─── Logs View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── Logs View ───────────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   j/k          Scroll line by line"),
             Line::from(""),
-            Line::from(Span::styled(" ─── BBS View ────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── BBS View ────────────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   i            Activate message input"),
             Line::from("   Enter        Send message (when typing)"),
             Line::from("   Esc          Cancel input"),
@@ -5467,7 +6421,10 @@ impl OsvmApp {
             Line::from("   1-9          Select board by number"),
             Line::from("   r            Refresh boards and posts"),
             Line::from(""),
-            Line::from(Span::styled(" ─── Federation View ─────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── Federation View ─────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   r            Refresh peer status from disk"),
             Line::from("   a            Add new peer (enter address, then Enter)"),
             Line::from("   d            Delete selected peer"),
@@ -5478,20 +6435,29 @@ impl OsvmApp {
             Line::from("   j/k/↑/↓      Scroll sessions list"),
             Line::from("   Esc          Cancel add peer input"),
             Line::from(""),
-            Line::from(Span::styled(" ─── Legend ──────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── Legend ──────────────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   🔴 Target    Red wallet being investigated"),
             Line::from("   🟢 Funding   Green wallets that funded the target"),
             Line::from("   🔵 Recipient Blue wallets that received from target"),
             Line::from("   🟣 DeFi      Magenta DEX/DeFi protocol addresses"),
             Line::from("   🟡 Token     Yellow token contract addresses"),
             Line::from(""),
-            Line::from(Span::styled(" ─── About ───────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                " ─── About ───────────────────────────────────────────────────",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from("   OSVM CLI provides AI-powered blockchain investigation"),
             Line::from("   for Solana wallets using natural language queries."),
             Line::from("   Use BFS exploration to discover connections (depth 1-20)."),
             Line::from("   Adjust exploration depth with [ and ] keys in Graph view."),
             Line::from(""),
-            Line::from(Span::styled(" Use ↑/↓ or j/k to scroll this help | Press ? or Esc to close ", Style::default().fg(Color::DarkGray))),
+            Line::from(Span::styled(
+                " Use ↑/↓ or j/k to scroll this help | Press ? or Esc to close ",
+                Style::default().fg(Color::DarkGray),
+            )),
         ];
 
         let total_lines = help_lines.len();
@@ -5506,14 +6472,18 @@ impl OsvmApp {
             .collect();
 
         let help = Paragraph::new(visible_lines)
-            .block(Block::default()
-                .title(Span::styled(
-                    format!(" Help ({}/{}) ", actual_scroll + 1, total_lines),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-                ))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Double)
-                .border_style(Style::default().fg(Color::Cyan)))
+            .block(
+                Block::default()
+                    .title(Span::styled(
+                        format!(" Help ({}/{}) ", actual_scroll + 1, total_lines),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Double)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(help, popup_area);
@@ -5524,14 +6494,17 @@ impl OsvmApp {
         // Calculate total lines for scroll indicator
         let block = Block::default()
             .title(Span::styled(
-                format!(" 💡 AI Insights {} ",
+                format!(
+                    " 💡 AI Insights {} ",
                     if self.ai_insights_scroll > 0 {
                         format!("(scroll: {})", self.ai_insights_scroll)
                     } else {
                         String::new()
                     }
                 ),
-                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -5552,7 +6525,11 @@ impl OsvmApp {
                 if let Some(ref trail) = graph.investigation_trail {
                     // Trail header with branch info
                     let branch_indicator = if graph.all_trails.len() > 1 {
-                        format!(" [{}/{}]", graph.active_trail_idx + 1, graph.all_trails.len())
+                        format!(
+                            " [{}/{}]",
+                            graph.active_trail_idx + 1,
+                            graph.all_trails.len()
+                        )
                     } else {
                         String::new()
                     };
@@ -5560,8 +6537,13 @@ impl OsvmApp {
                     lines.push(Line::from(vec![
                         Span::styled(" 🔍 ", Style::default()),
                         Span::styled(
-                            format!("TRAIL ANALYSIS: '{}'{}", trail.branch_name, branch_indicator),
-                            Style::default().fg(Color::Rgb(30, 144, 255)).add_modifier(Modifier::BOLD)
+                            format!(
+                                "TRAIL ANALYSIS: '{}'{}",
+                                trail.branch_name, branch_indicator
+                            ),
+                            Style::default()
+                                .fg(Color::Rgb(30, 144, 255))
+                                .add_modifier(Modifier::BOLD),
                         ),
                     ]));
 
@@ -5573,30 +6555,41 @@ impl OsvmApp {
                     lines.push(Line::from(vec![
                         Span::styled("   ", Style::default()),
                         Span::styled(
-                            format!("📍 {} steps • 💰 {:.2} total • {} tokens",
+                            format!(
+                                "📍 {} steps • 💰 {:.2} total • {} tokens",
                                 step_count,
                                 total_flow,
                                 tokens.len()
                             ),
-                            Style::default().fg(Color::Cyan)
+                            Style::default().fg(Color::Cyan),
                         ),
                     ]));
 
                     // Risk wallets in trail
-                    let critical_count = trail.steps.iter()
-                        .filter(|s| matches!(s.risk_level, crate::utils::tui::graph::RiskLevel::Critical))
+                    let critical_count = trail
+                        .steps
+                        .iter()
+                        .filter(|s| {
+                            matches!(s.risk_level, crate::utils::tui::graph::RiskLevel::Critical)
+                        })
                         .count();
-                    let high_count = trail.steps.iter()
-                        .filter(|s| matches!(s.risk_level, crate::utils::tui::graph::RiskLevel::High))
+                    let high_count = trail
+                        .steps
+                        .iter()
+                        .filter(|s| {
+                            matches!(s.risk_level, crate::utils::tui::graph::RiskLevel::High)
+                        })
                         .count();
 
                     if critical_count > 0 || high_count > 0 {
                         lines.push(Line::from(vec![
                             Span::styled("   ", Style::default()),
                             Span::styled(
-                                format!("⚠ Trail risk: {} critical, {} high-risk wallets",
-                                    critical_count, high_count),
-                                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                                format!(
+                                    "⚠ Trail risk: {} critical, {} high-risk wallets",
+                                    critical_count, high_count
+                                ),
+                                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                             ),
                         ]));
                     }
@@ -5614,7 +6607,11 @@ impl OsvmApp {
 
                     for (i, step) in display_steps.enumerate() {
                         let addr_short = if step.wallet_address.len() > 8 {
-                            format!("{}..{}", &step.wallet_address[..4], &step.wallet_address[step.wallet_address.len()-4..])
+                            format!(
+                                "{}..{}",
+                                &step.wallet_address[..4],
+                                &step.wallet_address[step.wallet_address.len() - 4..]
+                            )
                         } else {
                             step.wallet_address.clone()
                         };
@@ -5627,7 +6624,8 @@ impl OsvmApp {
                         };
 
                         if i > 0 {
-                            flow_spans.push(Span::styled(" → ", Style::default().fg(Color::DarkGray)));
+                            flow_spans
+                                .push(Span::styled(" → ", Style::default().fg(Color::DarkGray)));
                         }
                         flow_spans.push(Span::styled(addr_short, Style::default().fg(risk_color)));
                     }
@@ -5635,7 +6633,7 @@ impl OsvmApp {
                     if trail.steps.len() > 5 {
                         flow_spans.push(Span::styled(
                             format!(" +{} more", trail.steps.len() - 5),
-                            Style::default().fg(Color::DarkGray)
+                            Style::default().fg(Color::DarkGray),
                         ));
                     }
 
@@ -5647,8 +6645,13 @@ impl OsvmApp {
                             Span::styled("   ", Style::default()),
                             Span::styled("Tokens: ", Style::default().fg(Color::DarkGray)),
                             Span::styled(
-                                tokens.iter().take(5).cloned().collect::<Vec<_>>().join(", "),
-                                Style::default().fg(Color::Yellow)
+                                tokens
+                                    .iter()
+                                    .take(5)
+                                    .cloned()
+                                    .collect::<Vec<_>>()
+                                    .join(", "),
+                                Style::default().fg(Color::Yellow),
                             ),
                         ]));
                     }
@@ -5658,7 +6661,10 @@ impl OsvmApp {
                         lines.push(Line::from(vec![
                             Span::styled("   ", Style::default()),
                             Span::styled("💭 ", Style::default()),
-                            Span::styled(hypothesis.clone(), Style::default().fg(Color::LightMagenta)),
+                            Span::styled(
+                                hypothesis.clone(),
+                                Style::default().fg(Color::LightMagenta),
+                            ),
                         ]));
                     }
 
@@ -5667,16 +6673,20 @@ impl OsvmApp {
                         lines.push(Line::from(vec![
                             Span::styled("   ", Style::default()),
                             Span::styled(
-                                format!("📊 Compare mode: {} branches visible", graph.all_trails.len()),
-                                Style::default().fg(Color::Cyan)
+                                format!(
+                                    "📊 Compare mode: {} branches visible",
+                                    graph.all_trails.len()
+                                ),
+                                Style::default().fg(Color::Cyan),
                             ),
                         ]));
                     }
 
                     // Separator between trail and graph analysis
-                    lines.push(Line::from(vec![
-                        Span::styled(" ═══════════════════════════════", Style::default().fg(Color::Rgb(30, 144, 255))),
-                    ]));
+                    lines.push(Line::from(vec![Span::styled(
+                        " ═══════════════════════════════",
+                        Style::default().fg(Color::Rgb(30, 144, 255)),
+                    )]));
                 }
             }
 
@@ -5685,27 +6695,33 @@ impl OsvmApp {
 
             // Display critical alerts first (highest priority)
             for alert in &risk_explanation.alerts {
-                let color = if alert.contains("CRITICAL") || alert.contains("🚨") || alert.contains("🔴") {
-                    Color::Red
-                } else if alert.contains("RAPID") || alert.contains("⚡") {
-                    Color::LightRed
-                } else if alert.contains("CIRCULAR") || alert.contains("🔄") {
-                    Color::Yellow
-                } else {
-                    Color::LightYellow
-                };
+                let color =
+                    if alert.contains("CRITICAL") || alert.contains("🚨") || alert.contains("🔴")
+                    {
+                        Color::Red
+                    } else if alert.contains("RAPID") || alert.contains("⚡") {
+                        Color::LightRed
+                    } else if alert.contains("CIRCULAR") || alert.contains("🔄") {
+                        Color::Yellow
+                    } else {
+                        Color::LightYellow
+                    };
 
                 lines.push(Line::from(vec![
                     Span::styled(" ", Style::default()),
-                    Span::styled(alert.clone(), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        alert.clone(),
+                        Style::default().fg(color).add_modifier(Modifier::BOLD),
+                    ),
                 ]));
             }
 
             // Add separator after alerts if there are any
             if !risk_explanation.alerts.is_empty() {
-                lines.push(Line::from(vec![
-                    Span::styled(" ─────────────────────────────", Style::default().fg(Color::DarkGray)),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    " ─────────────────────────────",
+                    Style::default().fg(Color::DarkGray),
+                )]));
             }
 
             // Show overall risk score with level indicator (prominent)
@@ -5719,33 +6735,46 @@ impl OsvmApp {
             lines.push(Line::from(vec![
                 Span::styled(" ", Style::default()),
                 Span::styled(
-                    format!("{} RISK SCORE: {:.0}/100 ({:?})", risk_icon, risk_explanation.score, risk_explanation.level),
-                    Style::default().fg(risk_color).add_modifier(Modifier::BOLD)
+                    format!(
+                        "{} RISK SCORE: {:.0}/100 ({:?})",
+                        risk_icon, risk_explanation.score, risk_explanation.level
+                    ),
+                    Style::default().fg(risk_color).add_modifier(Modifier::BOLD),
                 ),
             ]));
 
             // Add actionable context for risk score interpretation
             let risk_context = match risk_explanation.level {
-                crate::utils::tui::graph::RiskLevel::Critical => "  ⚠ Action: Review mixer patterns, verify source wallets, document chain",
-                crate::utils::tui::graph::RiskLevel::High => "  ⚠ Action: Verify counterparties, analyze timing patterns, export data",
-                crate::utils::tui::graph::RiskLevel::Medium => "  ℹ Action: Monitor for changes, track volume spikes, note patterns",
-                crate::utils::tui::graph::RiskLevel::Low => "  ✓ Status: Normal patterns observed, continue routine monitoring",
+                crate::utils::tui::graph::RiskLevel::Critical => {
+                    "  ⚠ Action: Review mixer patterns, verify source wallets, document chain"
+                }
+                crate::utils::tui::graph::RiskLevel::High => {
+                    "  ⚠ Action: Verify counterparties, analyze timing patterns, export data"
+                }
+                crate::utils::tui::graph::RiskLevel::Medium => {
+                    "  ℹ Action: Monitor for changes, track volume spikes, note patterns"
+                }
+                crate::utils::tui::graph::RiskLevel::Low => {
+                    "  ✓ Status: Normal patterns observed, continue routine monitoring"
+                }
             };
-            lines.push(Line::from(vec![
-                Span::styled(risk_context, Style::default().fg(Color::DarkGray)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                risk_context,
+                Style::default().fg(Color::DarkGray),
+            )]));
 
             // Display detailed reasons (explanations) - increased to 10 for expanded panel
             if !risk_explanation.reasons.is_empty() {
-                lines.push(Line::from(vec![
-                    Span::styled("  Reasons:", Style::default().fg(Color::Cyan)),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    "  Reasons:",
+                    Style::default().fg(Color::Cyan),
+                )]));
             }
             for (idx, reason) in risk_explanation.reasons.iter().take(10).enumerate() {
                 let prefix = if idx == risk_explanation.reasons.len() - 1 || idx == 9 {
-                    "   └─ "  // Last item
+                    "   └─ " // Last item
                 } else {
-                    "   ├─ "  // Regular item
+                    "   ├─ " // Regular item
                 };
                 lines.push(Line::from(vec![
                     Span::styled(prefix, Style::default().fg(Color::DarkGray)),
@@ -5769,35 +6798,47 @@ impl OsvmApp {
                 Span::styled(" ", Style::default()),
                 Span::styled(
                     format!("{} Behavior: {:?}", behavior_icon, behavior),
-                    Style::default().fg(behavior_color)
+                    Style::default().fg(behavior_color),
                 ),
             ]));
 
             // Entity clustering info (lazily computed and cached)
             let entity_clusters = graph.get_entity_clusters();
             if !entity_clusters.is_empty() {
-                let total_clustered: usize = entity_clusters.iter()
+                let total_clustered: usize = entity_clusters
+                    .iter()
                     .map(|c| c.wallet_addresses.len())
                     .sum();
 
                 lines.push(Line::from(vec![
                     Span::styled(" ", Style::default()),
                     Span::styled(
-                        format!("🔗 {} entity clusters ({} wallets coordinated)",
-                            entity_clusters.len(), total_clustered),
-                        Style::default().fg(Color::LightMagenta).add_modifier(Modifier::BOLD)
+                        format!(
+                            "🔗 {} entity clusters ({} wallets coordinated)",
+                            entity_clusters.len(),
+                            total_clustered
+                        ),
+                        Style::default()
+                            .fg(Color::LightMagenta)
+                            .add_modifier(Modifier::BOLD),
                     ),
                 ]));
 
                 // Show top cluster if significant
-                if let Some(largest) = entity_clusters.iter().max_by_key(|c| c.wallet_addresses.len()) {
+                if let Some(largest) = entity_clusters
+                    .iter()
+                    .max_by_key(|c| c.wallet_addresses.len())
+                {
                     if largest.wallet_addresses.len() >= 3 {
                         lines.push(Line::from(vec![
                             Span::styled("   ", Style::default()),
                             Span::styled(
-                                format!("Largest: {} wallets, {:.0}% confidence",
-                                    largest.wallet_addresses.len(), largest.confidence * 100.0),
-                                Style::default().fg(Color::DarkGray)
+                                format!(
+                                    "Largest: {} wallets, {:.0}% confidence",
+                                    largest.wallet_addresses.len(),
+                                    largest.confidence * 100.0
+                                ),
+                                Style::default().fg(Color::DarkGray),
                             ),
                         ]));
                     }
@@ -5806,7 +6847,8 @@ impl OsvmApp {
 
             // Investigation progress
             let progress_pct = if self.wallets_explored > 0 {
-                (self.wallets_explored as f64 / (self.wallets_explored + 10) as f64 * 100.0).min(100.0)
+                (self.wallets_explored as f64 / (self.wallets_explored + 10) as f64 * 100.0)
+                    .min(100.0)
             } else {
                 0.0
             };
@@ -5814,13 +6856,21 @@ impl OsvmApp {
             lines.push(Line::from(vec![
                 Span::styled(" ", Style::default()),
                 Span::styled(
-                    format!("📊 {:.0}% | {} wallets | {} nodes | {}s",
-                        progress_pct, self.wallets_explored, graph.node_count(), elapsed),
-                    Style::default().fg(Color::DarkGray)
+                    format!(
+                        "📊 {:.0}% | {} wallets | {} nodes | {}s",
+                        progress_pct,
+                        self.wallets_explored,
+                        graph.node_count(),
+                        elapsed
+                    ),
+                    Style::default().fg(Color::DarkGray),
                 ),
             ]));
         } else {
-            lines.push(Line::from(Span::styled("  Initializing graph analysis...", Style::default().fg(Color::DarkGray))));
+            lines.push(Line::from(Span::styled(
+                "  Initializing graph analysis...",
+                Style::default().fg(Color::DarkGray),
+            )));
         }
 
         // Apply scroll offset and handle overflow
@@ -5850,7 +6900,9 @@ impl OsvmApp {
                 Span::styled("  ", Style::default()),
                 Span::styled(
                     format!("⋮ {} more (j/k to scroll)", remaining),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]));
         }
@@ -5865,27 +6917,39 @@ impl OsvmApp {
         use std::io::Write;
 
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("investigation_{}_{}.json", self.target_wallet[..8].to_string(), timestamp);
+        let filename = format!(
+            "investigation_{}_{}.json",
+            self.target_wallet[..8].to_string(),
+            timestamp
+        );
 
-        let (nodes, edges, risk_analysis, behavior) = self.wallet_graph.lock()
+        let (nodes, edges, risk_analysis, behavior) = self
+            .wallet_graph
+            .lock()
             .map(|mut g| {
                 let risk = g.get_cached_risk_explanation();
                 let behavior_type = g.classify_wallet_behavior(0);
                 (g.node_count(), g.edge_count(), risk, behavior_type)
             })
-            .unwrap_or((0, 0, crate::utils::tui::graph::RiskExplanation {
-                score: 0.0,
-                level: crate::utils::tui::graph::RiskLevel::Low,
-                reasons: vec![],
-                alerts: vec![],
-            }, crate::utils::tui::graph::WalletBehaviorType::EOA));
+            .unwrap_or((
+                0,
+                0,
+                crate::utils::tui::graph::RiskExplanation {
+                    score: 0.0,
+                    level: crate::utils::tui::graph::RiskLevel::Low,
+                    reasons: vec![],
+                    alerts: vec![],
+                },
+                crate::utils::tui::graph::WalletBehaviorType::EOA,
+            ));
 
         // Save to database
         if let Ok(mut db) = crate::utils::investigation_db::InvestigationDB::open() {
             let inv = crate::utils::investigation_db::Investigation {
                 id: None,
                 wallet_address: self.target_wallet.clone(),
-                started_at: chrono::Utc::now() - chrono::Duration::seconds(self.start_time.elapsed().as_secs() as i64),
+                started_at: chrono::Utc::now()
+                    - chrono::Duration::seconds(self.start_time.elapsed().as_secs() as i64),
                 completed_at: Some(chrono::Utc::now()),
                 risk_score: risk_analysis.score,
                 risk_level: format!("{:?}", risk_analysis.level),
@@ -5895,8 +6959,10 @@ impl OsvmApp {
                 depth_reached: self.depth_reached,
                 alerts: risk_analysis.alerts.clone(),
                 reasons: risk_analysis.reasons.clone(),
-                notes: Some(format!("API Calls: {}, SOL In: {:.2}, SOL Out: {:.2}",
-                    self.api_calls, self.total_sol_in, self.total_sol_out)),
+                notes: Some(format!(
+                    "API Calls: {}, SOL In: {:.2}, SOL Out: {:.2}",
+                    self.api_calls, self.total_sol_in, self.total_sol_out
+                )),
             };
             let _ = db.save_investigation(&inv); // Ignore errors for now
         }
@@ -5937,8 +7003,12 @@ impl OsvmApp {
         // Check filter mode
         let filter_match = match self.filter_mode {
             FilterMode::All => true,
-            FilterMode::Errors => line.contains("ERROR") || line.contains("error") || line.contains("⚠"),
-            FilterMode::Success => line.contains("✅") || line.contains("Found") || line.contains("SUCCESS"),
+            FilterMode::Errors => {
+                line.contains("ERROR") || line.contains("error") || line.contains("⚠")
+            }
+            FilterMode::Success => {
+                line.contains("✅") || line.contains("Found") || line.contains("SUCCESS")
+            }
             FilterMode::Transfers => line.contains("transfer") || line.contains("→"),
         };
 
@@ -5948,7 +7018,8 @@ impl OsvmApp {
 
         // Check search query
         if !self.search_query.is_empty() {
-            line.to_lowercase().contains(&self.search_query.to_lowercase())
+            line.to_lowercase()
+                .contains(&self.search_query.to_lowercase())
         } else {
             true
         }
@@ -5973,88 +7044,172 @@ impl OsvmApp {
 
         // TARGET WALLET
         let truncated_wallet = if self.target_wallet.len() > 12 {
-            format!("{}...{}", &self.target_wallet[..6], &self.target_wallet[self.target_wallet.len()-6..])
+            format!(
+                "{}...{}",
+                &self.target_wallet[..6],
+                &self.target_wallet[self.target_wallet.len() - 6..]
+            )
         } else {
             self.target_wallet.clone()
         };
         let wallet_text = vec![
-            Line::from(Span::styled(" 🎯 TARGET WALLET ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                " 🎯 TARGET WALLET ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(vec![
                 Span::styled(" Addr: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(truncated_wallet, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    truncated_wallet,
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled(" Nodes: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", self.wallets_explored), Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{}", self.wallets_explored),
+                    Style::default().fg(Color::Yellow),
+                ),
             ]),
         ];
-        let wallet_widget = Paragraph::new(wallet_text)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        let wallet_widget = Paragraph::new(wallet_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(wallet_widget, chunks[0]);
 
         // TOKEN HOLDINGS (top 2 tokens)
         let top_tokens: Vec<_> = token_vols.iter().take(2).collect();
-        let mut token_lines = vec![
-            Line::from(Span::styled(" 💎 TOP TOKENS ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        ];
+        let mut token_lines = vec![Line::from(Span::styled(
+            " 💎 TOP TOKENS ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ))];
         if top_tokens.is_empty() {
-            token_lines.push(Line::from(Span::styled(" No data", Style::default().fg(Color::DarkGray))));
+            token_lines.push(Line::from(Span::styled(
+                " No data",
+                Style::default().fg(Color::DarkGray),
+            )));
         } else {
             for token in top_tokens {
                 token_lines.push(Line::from(vec![
-                    Span::styled(format!(" {}: ", token.symbol), Style::default().fg(Color::White)),
-                    Span::styled(format!("{:.2}", token.amount), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        format!(" {}: ", token.symbol),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(
+                        format!("{:.2}", token.amount),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                 ]));
             }
         }
-        let token_widget = Paragraph::new(token_lines)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
+        let token_widget = Paragraph::new(token_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        );
         f.render_widget(token_widget, chunks[1]);
 
         // TRANSFER ACTIVITY (in/out counts)
         let inflow_count = transfer_evts.iter().filter(|e| e.direction == "IN").count();
-        let outflow_count = transfer_evts.iter().filter(|e| e.direction == "OUT").count();
+        let outflow_count = transfer_evts
+            .iter()
+            .filter(|e| e.direction == "OUT")
+            .count();
         let total_transfers = inflow_count + outflow_count;
         let activity_text = vec![
-            Line::from(Span::styled(" 📊 TRANSFERS ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                " 📊 TRANSFERS ",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(vec![
                 Span::styled(" Total: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", total_transfers), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{}", total_transfers),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled(" In: ", Style::default().fg(Color::Green)),
-                Span::styled(format!("{}", inflow_count), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("{}", inflow_count),
+                    Style::default().fg(Color::Green),
+                ),
                 Span::styled(" Out: ", Style::default().fg(Color::Red)),
-                Span::styled(format!("{}", outflow_count), Style::default().fg(Color::Red)),
+                Span::styled(
+                    format!("{}", outflow_count),
+                    Style::default().fg(Color::Red),
+                ),
             ]),
         ];
-        let activity_widget = Paragraph::new(activity_text)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Magenta)));
+        let activity_widget = Paragraph::new(activity_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Magenta)),
+        );
         f.render_widget(activity_widget, chunks[2]);
 
         // SOL FLOW (in/out balance)
         let net_flow = self.total_sol_in - self.total_sol_out;
-        let flow_color = if net_flow > 0.0 { Color::Green }
-                        else if net_flow < 0.0 { Color::Red }
-                        else { Color::Yellow };
-        let flow_symbol = if net_flow > 0.0 { "↑" }
-                         else if net_flow < 0.0 { "↓" }
-                         else { "=" };
+        let flow_color = if net_flow > 0.0 {
+            Color::Green
+        } else if net_flow < 0.0 {
+            Color::Red
+        } else {
+            Color::Yellow
+        };
+        let flow_symbol = if net_flow > 0.0 {
+            "↑"
+        } else if net_flow < 0.0 {
+            "↓"
+        } else {
+            "="
+        };
         let flow_text = vec![
-            Line::from(Span::styled(" 💸 SOL FLOW ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                " 💸 SOL FLOW ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(vec![
                 Span::styled(" Net: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{} {:.4}", flow_symbol, net_flow.abs()), Style::default().fg(flow_color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{} {:.4}", flow_symbol, net_flow.abs()),
+                    Style::default().fg(flow_color).add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled(" In: ", Style::default().fg(Color::Green)),
-                Span::styled(format!("{:.4}", self.total_sol_in), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("{:.4}", self.total_sol_in),
+                    Style::default().fg(Color::Green),
+                ),
                 Span::styled(" Out: ", Style::default().fg(Color::Red)),
-                Span::styled(format!("{:.4}", self.total_sol_out), Style::default().fg(Color::Red)),
+                Span::styled(
+                    format!("{:.4}", self.total_sol_out),
+                    Style::default().fg(Color::Red),
+                ),
             ]),
         ];
-        let flow_widget = Paragraph::new(flow_text)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Green)));
+        let flow_widget = Paragraph::new(flow_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green)),
+        );
         f.render_widget(flow_widget, chunks[3]);
     }
     /// Render Search Results Tab - shows actual findings from indexed data
@@ -6065,30 +7220,51 @@ impl OsvmApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(4),  // Search info header
-                Constraint::Min(0),      // Results
-                Constraint::Length(2),   // Status bar
+                Constraint::Length(4), // Search info header
+                Constraint::Min(0),    // Results
+                Constraint::Length(2), // Status bar
             ])
             .split(area);
 
         // Search Info Header
         let header_text = vec![
             Line::from(vec![
-                Span::styled(" 🔍 Search Query: ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::styled(&results_data.query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " 🔍 Search Query: ",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    &results_data.query,
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled(" 📊 Type: ", Style::default().fg(Color::Cyan)),
                 Span::styled(&results_data.entity_type, Style::default().fg(Color::Green)),
                 Span::styled("  •  Matches: ", Style::default().fg(Color::Cyan)),
-                Span::styled(results_data.total_matches.to_string(), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    results_data.total_matches.to_string(),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("  •  Time: ", Style::default().fg(Color::Cyan)),
-                Span::styled(&results_data.search_timestamp, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    &results_data.search_timestamp,
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]),
         ];
 
-        let header = Paragraph::new(header_text)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        let header = Paragraph::new(header_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(header, chunks[0]);
 
         // Results sections
@@ -6098,23 +7274,28 @@ impl OsvmApp {
             result_lines.push(Line::from(""));
             result_lines.push(Line::from(Span::styled(
                 " No matches found in indexed data.",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::ITALIC),
             )));
             result_lines.push(Line::from(""));
             result_lines.push(Line::from(Span::styled(
-                " Try:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                " Try:",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
             )));
             result_lines.push(Line::from(Span::styled(
                 "   • Wait for more data to be indexed from blockchain",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
             result_lines.push(Line::from(Span::styled(
                 "   • Search for different terms (wallet address, token symbol)",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
             result_lines.push(Line::from(Span::styled(
                 "   • Press Ctrl+K to open search again",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
         } else {
             // Wallets Section
@@ -6122,26 +7303,44 @@ impl OsvmApp {
                 result_lines.push(Line::from(""));
                 result_lines.push(Line::from(Span::styled(
                     format!(" ━━━ Wallets ({}) ━━━", results_data.wallets_found.len()),
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 )));
                 result_lines.push(Line::from(""));
 
                 for wallet in &results_data.wallets_found {
                     result_lines.push(Line::from(vec![
                         Span::styled(" 👛 ", Style::default().fg(Color::Green)),
-                        Span::styled(&wallet.address, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            &wallet.address,
+                            Style::default()
+                                .fg(Color::White)
+                                .add_modifier(Modifier::BOLD),
+                        ),
                     ]));
                     result_lines.push(Line::from(vec![
                         Span::raw("    "),
                         Span::styled("Balance: ", Style::default().fg(Color::DarkGray)),
-                        Span::styled(format!("{:.4} SOL", wallet.balance_sol), Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            format!("{:.4} SOL", wallet.balance_sol),
+                            Style::default().fg(Color::Yellow),
+                        ),
                         Span::raw("  •  "),
                         Span::styled("Transfers: ", Style::default().fg(Color::DarkGray)),
-                        Span::styled(wallet.transfer_count.to_string(), Style::default().fg(Color::Cyan)),
+                        Span::styled(
+                            wallet.transfer_count.to_string(),
+                            Style::default().fg(Color::Cyan),
+                        ),
                     ]));
                     result_lines.push(Line::from(vec![
                         Span::raw("    "),
-                        Span::styled(&wallet.match_reason, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                        Span::styled(
+                            &wallet.match_reason,
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        ),
                     ]));
                     result_lines.push(Line::from(""));
                 }
@@ -6151,21 +7350,36 @@ impl OsvmApp {
             if !results_data.tokens_found.is_empty() {
                 result_lines.push(Line::from(Span::styled(
                     format!(" ━━━ Tokens ({}) ━━━", results_data.tokens_found.len()),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 )));
                 result_lines.push(Line::from(""));
 
                 for token in &results_data.tokens_found {
                     result_lines.push(Line::from(vec![
                         Span::styled(" 🪙 ", Style::default().fg(Color::Yellow)),
-                        Span::styled(&token.symbol, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            &token.symbol,
+                            Style::default()
+                                .fg(Color::White)
+                                .add_modifier(Modifier::BOLD),
+                        ),
                     ]));
                     result_lines.push(Line::from(vec![
                         Span::raw("    "),
                         Span::styled("Volume: ", Style::default().fg(Color::DarkGray)),
-                        Span::styled(format!("{:.2}", token.volume), Style::default().fg(Color::Cyan)),
+                        Span::styled(
+                            format!("{:.2}", token.volume),
+                            Style::default().fg(Color::Cyan),
+                        ),
                         Span::raw("  •  "),
-                        Span::styled(&token.match_reason, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                        Span::styled(
+                            &token.match_reason,
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        ),
                     ]));
                     result_lines.push(Line::from(""));
                 }
@@ -6174,8 +7388,13 @@ impl OsvmApp {
             // Transactions Section
             if !results_data.transactions_found.is_empty() {
                 result_lines.push(Line::from(Span::styled(
-                    format!(" ━━━ Transactions ({}) ━━━", results_data.transactions_found.len()),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    format!(
+                        " ━━━ Transactions ({}) ━━━",
+                        results_data.transactions_found.len()
+                    ),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
                 )));
                 result_lines.push(Line::from(""));
 
@@ -6188,11 +7407,19 @@ impl OsvmApp {
                         Span::raw("    "),
                         Span::styled(&tx.timestamp, Style::default().fg(Color::DarkGray)),
                         Span::raw("  •  "),
-                        Span::styled(format!("{:.4} SOL", tx.amount_sol), Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            format!("{:.4} SOL", tx.amount_sol),
+                            Style::default().fg(Color::Yellow),
+                        ),
                     ]));
                     result_lines.push(Line::from(vec![
                         Span::raw("    "),
-                        Span::styled(&tx.match_reason, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                        Span::styled(
+                            &tx.match_reason,
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        ),
                     ]));
                     result_lines.push(Line::from(""));
                 }
@@ -6200,19 +7427,34 @@ impl OsvmApp {
         }
 
         let results_paragraph = Paragraph::new(result_lines)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::White))
-                .title(Span::styled(" Search Results ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::White))
+                    .title(Span::styled(
+                        " Search Results ",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    )),
+            )
             .scroll((self.search_results_scroll as u16, 0));
 
         f.render_widget(results_paragraph, chunks[1]);
 
         // Status line (simplified)
         let status_text = Line::from(vec![
-            Span::styled(" Search Results ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " Search Results ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" | "),
-            Span::styled(format!("{} matches", results_data.total_matches), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!("{} matches", results_data.total_matches),
+                Style::default().fg(Color::Yellow),
+            ),
             Span::raw(" | Press "),
             Span::styled("Ctrl+K", Style::default().fg(Color::Green)),
             Span::raw(" to search again"),
@@ -6229,34 +7471,46 @@ impl OsvmApp {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Header
-                Constraint::Length(14),  // Network topology + peers
-                Constraint::Min(8),      // Sessions list
-                Constraint::Length(2),   // Status bar
+                Constraint::Length(3),  // Header
+                Constraint::Length(14), // Network topology + peers
+                Constraint::Min(8),     // Sessions list
+                Constraint::Length(2),  // Status bar
             ])
             .split(area);
 
         // === HEADER ===
-        let header_text = vec![
-            Line::from(vec![
-                Span::styled(" 🌐 FEDERATION NETWORK DASHBOARD ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled("  ", Style::default()),
-                Span::styled(format!("Node: {}", fed_state.node_id), Style::default().fg(Color::Yellow)),
-            ]),
-        ];
-        let header = Paragraph::new(header_text)
-            .block(Block::default()
+        let header_text = vec![Line::from(vec![
+            Span::styled(
+                " 🌐 FEDERATION NETWORK DASHBOARD ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                format!("Node: {}", fed_state.node_id),
+                Style::default().fg(Color::Yellow),
+            ),
+        ])];
+        let header = Paragraph::new(header_text).block(
+            Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan))
-                .title(Span::styled(" Federation ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+                .title(Span::styled(
+                    " Federation ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
         f.render_widget(header, main_chunks[0]);
 
         // === NETWORK TOPOLOGY + PEERS (side by side) ===
         let network_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(50),  // Network topology graph
-                Constraint::Percentage(50),  // Peer list
+                Constraint::Percentage(50), // Network topology graph
+                Constraint::Percentage(50), // Peer list
             ])
             .split(main_chunks[1]);
 
@@ -6270,16 +7524,30 @@ impl OsvmApp {
         self.render_federation_sessions(f, main_chunks[2], &fed_state);
 
         // === STATUS BAR ===
-        let refresh_ago = fed_state.last_refresh
+        let refresh_ago = fed_state
+            .last_refresh
             .map(|t| format!("{}s ago", t.elapsed().as_secs()))
             .unwrap_or_else(|| "never".to_string());
 
         // Show different status bar based on input mode
         let status_text = if self.federation_input_active {
             Line::from(vec![
-                Span::styled(" ADD PEER: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled(&self.federation_input_buffer, Style::default().fg(Color::White)),
-                Span::styled("▏", Style::default().fg(Color::White).add_modifier(Modifier::SLOW_BLINK)),
+                Span::styled(
+                    " ADD PEER: ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    &self.federation_input_buffer,
+                    Style::default().fg(Color::White),
+                ),
+                Span::styled(
+                    "▏",
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::SLOW_BLINK),
+                ),
                 Span::raw(" | "),
                 Span::styled("Enter", Style::default().fg(Color::Green)),
                 Span::raw(" confirm "),
@@ -6288,13 +7556,27 @@ impl OsvmApp {
             ])
         } else {
             Line::from(vec![
-                Span::styled(" [6] Federation ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " [6] Federation ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(" | "),
-                Span::styled(format!("{} peers", fed_state.peers.len()), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("{} peers", fed_state.peers.len()),
+                    Style::default().fg(Color::Green),
+                ),
                 Span::raw(" | "),
-                Span::styled(format!("{} sessions", fed_state.sessions.len()), Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{} sessions", fed_state.sessions.len()),
+                    Style::default().fg(Color::Yellow),
+                ),
                 Span::raw(" | "),
-                Span::styled(format!("{}s", refresh_ago), Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{}s", refresh_ago),
+                    Style::default().fg(Color::DarkGray),
+                ),
                 Span::raw(" | "),
                 Span::styled("r", Style::default().fg(Color::Green)),
                 Span::raw(" refresh "),
@@ -6311,7 +7593,12 @@ impl OsvmApp {
     }
 
     /// Render ASCII network topology graph
-    fn render_federation_network_graph(&self, f: &mut Frame, area: Rect, state: &FederationDashboardState) {
+    fn render_federation_network_graph(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        state: &FederationDashboardState,
+    ) {
         let mut lines: Vec<Line> = Vec::new();
 
         if state.peers.is_empty() {
@@ -6319,30 +7606,40 @@ impl OsvmApp {
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 "       ┌─────────────┐",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
             lines.push(Line::from(vec![
                 Span::styled("       │ ", Style::default().fg(Color::DarkGray)),
-                Span::styled("YOU", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "YOU",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("       │", Style::default().fg(Color::DarkGray)),
             ]));
             lines.push(Line::from(vec![
                 Span::styled("       │ ", Style::default().fg(Color::DarkGray)),
-                Span::styled(&state.node_id[..8.min(state.node_id.len())], Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    &state.node_id[..8.min(state.node_id.len())],
+                    Style::default().fg(Color::Yellow),
+                ),
                 Span::styled("  │", Style::default().fg(Color::DarkGray)),
             ]));
             lines.push(Line::from(Span::styled(
                 "       └─────────────┘",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 "  No peers connected. Add with:",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::ITALIC),
             )));
             lines.push(Line::from(Span::styled(
                 "  osvm collab peers add <address>",
-                Style::default().fg(Color::Green)
+                Style::default().fg(Color::Green),
             )));
         } else {
             // Build network topology visualization
@@ -6351,21 +7648,29 @@ impl OsvmApp {
             // Center node (us)
             lines.push(Line::from(Span::styled(
                 "           ┌───────────────┐",
-                Style::default().fg(Color::Cyan)
+                Style::default().fg(Color::Cyan),
             )));
             lines.push(Line::from(vec![
                 Span::styled("           │ ", Style::default().fg(Color::Cyan)),
-                Span::styled("★ YOU", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "★ YOU",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("        │", Style::default().fg(Color::Cyan)),
             ]));
             lines.push(Line::from(vec![
                 Span::styled("           │ ", Style::default().fg(Color::Cyan)),
-                Span::styled(&state.node_id[..10.min(state.node_id.len())], Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    &state.node_id[..10.min(state.node_id.len())],
+                    Style::default().fg(Color::Yellow),
+                ),
                 Span::styled("    │", Style::default().fg(Color::Cyan)),
             ]));
             lines.push(Line::from(Span::styled(
                 "           └───────┬───────┘",
-                Style::default().fg(Color::Cyan)
+                Style::default().fg(Color::Cyan),
             )));
 
             // Connection lines to peers
@@ -6378,7 +7683,10 @@ impl OsvmApp {
                     3 => "       ┌────┼─────────────┼────┐",
                     _ => "  ┌────┼────┼─────────────┼────┼────┐",
                 };
-                lines.push(Line::from(Span::styled(conn_line, Style::default().fg(Color::Green))));
+                lines.push(Line::from(Span::styled(
+                    conn_line,
+                    Style::default().fg(Color::Green),
+                )));
 
                 // Draw peer boxes (max 4 shown)
                 let shown_peers: Vec<_> = state.peers.iter().take(4).collect();
@@ -6395,55 +7703,107 @@ impl OsvmApp {
                     };
 
                     peer_line1.push_str(&format!(" [{} ", status_icon));
-                    peer_line2.push_str(&format!("  {} ", &peer.node_id[..6.min(peer.node_id.len())]));
-                    peer_line3.push_str(&format!("  {}] ", peer.latency_ms.map(|l| format!("{}ms", l)).unwrap_or_else(|| "?".to_string())));
+                    peer_line2.push_str(&format!(
+                        "  {} ",
+                        &peer.node_id[..6.min(peer.node_id.len())]
+                    ));
+                    peer_line3.push_str(&format!(
+                        "  {}] ",
+                        peer.latency_ms
+                            .map(|l| format!("{}ms", l))
+                            .unwrap_or_else(|| "?".to_string())
+                    ));
                 }
 
-                lines.push(Line::from(Span::styled(peer_line1.clone(), Style::default().fg(Color::White))));
-                lines.push(Line::from(Span::styled(peer_line2.clone(), Style::default().fg(Color::Yellow))));
-                lines.push(Line::from(Span::styled(peer_line3.clone(), Style::default().fg(Color::DarkGray))));
+                lines.push(Line::from(Span::styled(
+                    peer_line1.clone(),
+                    Style::default().fg(Color::White),
+                )));
+                lines.push(Line::from(Span::styled(
+                    peer_line2.clone(),
+                    Style::default().fg(Color::Yellow),
+                )));
+                lines.push(Line::from(Span::styled(
+                    peer_line3.clone(),
+                    Style::default().fg(Color::DarkGray),
+                )));
 
                 if state.peers.len() > 4 {
                     lines.push(Line::from(Span::styled(
                         format!("  ... +{} more peers", state.peers.len() - 4),
-                        Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::ITALIC),
                     )));
                 }
             }
         }
 
-        let graph = Paragraph::new(lines)
-            .block(Block::default()
+        let graph = Paragraph::new(lines).block(
+            Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Green))
-                .title(Span::styled(" Network Topology ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))));
+                .title(Span::styled(
+                    " Network Topology ",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
         f.render_widget(graph, area);
     }
 
     /// Render peer list with status and metrics
-    fn render_federation_peer_list(&self, f: &mut Frame, area: Rect, state: &FederationDashboardState) {
+    fn render_federation_peer_list(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        state: &FederationDashboardState,
+    ) {
         let mut lines: Vec<Line> = Vec::new();
 
         if state.peers.is_empty() {
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 " No federation peers configured",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::ITALIC),
             )));
         } else {
             // Column headers
             lines.push(Line::from(vec![
-                Span::styled(" Status ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " Status ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Node ID      ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Node ID      ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Latency ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Latency ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Sessions", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Sessions",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]));
             lines.push(Line::from(Span::styled(
                 " ───────┼──────────────┼─────────┼─────────",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
 
             for (idx, peer) in state.peers.iter().enumerate() {
@@ -6455,7 +7815,8 @@ impl OsvmApp {
                     PeerStatus::Unknown => ("? UNKNOWN", Color::DarkGray),
                 };
 
-                let latency = peer.latency_ms
+                let latency = peer
+                    .latency_ms
                     .map(|l| format!("{:>5}ms", l))
                     .unwrap_or_else(|| "   N/A".to_string());
 
@@ -6471,37 +7832,59 @@ impl OsvmApp {
                     Span::styled(select_indicator, row_style.fg(Color::Cyan)),
                     Span::styled(format!("{} ", status_icon), row_style.fg(status_color)),
                     Span::styled("│ ", row_style.fg(Color::DarkGray)),
-                    Span::styled(format!("{:<12} ", &peer.node_id[..12.min(peer.node_id.len())]), row_style.fg(Color::Yellow)),
+                    Span::styled(
+                        format!("{:<12} ", &peer.node_id[..12.min(peer.node_id.len())]),
+                        row_style.fg(Color::Yellow),
+                    ),
                     Span::styled("│ ", row_style.fg(Color::DarkGray)),
                     Span::styled(format!("{} ", latency), row_style.fg(Color::White)),
                     Span::styled("│ ", row_style.fg(Color::DarkGray)),
-                    Span::styled(format!("{:>4}", peer.sessions_hosted), row_style.fg(Color::Cyan)),
+                    Span::styled(
+                        format!("{:>4}", peer.sessions_hosted),
+                        row_style.fg(Color::Cyan),
+                    ),
                 ]));
             }
         }
 
-        let peers_widget = Paragraph::new(lines)
-            .block(Block::default()
+        let peers_widget = Paragraph::new(lines).block(
+            Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow))
-                .title(Span::styled(" Peers ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))));
+                .title(Span::styled(
+                    " Peers ",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        );
         f.render_widget(peers_widget, area);
     }
 
     /// Render federation sessions list
-    fn render_federation_sessions(&self, f: &mut Frame, area: Rect, state: &FederationDashboardState) {
+    fn render_federation_sessions(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        state: &FederationDashboardState,
+    ) {
         let mut lines: Vec<Line> = Vec::new();
 
         if state.sessions.is_empty() {
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 " No active sessions discovered",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::ITALIC),
             )));
             lines.push(Line::from(""));
             lines.push(Line::from(vec![
                 Span::styled(" Start a session: ", Style::default().fg(Color::White)),
-                Span::styled("osvm collab start --name \"Investigation\"", Style::default().fg(Color::Green)),
+                Span::styled(
+                    "osvm collab start --name \"Investigation\"",
+                    Style::default().fg(Color::Green),
+                ),
             ]));
             lines.push(Line::from(vec![
                 Span::styled(" Discover sessions: ", Style::default().fg(Color::White)),
@@ -6510,17 +7893,37 @@ impl OsvmApp {
         } else {
             // Column headers
             lines.push(Line::from(vec![
-                Span::styled(" Name                    ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " Name                    ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Host         ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Host         ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Users ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Users ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Status", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Status",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]));
             lines.push(Line::from(Span::styled(
                 " ────────────────────────┼──────────────┼───────┼────────",
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
 
             for (idx, session) in state.sessions.iter().enumerate() {
@@ -6550,9 +7953,18 @@ impl OsvmApp {
                     Span::styled(select_indicator, row_style.fg(Color::Cyan)),
                     Span::styled(format!("{} ", name), row_style.fg(Color::White)),
                     Span::styled("│ ", row_style.fg(Color::DarkGray)),
-                    Span::styled(format!("{:<12} ", &session.host_node_id[..12.min(session.host_node_id.len())]), row_style.fg(Color::Yellow)),
+                    Span::styled(
+                        format!(
+                            "{:<12} ",
+                            &session.host_node_id[..12.min(session.host_node_id.len())]
+                        ),
+                        row_style.fg(Color::Yellow),
+                    ),
                     Span::styled("│ ", row_style.fg(Color::DarkGray)),
-                    Span::styled(format!("{:>5} ", session.participant_count), row_style.fg(Color::Cyan)),
+                    Span::styled(
+                        format!("{:>5} ", session.participant_count),
+                        row_style.fg(Color::Cyan),
+                    ),
                     Span::styled("│ ", row_style.fg(Color::DarkGray)),
                     Span::styled(format!("{:<6}", session.status), row_style.fg(status_color)),
                 ]));
@@ -6560,10 +7972,17 @@ impl OsvmApp {
         }
 
         let sessions_widget = Paragraph::new(lines)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Magenta))
-                .title(Span::styled(" Federated Sessions ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Magenta))
+                    .title(Span::styled(
+                        " Federated Sessions ",
+                        Style::default()
+                            .fg(Color::Magenta)
+                            .add_modifier(Modifier::BOLD),
+                    )),
+            )
             .scroll((self.federation_scroll as u16, 0));
         f.render_widget(sessions_widget, area);
     }

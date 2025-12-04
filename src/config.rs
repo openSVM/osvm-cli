@@ -86,7 +86,8 @@ impl Config {
             .map(|s| s.as_str())
             .unwrap_or("~/.config/osvm/config.yml");
 
-        let cli_config = crate::utils::config_loader::Config::load(cli_config_path).unwrap_or_default();
+        let cli_config =
+            crate::utils::config_loader::Config::load(cli_config_path).unwrap_or_default();
 
         // OSVM uses its own keypair directory, NOT ~/.config/solana/
         // This prevents accidentally touching user's main Solana keypairs

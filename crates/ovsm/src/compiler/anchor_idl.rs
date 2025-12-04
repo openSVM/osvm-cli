@@ -120,11 +120,11 @@ pub struct IdlEnumVariant {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum IdlType {
-    Primitive(String),  // "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "bool", "string", "publicKey"
-    Array { array: [Box<IdlType>; 2] },  // [type, length]
+    Primitive(String), // "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "bool", "string", "publicKey"
+    Array { array: [Box<IdlType>; 2] }, // [type, length]
     Vec { vec: Box<IdlType> },
     Option { option: Box<IdlType> },
-    Defined { defined: String },  // Custom type reference
+    Defined { defined: String }, // Custom type reference
 }
 
 /// Error definition
@@ -186,7 +186,11 @@ impl<'a> IdlGenerator<'a> {
 
         Ok(AnchorIdl {
             version: self.version.clone(),
-            name: if self.name.is_empty() { "ovsm_program".to_string() } else { self.name.clone() },
+            name: if self.name.is_empty() {
+                "ovsm_program".to_string()
+            } else {
+                self.name.clone()
+            },
             instructions: self.instructions.clone(),
             accounts: self.accounts.clone(),
             types: self.types.clone(),
@@ -198,8 +202,7 @@ impl<'a> IdlGenerator<'a> {
     /// Generate IDL as JSON string
     pub fn generate_json(&mut self) -> Result<String, String> {
         let idl = self.generate()?;
-        serde_json::to_string_pretty(&idl)
-            .map_err(|e| format!("JSON serialization failed: {}", e))
+        serde_json::to_string_pretty(&idl).map_err(|e| format!("JSON serialization failed: {}", e))
     }
 
     /// Parse the OVSM source and extract IDL information
@@ -231,8 +234,9 @@ impl<'a> IdlGenerator<'a> {
                 if content.starts_with('=') || content.starts_with('-') || content.is_empty() {
                     continue;
                 }
-                if let Some(name_part) = content.split(|c| c == '-' || c == ':').next() {
-                    let name = name_part.trim()
+                if let Some(name_part) = content.split(['-', ':']).next() {
+                    let name = name_part
+                        .trim()
                         .to_lowercase()
                         .replace(' ', "_")
                         .replace("=", "")
@@ -372,7 +376,9 @@ impl<'a> IdlGenerator<'a> {
                     }
                     let check_line = lines[i + offset];
                     // Look for pattern: = discriminator NUM) or (= discriminator NUM)
-                    for word in check_line.split(|c: char| c.is_whitespace() || c == '(' || c == ')') {
+                    for word in
+                        check_line.split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+                    {
                         if let Ok(num) = word.parse::<u8>() {
                             disc = Some(num);
                             break;
@@ -415,12 +421,15 @@ impl<'a> IdlGenerator<'a> {
             .into_iter()
             .map(|(disc, name)| {
                 let args = self.infer_instruction_args(&name);
-                (disc, IdlInstruction {
-                    name,
-                    accounts: self.infer_instruction_accounts(disc),
-                    args,
-                    discriminator: Some(vec![disc]),
-                })
+                (
+                    disc,
+                    IdlInstruction {
+                        name,
+                        accounts: self.infer_instruction_accounts(disc),
+                        args,
+                        discriminator: Some(vec![disc]),
+                    },
+                )
             })
             .collect();
 
@@ -455,7 +464,10 @@ impl<'a> IdlGenerator<'a> {
         let mut args = Vec::new();
 
         // Common patterns
-        if name_lower.contains("transfer") || name_lower.contains("deposit") || name_lower.contains("withdraw") {
+        if name_lower.contains("transfer")
+            || name_lower.contains("deposit")
+            || name_lower.contains("withdraw")
+        {
             args.push(IdlArg {
                 name: "amount".to_string(),
                 ty: IdlType::Primitive("u64".to_string()),
@@ -546,7 +558,7 @@ impl<'a> IdlGenerator<'a> {
         let mut result = String::new();
         let mut first_word = true;
 
-        for word in s.split(|c: char| c == ' ' || c == '_' || c == '-') {
+        for word in s.split([' ', '_', '-']) {
             if word.is_empty() {
                 continue;
             }
@@ -644,7 +656,11 @@ mod tests {
         let idl = generator.generate().unwrap();
 
         assert_eq!(idl.name, "agent_accountability_demo");
-        assert!(idl.instructions.len() >= 3, "Expected at least 3 instructions, got {}", idl.instructions.len());
+        assert!(
+            idl.instructions.len() >= 3,
+            "Expected at least 3 instructions, got {}",
+            idl.instructions.len()
+        );
 
         // Check instruction names are camelCase
         let names: Vec<&str> = idl.instructions.iter().map(|i| i.name.as_str()).collect();
@@ -687,26 +703,20 @@ mod tests {
         let idl = AnchorIdl {
             version: "0.1.0".to_string(),
             name: "test".to_string(),
-            instructions: vec![
-                IdlInstruction {
-                    name: "initialize".to_string(),
-                    accounts: vec![
-                        IdlAccountMeta {
-                            name: "state".to_string(),
-                            is_mut: true,
-                            is_signer: false,
-                            docs: None,
-                        },
-                    ],
-                    args: vec![
-                        IdlArg {
-                            name: "amount".to_string(),
-                            ty: IdlType::Primitive("u64".to_string()),
-                        },
-                    ],
-                    discriminator: Some(vec![0]),
-                },
-            ],
+            instructions: vec![IdlInstruction {
+                name: "initialize".to_string(),
+                accounts: vec![IdlAccountMeta {
+                    name: "state".to_string(),
+                    is_mut: true,
+                    is_signer: false,
+                    docs: None,
+                }],
+                args: vec![IdlArg {
+                    name: "amount".to_string(),
+                    ty: IdlType::Primitive("u64".to_string()),
+                }],
+                discriminator: Some(vec![0]),
+            }],
             accounts: vec![],
             types: vec![],
             errors: vec![],

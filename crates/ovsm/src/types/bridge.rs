@@ -37,12 +37,11 @@
 //! // Now reg_type contains pointer provenance with struct info
 //! ```
 
-use std::collections::HashMap;
 use super::{Type, TypeContext, TypedStructDef};
 use crate::compiler::ir::{
-    StructDef, FieldType, PrimitiveType,
-    RegType, PointerType, MemoryRegion, Alignment,
+    Alignment, FieldType, MemoryRegion, PointerType, PrimitiveType, RegType, StructDef,
 };
+use std::collections::HashMap;
 
 /// Bridge between source-level types and IR-level types
 pub struct TypeBridge {
@@ -76,24 +75,57 @@ impl TypeBridge {
     pub fn source_to_ir(&self, source_ty: &Type, ctx: &TypeContext) -> RegType {
         match source_ty {
             // === Primitive Integers ===
-            Type::U8 => RegType::Value { size: 1, signed: false },
-            Type::U16 => RegType::Value { size: 2, signed: false },
-            Type::U32 => RegType::Value { size: 4, signed: false },
-            Type::U64 => RegType::Value { size: 8, signed: false },
-            Type::I8 => RegType::Value { size: 1, signed: true },
-            Type::I16 => RegType::Value { size: 2, signed: true },
-            Type::I32 => RegType::Value { size: 4, signed: true },
-            Type::I64 => RegType::Value { size: 8, signed: true },
+            Type::U8 => RegType::Value {
+                size: 1,
+                signed: false,
+            },
+            Type::U16 => RegType::Value {
+                size: 2,
+                signed: false,
+            },
+            Type::U32 => RegType::Value {
+                size: 4,
+                signed: false,
+            },
+            Type::U64 => RegType::Value {
+                size: 8,
+                signed: false,
+            },
+            Type::I8 => RegType::Value {
+                size: 1,
+                signed: true,
+            },
+            Type::I16 => RegType::Value {
+                size: 2,
+                signed: true,
+            },
+            Type::I32 => RegType::Value {
+                size: 4,
+                signed: true,
+            },
+            Type::I64 => RegType::Value {
+                size: 8,
+                signed: true,
+            },
 
             // Floats are also 4/8 byte values
-            Type::F32 => RegType::Value { size: 4, signed: true },
-            Type::F64 => RegType::Value { size: 8, signed: true },
+            Type::F32 => RegType::Value {
+                size: 4,
+                signed: true,
+            },
+            Type::F64 => RegType::Value {
+                size: 8,
+                signed: true,
+            },
 
             // Boolean is 1 byte
             Type::Bool => RegType::Bool,
 
             // Unit is nothing (0 bytes, but we use 8 for uniformity)
-            Type::Unit => RegType::Value { size: 8, signed: false },
+            Type::Unit => RegType::Value {
+                size: 8,
+                signed: false,
+            },
 
             // === Pointer Types ===
             Type::Ptr(inner) => {
@@ -148,7 +180,10 @@ impl TypeBridge {
             // === Pubkey ===
             Type::Pubkey => {
                 // Pubkey is a 32-byte value
-                RegType::Value { size: 32, signed: false }
+                RegType::Value {
+                    size: 32,
+                    signed: false,
+                }
             }
 
             // === String ===
@@ -177,16 +212,23 @@ impl TypeBridge {
             // === Tuple Types ===
             Type::Tuple(types) => {
                 // Tuple size is sum of element sizes
-                let total_size: i64 = types.iter()
+                let total_size: i64 = types
+                    .iter()
                     .map(|t| self.type_size(t, ctx).unwrap_or(8))
                     .sum();
-                RegType::Value { size: total_size, signed: false }
+                RegType::Value {
+                    size: total_size,
+                    signed: false,
+                }
             }
 
             // === Function Types ===
             Type::Fn { .. } => {
                 // Function pointers are 8-byte values
-                RegType::Value { size: 8, signed: false }
+                RegType::Value {
+                    size: 8,
+                    signed: false,
+                }
             }
 
             // === Special Types ===
@@ -241,7 +283,8 @@ impl TypeBridge {
         data_len: Option<i64>,
     ) -> RegType {
         let type_size = self.type_size(source_ty, ctx);
-        let struct_name = self.extract_struct_name(source_ty)
+        let struct_name = self
+            .extract_struct_name(source_ty)
             .or_else(|| match source_ty {
                 Type::Struct(name) => Some(name.clone()),
                 _ => None,
@@ -249,12 +292,11 @@ impl TypeBridge {
 
         RegType::Pointer(PointerType {
             region: MemoryRegion::AccountData(account_idx),
-            bounds: data_len.map(|len| (0, len))
-                .or(type_size.map(|s| (0, s))),
+            bounds: data_len.map(|len| (0, len)).or(type_size.map(|s| (0, s))),
             struct_type: struct_name,
             offset: 0,
             alignment: Alignment::Byte1, // Account data may not be aligned
-            writable: true, // Will be validated by is_writable check
+            writable: true,              // Will be validated by is_writable check
         })
     }
 
@@ -278,7 +320,7 @@ impl TypeBridge {
                     (8, false) => Type::U64,
                     (8, true) => Type::I64,
                     (32, false) => Type::Pubkey, // Likely a pubkey
-                    _ => Type::Any, // Unknown size
+                    _ => Type::Any,              // Unknown size
                 }
             }
 
@@ -309,15 +351,17 @@ impl TypeBridge {
     pub fn source_struct_to_ir(&self, source: &TypedStructDef) -> StructDef {
         use crate::compiler::ir::StructField;
 
-        let fields = source.fields.iter().map(|f| {
-            StructField {
+        let fields = source
+            .fields
+            .iter()
+            .map(|f| StructField {
                 name: f.name.clone(),
                 field_type: self.source_field_type_to_ir(&f.field_type),
                 offset: f.offset as i64,
                 element_size: None,
                 array_count: None,
-            }
-        }).collect();
+            })
+            .collect();
 
         StructDef {
             name: source.name.clone(),
@@ -340,10 +384,16 @@ impl TypeBridge {
             Type::Pubkey => FieldType::Pubkey,
             Type::Array { element, size } => {
                 if let Some(prim) = self.source_to_primitive(element) {
-                    FieldType::Array { element_type: prim, count: *size }
+                    FieldType::Array {
+                        element_type: prim,
+                        count: *size,
+                    }
                 } else {
                     // Fallback to u8 array
-                    FieldType::Array { element_type: PrimitiveType::U8, count: *size }
+                    FieldType::Array {
+                        element_type: PrimitiveType::U8,
+                        count: *size,
+                    }
                 }
             }
             Type::Struct(name) => FieldType::Struct(name.clone()),
@@ -379,16 +429,13 @@ impl TypeBridge {
             Type::U64 | Type::I64 | Type::F64 => Some(8),
             Type::Ptr(_) | Type::Ref(_) | Type::RefMut(_) => Some(8),
             Type::Pubkey => Some(32),
-            Type::Struct(name) => {
-                ctx.lookup_struct(name).map(|s| s.total_size as i64)
-            }
+            Type::Struct(name) => ctx.lookup_struct(name).map(|s| s.total_size as i64),
             Type::Array { element, size } => {
                 self.type_size(element, ctx).map(|s| s * (*size as i64))
             }
             Type::Tuple(types) => {
-                let sizes: Option<Vec<i64>> = types.iter()
-                    .map(|t| self.type_size(t, ctx))
-                    .collect();
+                let sizes: Option<Vec<i64>> =
+                    types.iter().map(|t| self.type_size(t, ctx)).collect();
                 sizes.map(|s| s.iter().sum())
             }
             _ => None,
@@ -516,12 +563,18 @@ mod tests {
 
         assert!(matches!(
             bridge.source_to_ir(&Type::U64, &ctx),
-            RegType::Value { size: 8, signed: false }
+            RegType::Value {
+                size: 8,
+                signed: false
+            }
         ));
 
         assert!(matches!(
             bridge.source_to_ir(&Type::I32, &ctx),
-            RegType::Value { size: 4, signed: true }
+            RegType::Value {
+                size: 4,
+                signed: true
+            }
         ));
 
         assert!(matches!(
@@ -566,7 +619,10 @@ mod tests {
         let bridge = TypeBridge::new();
         let ctx = TypeContext::new();
 
-        let arr_ty = Type::Array { element: Box::new(Type::U8), size: 32 };
+        let arr_ty = Type::Array {
+            element: Box::new(Type::U8),
+            size: 32,
+        };
         let ir_ty = bridge.source_to_ir(&arr_ty, &ctx);
 
         if let RegType::Value { size, .. } = ir_ty {
@@ -617,11 +673,17 @@ mod tests {
         let ctx = TypeContext::new();
 
         // Same types are compatible
-        let ir = RegType::Value { size: 8, signed: false };
+        let ir = RegType::Value {
+            size: 8,
+            signed: false,
+        };
         assert!(bridge.types_compatible(&Type::U64, &ir, &ctx));
 
         // Different sizes are not compatible
-        let ir = RegType::Value { size: 4, signed: false };
+        let ir = RegType::Value {
+            size: 4,
+            signed: false,
+        };
         assert!(!bridge.types_compatible(&Type::U64, &ir, &ctx));
 
         // Unknown is always compatible (gradual typing)
@@ -645,7 +707,10 @@ mod tests {
 
         assert!(matches!(
             ir_ty,
-            RegType::Value { size: 8, signed: false }
+            RegType::Value {
+                size: 8,
+                signed: false
+            }
         ));
 
         // Create a refinement type on i32: {x : i32 | x >= 0}
@@ -655,7 +720,10 @@ mod tests {
         let ir_ty_i32 = bridge.source_to_ir(&refined_type_i32, &ctx);
         assert!(matches!(
             ir_ty_i32,
-            RegType::Value { size: 4, signed: true }
+            RegType::Value {
+                size: 4,
+                signed: true
+            }
         ));
     }
 
@@ -671,11 +739,17 @@ mod tests {
         let refined_type = Type::Refined(Box::new(refined));
 
         // Should match u64's IR type
-        let ir = RegType::Value { size: 8, signed: false };
+        let ir = RegType::Value {
+            size: 8,
+            signed: false,
+        };
         assert!(bridge.types_compatible(&refined_type, &ir, &ctx));
 
         // Should not match i32's IR type (wrong size)
-        let ir_wrong = RegType::Value { size: 4, signed: true };
+        let ir_wrong = RegType::Value {
+            size: 4,
+            signed: true,
+        };
         assert!(!bridge.types_compatible(&refined_type, &ir_wrong, &ctx));
     }
 }

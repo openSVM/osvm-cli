@@ -172,7 +172,12 @@ pub enum SmtConstraint {
     /// Register equals sum of two registers
     Add { dst: u32, lhs: u32, rhs: u32 },
     /// Memory access within bounds
-    InBounds { base: u32, offset: i64, size: i64, max_len: u32 },
+    InBounds {
+        base: u32,
+        offset: i64,
+        size: i64,
+        max_len: u32,
+    },
     /// Memory region is writable
     Writable { base: u32 },
     /// Branch condition
@@ -197,19 +202,41 @@ impl Verifier {
     }
 
     /// Add a constraint for a memory load
-    pub fn add_load_constraint(&mut self, base: u32, offset: i64, size: i64, max_len_reg: Option<u32>) {
+    pub fn add_load_constraint(
+        &mut self,
+        base: u32,
+        offset: i64,
+        size: i64,
+        max_len_reg: Option<u32>,
+    ) {
         self.access_count += 1;
         if let Some(max_len) = max_len_reg {
-            self.constraints.push(SmtConstraint::InBounds { base, offset, size, max_len });
+            self.constraints.push(SmtConstraint::InBounds {
+                base,
+                offset,
+                size,
+                max_len,
+            });
         }
     }
 
     /// Add a constraint for a memory store
-    pub fn add_store_constraint(&mut self, base: u32, offset: i64, size: i64, max_len_reg: Option<u32>) {
+    pub fn add_store_constraint(
+        &mut self,
+        base: u32,
+        offset: i64,
+        size: i64,
+        max_len_reg: Option<u32>,
+    ) {
         self.access_count += 1;
         self.constraints.push(SmtConstraint::Writable { base });
         if let Some(max_len) = max_len_reg {
-            self.constraints.push(SmtConstraint::InBounds { base, offset, size, max_len });
+            self.constraints.push(SmtConstraint::InBounds {
+                base,
+                offset,
+                size,
+                max_len,
+            });
         }
     }
 
@@ -220,13 +247,15 @@ impl Verifier {
         smt.push_str("(set-logic QF_BV)\n\n");
 
         // Declare registers as bitvectors
-        let max_reg = self.constraints.iter()
-            .filter_map(|c| match c {
-                SmtConstraint::Const { reg, .. } => Some(*reg),
-                SmtConstraint::Add { dst, lhs, rhs } => Some(*dst.max(lhs).max(rhs)),
-                SmtConstraint::InBounds { base, max_len, .. } => Some(*base.max(max_len)),
-                SmtConstraint::Writable { base } => Some(*base),
-                SmtConstraint::Branch { cond, .. } => Some(*cond),
+        let max_reg = self
+            .constraints
+            .iter()
+            .map(|c| match c {
+                SmtConstraint::Const { reg, .. } => *reg,
+                SmtConstraint::Add { dst, lhs, rhs } => *dst.max(lhs).max(rhs),
+                SmtConstraint::InBounds { base, max_len, .. } => *base.max(max_len),
+                SmtConstraint::Writable { base } => *base,
+                SmtConstraint::Branch { cond, .. } => *cond,
             })
             .max()
             .unwrap_or(0);
@@ -240,10 +269,7 @@ impl Verifier {
         for constraint in &self.constraints {
             match constraint {
                 SmtConstraint::Const { reg, value } => {
-                    smt.push_str(&format!(
-                        "(assert (= r{} #x{:016x}))\n",
-                        reg, *value as u64
-                    ));
+                    smt.push_str(&format!("(assert (= r{} #x{:016x}))\n", reg, *value as u64));
                 }
                 SmtConstraint::Add { dst, lhs, rhs } => {
                     smt.push_str(&format!(
@@ -251,7 +277,12 @@ impl Verifier {
                         dst, lhs, rhs
                     ));
                 }
-                SmtConstraint::InBounds { base, offset, size, max_len } => {
+                SmtConstraint::InBounds {
+                    base,
+                    offset,
+                    size,
+                    max_len,
+                } => {
                     // Access must end before max_len
                     let end_offset = *offset + *size;
                     smt.push_str(&format!(
@@ -264,17 +295,11 @@ impl Verifier {
                     ));
                 }
                 SmtConstraint::Writable { base } => {
-                    smt.push_str(&format!(
-                        "; Writability check for region at r{}\n",
-                        base
-                    ));
+                    smt.push_str(&format!("; Writability check for region at r{}\n", base));
                     // In practice, this would check against known writable regions
                 }
                 SmtConstraint::Branch { cond, target } => {
-                    smt.push_str(&format!(
-                        "; Branch on r{} to {}\n",
-                        cond, target
-                    ));
+                    smt.push_str(&format!("; Branch on r{} to {}\n", cond, target));
                 }
             }
         }
@@ -310,8 +335,14 @@ mod tests {
     #[test]
     fn test_smtlib_output() {
         let mut v = Verifier::new();
-        v.constraints.push(SmtConstraint::Const { reg: 0, value: 100 });
-        v.constraints.push(SmtConstraint::InBounds { base: 1, offset: 0, size: 8, max_len: 0 });
+        v.constraints
+            .push(SmtConstraint::Const { reg: 0, value: 100 });
+        v.constraints.push(SmtConstraint::InBounds {
+            base: 1,
+            offset: 0,
+            size: 8,
+            max_len: 0,
+        });
 
         let smt = v.to_smtlib();
         assert!(smt.contains("(set-logic QF_BV)"));

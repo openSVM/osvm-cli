@@ -1,8 +1,8 @@
 // User database operations
 
-use diesel::prelude::*;
-use crate::utils::bbs::{models::*, schema::users};
 use super::Result;
+use crate::utils::bbs::{models::*, schema::users};
+use diesel::prelude::*;
 
 /// Get user by node ID
 pub fn get(conn: &mut SqliteConnection, node_id: &str) -> Result<User> {

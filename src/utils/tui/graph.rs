@@ -1,29 +1,333 @@
+use arboard::Clipboard;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Widget, Wrap, canvas::{Canvas, Points, Line as CanvasLine, Circle, Rectangle}},
+    widgets::{
+        canvas::{Canvas, Circle, Line as CanvasLine, Points, Rectangle},
+        Block, Borders, Widget, Wrap,
+    },
     Frame,
 };
-use std::collections::{HashMap, HashSet, VecDeque};
-use arboard::Clipboard;
 use rayon::prelude::*;
-use std::sync::{Arc, atomic::{AtomicBool, AtomicU64, Ordering}};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,
+};
 use std::thread::{self, JoinHandle};
+use std::time::Instant;
+
+// ============================================================================
+// INCREMENTAL FORCE-DIRECTED LAYOUT ENGINE
+// ============================================================================
+// Purpose-built for streaming graphs. Key innovations:
+// 1. Position Inheritance: New nodes spawn near their connected neighbors
+// 2. Local Updates: Only compute forces for affected neighborhood
+// 3. Persistent Spatial Index: Incremental quadtree updates vs full rebuild
+// 4. Per-Node Temperature: Cold settled nodes, hot new nodes
+// 5. Arrival Queue: Batch process incoming nodes efficiently
+
+/// Per-node state for incremental layout
+#[derive(Debug, Clone)]
+pub struct NodeLayoutState {
+    /// Node temperature (high = active, low = settled)
+    pub temperature: f64,
+    /// When this node was added (for age-based cooling)
+    pub added_tick: u64,
+    /// Number of layout iterations this node has participated in
+    pub iterations: u32,
+    /// Whether this node needs force recalculation
+    pub dirty: bool,
+    /// Cached force from last tick (for interpolation)
+    pub cached_force: (f64, f64),
+    /// Distance to nearest anchor (for stability)
+    pub anchor_distance: f64,
+}
+
+impl Default for NodeLayoutState {
+    fn default() -> Self {
+        Self {
+            temperature: 100.0, // Start hot
+            added_tick: 0,
+            iterations: 0,
+            dirty: true,
+            cached_force: (0.0, 0.0),
+            anchor_distance: f64::MAX,
+        }
+    }
+}
+
+/// Arrival queue entry for batched node processing
+#[derive(Debug, Clone)]
+pub struct NodeArrival {
+    pub node_idx: usize,
+    pub connected_to: Vec<usize>, // Existing nodes this connects to
+    pub inherited_position: Option<(f64, f64)>, // Pre-calculated from neighbors
+}
+
+/// Incremental Force-Directed Layout Engine
+/// Designed for streaming graphs with O(k log n) per-node updates
+#[derive(Debug)]
+pub struct IncrementalLayout {
+    /// Per-node layout state
+    pub node_states: Vec<NodeLayoutState>,
+    /// Queue of newly arrived nodes pending integration
+    pub arrival_queue: VecDeque<NodeArrival>,
+    /// Current tick counter
+    pub tick: u64,
+    /// Global minimum temperature (simulation never fully stops)
+    pub min_temperature: f64,
+    /// Per-node cooling rate
+    pub node_cooling_rate: f64,
+    /// Neighborhood radius for local updates (in ideal_length units)
+    pub local_update_radius: f64,
+    /// Whether incremental mode is active
+    pub enabled: bool,
+    /// Number of arrivals processed per tick
+    pub arrivals_per_tick: usize,
+    /// Hot zone: nodes within this many iterations are "hot"
+    pub hot_threshold: u32,
+    /// Nodes marked for local update this tick
+    affected_nodes: HashSet<usize>,
+    /// Performance stats
+    pub stats: IncrementalLayoutStats,
+}
+
+/// Performance statistics for incremental layout
+#[derive(Debug, Default, Clone)]
+pub struct IncrementalLayoutStats {
+    pub nodes_processed: usize,
+    pub arrivals_processed: usize,
+    pub local_updates: usize,
+    pub full_updates: usize,
+    pub avg_neighborhood_size: f64,
+    pub last_tick_duration_us: u64,
+}
+
+impl Default for IncrementalLayout {
+    fn default() -> Self {
+        Self {
+            node_states: Vec::new(),
+            arrival_queue: VecDeque::new(),
+            tick: 0,
+            min_temperature: 2.0,     // Never fully stop
+            node_cooling_rate: 0.92,  // Slightly faster than global cooling
+            local_update_radius: 3.0, // Update nodes within 3 * ideal_length
+            enabled: true,
+            arrivals_per_tick: 5, // Process up to 5 new nodes per tick
+            hot_threshold: 50,    // Nodes are "hot" for 50 iterations
+            affected_nodes: HashSet::new(),
+            stats: IncrementalLayoutStats::default(),
+        }
+    }
+}
+
+impl IncrementalLayout {
+    /// Create new incremental layout engine
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Ensure node states vector matches node count
+    pub fn ensure_capacity(&mut self, n: usize) {
+        while self.node_states.len() < n {
+            let mut state = NodeLayoutState::default();
+            state.added_tick = self.tick;
+            self.node_states.push(state);
+        }
+    }
+
+    /// Queue a new node for integration
+    /// connected_to: indices of existing nodes this new node connects to
+    pub fn queue_arrival(&mut self, node_idx: usize, connected_to: Vec<usize>) {
+        self.arrival_queue.push_back(NodeArrival {
+            node_idx,
+            connected_to,
+            inherited_position: None,
+        });
+    }
+
+    /// Calculate inherited position for a new node based on its neighbors
+    /// Returns centroid of connected neighbors with slight jitter
+    pub fn calculate_inherited_position(
+        &self,
+        connected_to: &[usize],
+        positions: &[(f64, f64)],
+        ideal_length: f64,
+    ) -> (f64, f64) {
+        if connected_to.is_empty() || positions.is_empty() {
+            // No neighbors - random position near origin
+            let angle = (self.tick as f64 * 2.399) % (2.0 * std::f64::consts::PI);
+            let r = ideal_length * 2.0;
+            return (r * angle.cos(), r * angle.sin());
+        }
+
+        // Calculate centroid of connected neighbors
+        let mut cx = 0.0;
+        let mut cy = 0.0;
+        let mut count = 0;
+
+        for &idx in connected_to {
+            if idx < positions.len() {
+                let (x, y) = positions[idx];
+                cx += x;
+                cy += y;
+                count += 1;
+            }
+        }
+
+        if count == 0 {
+            let angle = (self.tick as f64 * 2.399) % (2.0 * std::f64::consts::PI);
+            let r = ideal_length * 2.0;
+            return (r * angle.cos(), r * angle.sin());
+        }
+
+        cx /= count as f64;
+        cy /= count as f64;
+
+        // Add jitter: offset from centroid by ~1 ideal_length in a unique direction
+        let jitter_angle =
+            (self.tick as f64 + connected_to.len() as f64) * 0.618 * std::f64::consts::PI;
+        let jitter_r = ideal_length * 0.5;
+
+        (
+            cx + jitter_r * jitter_angle.cos(),
+            cy + jitter_r * jitter_angle.sin(),
+        )
+    }
+
+    /// Process pending arrivals and integrate them into the layout
+    /// Returns (new_node_indices, positions_to_set)
+    pub fn process_arrivals(
+        &mut self,
+        positions: &[(f64, f64)],
+        ideal_length: f64,
+    ) -> Vec<(usize, f64, f64)> {
+        let mut results = Vec::new();
+        let count = self.arrivals_per_tick.min(self.arrival_queue.len());
+
+        for _ in 0..count {
+            if let Some(mut arrival) = self.arrival_queue.pop_front() {
+                // Calculate position based on neighbors
+                let pos = if let Some(p) = arrival.inherited_position {
+                    p
+                } else {
+                    self.calculate_inherited_position(
+                        &arrival.connected_to,
+                        positions,
+                        ideal_length,
+                    )
+                };
+
+                results.push((arrival.node_idx, pos.0, pos.1));
+
+                // Mark this node as hot
+                self.ensure_capacity(arrival.node_idx + 1);
+                self.node_states[arrival.node_idx].temperature = 100.0;
+                self.node_states[arrival.node_idx].added_tick = self.tick;
+                self.node_states[arrival.node_idx].dirty = true;
+
+                // Mark connected neighbors for local update
+                for &neighbor in &arrival.connected_to {
+                    self.affected_nodes.insert(neighbor);
+                    if neighbor < self.node_states.len() {
+                        self.node_states[neighbor].dirty = true;
+                        // Slightly reheat neighbors
+                        self.node_states[neighbor].temperature =
+                            (self.node_states[neighbor].temperature + 10.0).min(50.0);
+                    }
+                }
+                self.affected_nodes.insert(arrival.node_idx);
+
+                self.stats.arrivals_processed += 1;
+            }
+        }
+
+        results
+    }
+
+    /// Get nodes that need force updates this tick
+    /// In incremental mode: only affected neighborhood
+    /// Falls back to all nodes if too many are affected
+    pub fn get_nodes_to_update(&mut self, total_nodes: usize) -> Vec<usize> {
+        if !self.enabled || self.affected_nodes.len() > total_nodes / 2 {
+            // Too many affected - do full update
+            self.stats.full_updates += 1;
+            return (0..total_nodes).collect();
+        }
+
+        self.stats.local_updates += 1;
+        self.affected_nodes.drain().collect()
+    }
+
+    /// Cool down node temperatures and prepare for next tick
+    pub fn tick(&mut self) {
+        self.tick += 1;
+        let hot_cutoff = self.tick.saturating_sub(self.hot_threshold as u64);
+
+        for state in &mut self.node_states {
+            // Cool down temperature
+            state.temperature =
+                (state.temperature * self.node_cooling_rate).max(self.min_temperature);
+            state.iterations += 1;
+
+            // Mark old, cold nodes as stable (skip force calc if neighbors unchanged)
+            if state.added_tick < hot_cutoff && state.temperature < 5.0 {
+                state.dirty = false;
+            }
+        }
+
+        self.affected_nodes.clear();
+    }
+
+    /// Check if a node is "hot" (recently added or disturbed)
+    pub fn is_hot(&self, idx: usize) -> bool {
+        if idx >= self.node_states.len() {
+            return true; // Unknown nodes are hot
+        }
+        let state = &self.node_states[idx];
+        state.temperature > 10.0 || self.tick - state.added_tick < self.hot_threshold as u64
+    }
+
+    /// Get effective temperature for a node (for force scaling)
+    pub fn get_temperature(&self, idx: usize) -> f64 {
+        if idx >= self.node_states.len() {
+            100.0
+        } else {
+            self.node_states[idx].temperature
+        }
+    }
+
+    /// Mark a node as needing update (e.g., new edge added)
+    pub fn mark_dirty(&mut self, idx: usize) {
+        if idx < self.node_states.len() {
+            self.node_states[idx].dirty = true;
+            self.node_states[idx].temperature =
+                (self.node_states[idx].temperature + 15.0).min(80.0);
+        }
+        self.affected_nodes.insert(idx);
+    }
+
+    /// Get layout statistics
+    pub fn get_stats(&self) -> IncrementalLayoutStats {
+        self.stats.clone()
+    }
+}
 
 // Re-export forensics types for backward compatibility
 pub use super::graph_forensics::{
-    AlertSeverity, CircularFlow, GraphData, GraphForensics, MixerStats,
-    RapidFlowAlert, RiskExplanation, RiskLevel, WalletBehaviorType,
+    AlertSeverity, CircularFlow, GraphData, GraphForensics, MixerStats, RapidFlowAlert,
+    RiskExplanation, RiskLevel, WalletBehaviorType,
 };
 
 #[derive(Debug, Clone)]
 pub enum WalletNodeType {
-    Target,      // Red - the wallet being investigated
-    Funding,     // Green - wallets that funded the target
-    Recipient,   // Blue - wallets that received from target
-    DeFi,        // Magenta - DEX/DeFi protocols
-    Token,       // Yellow - token contracts
-    Mixer,       // DarkGray - detected mixing/tumbling node
+    Target,    // Red - the wallet being investigated
+    Funding,   // Green - wallets that funded the target
+    Recipient, // Blue - wallets that received from target
+    DeFi,      // Magenta - DEX/DeFi protocols
+    Token,     // Yellow - token contracts
+    Mixer,     // DarkGray - detected mixing/tumbling node
 }
 
 impl WalletNodeType {
@@ -64,7 +368,7 @@ pub struct EdgeLabel {
     pub amount: f64,
     pub token: String,
     pub timestamp: Option<String>,
-    pub signature: Option<String>,  // Transaction signature for Solana Explorer
+    pub signature: Option<String>, // Transaction signature for Solana Explorer
 }
 
 impl EdgeLabel {
@@ -110,12 +414,19 @@ struct BoundingBox {
 
 impl BoundingBox {
     fn new(x: f64, y: f64, half_w: f64, half_h: f64) -> Self {
-        Self { x, y, half_w, half_h }
+        Self {
+            x,
+            y,
+            half_w,
+            half_h,
+        }
     }
 
     fn contains(&self, px: f64, py: f64) -> bool {
-        px >= self.x - self.half_w && px <= self.x + self.half_w &&
-        py >= self.y - self.half_h && py <= self.y + self.half_h
+        px >= self.x - self.half_w
+            && px <= self.x + self.half_w
+            && py >= self.y - self.half_h
+            && py <= self.y + self.half_h
     }
 
     /// Return which quadrant (0-3) a point belongs to, or None if outside
@@ -126,10 +437,10 @@ impl BoundingBox {
         let right = px >= self.x;
         let top = py >= self.y;
         Some(match (right, top) {
-            (false, true)  => 0, // NW
-            (true, true)   => 1, // NE
+            (false, true) => 0,  // NW
+            (true, true) => 1,   // NE
             (false, false) => 2, // SW
-            (true, false)  => 3, // SE
+            (true, false) => 3,  // SE
         })
     }
 
@@ -156,11 +467,7 @@ enum QuadTreeNode {
     /// Empty node (no points)
     Empty,
     /// Leaf node containing a single point (index into positions array)
-    Leaf {
-        idx: usize,
-        x: f64,
-        y: f64,
-    },
+    Leaf { idx: usize, x: f64, y: f64 },
     /// Internal node with 4 children and aggregated mass data
     Internal {
         children: Box<[QuadTreeNode; 4]>,
@@ -236,7 +543,14 @@ impl BarnesHutTree {
         Self::insert_into(&mut self.root, self.bounds, idx, x, y, 0);
     }
 
-    fn insert_into(node: &mut QuadTreeNode, bounds: BoundingBox, idx: usize, x: f64, y: f64, depth: usize) {
+    fn insert_into(
+        node: &mut QuadTreeNode,
+        bounds: BoundingBox,
+        idx: usize,
+        x: f64,
+        y: f64,
+        depth: usize,
+    ) {
         // Prevent infinite recursion from numerical issues
         if depth > 50 {
             return;
@@ -246,7 +560,11 @@ impl BarnesHutTree {
             QuadTreeNode::Empty => {
                 *node = QuadTreeNode::Leaf { idx, x, y };
             }
-            QuadTreeNode::Leaf { idx: old_idx, x: old_x, y: old_y } => {
+            QuadTreeNode::Leaf {
+                idx: old_idx,
+                x: old_x,
+                y: old_y,
+            } => {
                 // Convert to internal node and reinsert both points
                 let old_idx = *old_idx;
                 let old_x = *old_x;
@@ -288,7 +606,12 @@ impl BarnesHutTree {
         match node {
             QuadTreeNode::Empty => (0.0, 0.0, 0.0),
             QuadTreeNode::Leaf { x, y, .. } => (1.0, *x, *y),
-            QuadTreeNode::Internal { children, mass, com_x, com_y } => {
+            QuadTreeNode::Internal {
+                children,
+                mass,
+                com_x,
+                com_y,
+            } => {
                 let mut total_mass = 0.0;
                 let mut weighted_x = 0.0;
                 let mut weighted_y = 0.0;
@@ -313,8 +636,23 @@ impl BarnesHutTree {
 
     /// Calculate repulsive force on a single node using Barnes-Hut approximation
     /// Returns (fx, fy) force vector
-    pub fn calculate_force(&self, node_idx: usize, node_x: f64, node_y: f64, k2: f64, repulsion: f64) -> (f64, f64) {
-        self.calculate_force_recursive(&self.root, self.bounds, node_idx, node_x, node_y, k2, repulsion)
+    pub fn calculate_force(
+        &self,
+        node_idx: usize,
+        node_x: f64,
+        node_y: f64,
+        k2: f64,
+        repulsion: f64,
+    ) -> (f64, f64) {
+        self.calculate_force_recursive(
+            &self.root,
+            self.bounds,
+            node_idx,
+            node_x,
+            node_y,
+            k2,
+            repulsion,
+        )
     }
 
     fn calculate_force_recursive(
@@ -343,7 +681,12 @@ impl BarnesHutTree {
                 let force = repulsion * k2 / dist;
                 ((dx / dist) * force, (dy / dist) * force)
             }
-            QuadTreeNode::Internal { children, mass, com_x, com_y } => {
+            QuadTreeNode::Internal {
+                children,
+                mass,
+                com_x,
+                com_y,
+            } => {
                 if *mass == 0.0 {
                     return (0.0, 0.0);
                 }
@@ -368,7 +711,13 @@ impl BarnesHutTree {
                     for (q, child) in children.iter().enumerate() {
                         let child_bounds = bounds.subdivide(q);
                         let (cfx, cfy) = self.calculate_force_recursive(
-                            child, child_bounds, target_idx, target_x, target_y, k2, repulsion
+                            child,
+                            child_bounds,
+                            target_idx,
+                            target_x,
+                            target_y,
+                            k2,
+                            repulsion,
                         );
                         fx += cfx;
                         fy += cfy;
@@ -383,8 +732,12 @@ impl BarnesHutTree {
 /// Selection mode - navigating nodes vs edges
 #[derive(Debug, Clone, PartialEq)]
 pub enum SelectionMode {
-    Node(usize),  // Selected node index
-    Edge { edge_idx: usize, from_node: usize, to_node: usize },  // Selected edge with endpoints
+    Node(usize), // Selected node index
+    Edge {
+        edge_idx: usize,
+        from_node: usize,
+        to_node: usize,
+    }, // Selected edge with endpoints
 }
 
 // NOTE: WalletBehaviorType, RapidFlowAlert, AlertSeverity, CircularFlow,
@@ -450,7 +803,11 @@ impl IncrementalRiskStats {
 
     /// Calculate rapid transfer alerts from cached timestamp data
     /// This is O(T * log T) where T is number of transfers per token (typically small)
-    pub fn detect_rapid_transfers_incremental(&self, window_secs: u64, threshold: usize) -> Vec<RapidFlowAlert> {
+    pub fn detect_rapid_transfers_incremental(
+        &self,
+        window_secs: u64,
+        threshold: usize,
+    ) -> Vec<RapidFlowAlert> {
         let mut alerts = Vec::new();
 
         for (token, times) in &self.token_transfer_times {
@@ -525,7 +882,9 @@ impl IncrementalRiskStats {
         }
 
         // 4. Rapid transfers (use cached if available, else compute)
-        let rapid_count = self.cached_rapid_alerts.iter()
+        let rapid_count = self
+            .cached_rapid_alerts
+            .iter()
             .filter(|a| matches!(a.severity, AlertSeverity::Critical | AlertSeverity::High))
             .count();
         score += (rapid_count as f64) * 15.0;
@@ -612,7 +971,7 @@ impl Default for ForceDirectedPhysics {
             temperature: 100.0,
             initial_temp: 100.0,
             cooling_rate: 0.95,
-            ideal_length: 50.0,  // Will be recalculated based on node count
+            ideal_length: 50.0, // Will be recalculated based on node count
             repulsion_strength: 1.0,
             attraction_strength: 0.5,
             gravity: 0.1,
@@ -725,7 +1084,7 @@ pub struct SavedTrail {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SavedTrailStep {
     pub wallet_address: String,
-    pub risk_level: String,  // "Critical", "High", "Medium", "Low"
+    pub risk_level: String, // "Critical", "High", "Medium", "Low"
     pub note: Option<String>,
     pub edge_amount: Option<f64>,
     pub edge_token: Option<String>,
@@ -742,14 +1101,14 @@ pub struct TrailFile {
 
 /// Branch colors for multi-trail visual distinction
 const BRANCH_COLORS: [Color; 8] = [
-    Color::Rgb(30, 144, 255),   // Dodger Blue (primary)
-    Color::Rgb(255, 165, 0),    // Orange
-    Color::Rgb(50, 205, 50),    // Lime Green
-    Color::Rgb(255, 105, 180),  // Hot Pink
-    Color::Rgb(64, 224, 208),   // Turquoise
-    Color::Rgb(255, 215, 0),    // Gold
-    Color::Rgb(186, 85, 211),   // Medium Orchid
-    Color::Rgb(255, 99, 71),    // Tomato
+    Color::Rgb(30, 144, 255),  // Dodger Blue (primary)
+    Color::Rgb(255, 165, 0),   // Orange
+    Color::Rgb(50, 205, 50),   // Lime Green
+    Color::Rgb(255, 105, 180), // Hot Pink
+    Color::Rgb(64, 224, 208),  // Turquoise
+    Color::Rgb(255, 215, 0),   // Gold
+    Color::Rgb(186, 85, 211),  // Medium Orchid
+    Color::Rgb(255, 99, 71),   // Tomato
 ];
 
 impl InvestigationTrail {
@@ -758,7 +1117,13 @@ impl InvestigationTrail {
     }
 
     /// Create a new named branch trail
-    pub fn new_branch(start_node: usize, start_address: String, start_risk: RiskLevel, name: String, branch_idx: usize) -> Self {
+    pub fn new_branch(
+        start_node: usize,
+        start_address: String,
+        start_risk: RiskLevel,
+        name: String,
+        branch_idx: usize,
+    ) -> Self {
         Self {
             steps: vec![TrailStep {
                 node_index: start_node,
@@ -812,13 +1177,17 @@ impl InvestigationTrail {
             hypothesis: self.hypothesis.clone(),
             created_at: self.created_at,
             target_wallet: target_wallet.to_string(),
-            steps: self.steps.iter().map(|s| SavedTrailStep {
-                wallet_address: s.wallet_address.clone(),
-                risk_level: format!("{:?}", s.risk_level),
-                note: s.note.clone(),
-                edge_amount: s.edge_amount,
-                edge_token: s.edge_token.clone(),
-            }).collect(),
+            steps: self
+                .steps
+                .iter()
+                .map(|s| SavedTrailStep {
+                    wallet_address: s.wallet_address.clone(),
+                    risk_level: format!("{:?}", s.risk_level),
+                    note: s.note.clone(),
+                    edge_amount: s.edge_amount,
+                    edge_token: s.edge_token.clone(),
+                })
+                .collect(),
         }
     }
 
@@ -831,21 +1200,26 @@ impl InvestigationTrail {
             ctx.push_str(&format!("Hypothesis: {}\n", h));
         }
 
-        ctx.push_str(&format!("Steps: {} | Total Flow: {:.2}\n\n",
-            self.steps.len(), self.total_amount()));
+        ctx.push_str(&format!(
+            "Steps: {} | Total Flow: {:.2}\n\n",
+            self.steps.len(),
+            self.total_amount()
+        ));
 
         ctx.push_str("Flow Path:\n");
         for (i, step) in self.steps.iter().enumerate() {
-            let arrow = if i < self.steps.len() - 1 { "→" } else { "●" };
+            let arrow = if i < self.steps.len() - 1 {
+                "→"
+            } else {
+                "●"
+            };
             let edge_info = match (&step.edge_amount, &step.edge_token) {
                 (Some(amt), Some(tok)) => format!(" [{:.2} {}]", amt, tok),
                 _ => String::new(),
             };
-            ctx.push_str(&format!("  {} {} ({:?}){}\n",
-                arrow,
-                step.wallet_address,
-                step.risk_level,
-                edge_info
+            ctx.push_str(&format!(
+                "  {} {} ({:?}){}\n",
+                arrow, step.wallet_address, step.risk_level, edge_info
             ));
         }
 
@@ -856,10 +1230,21 @@ impl InvestigationTrail {
         }
 
         // Risk distribution
-        let critical = self.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::Critical)).count();
-        let high = self.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::High)).count();
+        let critical = self
+            .steps
+            .iter()
+            .filter(|s| matches!(s.risk_level, RiskLevel::Critical))
+            .count();
+        let high = self
+            .steps
+            .iter()
+            .filter(|s| matches!(s.risk_level, RiskLevel::High))
+            .count();
         if critical > 0 || high > 0 {
-            ctx.push_str(&format!("Risk wallets: {} critical, {} high\n", critical, high));
+            ctx.push_str(&format!(
+                "Risk wallets: {} critical, {} high\n",
+                critical, high
+            ));
         }
 
         ctx
@@ -897,7 +1282,13 @@ impl InvestigationTrail {
     }
 
     /// Legacy add_step for backward compatibility
-    pub fn add_step(&mut self, node_index: usize, address: String, risk: RiskLevel, note: Option<String>) {
+    pub fn add_step(
+        &mut self,
+        node_index: usize,
+        address: String,
+        risk: RiskLevel,
+        note: Option<String>,
+    ) {
         self.add_step_with_edge(node_index, address, risk, note, None, None, None);
     }
 
@@ -970,7 +1361,8 @@ impl InvestigationTrail {
 
     /// Get the currently tentative edge index
     pub fn get_tentative_edge(&self) -> Option<usize> {
-        self.tentative_edge_idx.and_then(|i| self.available_edges.get(i).copied())
+        self.tentative_edge_idx
+            .and_then(|i| self.available_edges.get(i).copied())
     }
 
     pub fn current_step(&self) -> &TrailStep {
@@ -979,9 +1371,7 @@ impl InvestigationTrail {
 
     /// Get all edge indices in the trail (for rendering)
     pub fn trail_edges(&self) -> Vec<usize> {
-        self.steps.iter()
-            .filter_map(|s| s.edge_from_prev)
-            .collect()
+        self.steps.iter().filter_map(|s| s.edge_from_prev).collect()
     }
 
     /// Get all node indices in the trail (for rendering)
@@ -991,14 +1381,14 @@ impl InvestigationTrail {
 
     /// Calculate total SOL equivalent in trail (sum of edge amounts)
     pub fn total_amount(&self) -> f64 {
-        self.steps.iter()
-            .filter_map(|s| s.edge_amount)
-            .sum()
+        self.steps.iter().filter_map(|s| s.edge_amount).sum()
     }
 
     /// Get unique tokens in trail
     pub fn unique_tokens(&self) -> Vec<String> {
-        let mut tokens: Vec<String> = self.steps.iter()
+        let mut tokens: Vec<String> = self
+            .steps
+            .iter()
             .filter_map(|s| s.edge_token.clone())
             .collect();
         tokens.sort();
@@ -1017,7 +1407,11 @@ impl InvestigationTrail {
                 RiskLevel::Low => "🟢",
             };
             let edge_info = if let Some(amt) = step.edge_amount {
-                format!(" [{:.2} {}]", amt, step.edge_token.as_deref().unwrap_or("?"))
+                format!(
+                    " [{:.2} {}]",
+                    amt,
+                    step.edge_token.as_deref().unwrap_or("?")
+                )
             } else {
                 String::new()
             };
@@ -1028,7 +1422,10 @@ impl InvestigationTrail {
                 step.wallet_address,
                 edge_info,
                 step.risk_level,
-                step.note.as_ref().map(|n| format!("({})", n)).unwrap_or_default()
+                step.note
+                    .as_ref()
+                    .map(|n| format!("({})", n))
+                    .unwrap_or_default()
             ));
         }
         summary
@@ -1036,7 +1433,7 @@ impl InvestigationTrail {
 }
 
 pub struct WalletGraph {
-    nodes: Vec<(String, WalletNode)>, // (address, node_data)
+    nodes: Vec<(String, WalletNode)>,            // (address, node_data)
     connections: Vec<(usize, usize, EdgeLabel)>, // (from_idx, to_idx, edge_data)
     target_wallet: String,
     /// Current selection (node or edge)
@@ -1054,11 +1451,11 @@ pub struct WalletGraph {
     /// Search query and results
     pub search_query: String,
     pub search_active: bool,
-    pub search_results: Vec<usize>,  // Node indices matching search
-    pub search_result_idx: usize,    // Current result position
+    pub search_results: Vec<usize>, // Node indices matching search
+    pub search_result_idx: usize,   // Current result position
     /// Toast notification
     pub toast_message: Option<String>,
-    pub toast_timer: u8,  // Frames remaining to show toast
+    pub toast_timer: u8, // Frames remaining to show toast
     /// In-memory wallet cache for multi-hop discovery (address -> metadata)
     pub wallet_cache: HashMap<String, WalletCacheEntry>,
     /// Path-connected nodes (only nodes with paths to target)
@@ -1083,6 +1480,8 @@ pub struct WalletGraph {
     pub trail_mode: bool,
     /// Trail comparison mode (show all branches overlaid)
     pub trail_compare_mode: bool,
+    /// Trail-only mode: when true, only show nodes/edges that are part of investigation trails
+    pub trail_only_mode: bool,
     /// Detail panel scroll position
     pub detail_scroll: usize,
     /// Filtered nodes (nodes with only 1 inflow OR 1 outflow - hidden from display)
@@ -1144,16 +1543,20 @@ pub struct WalletGraph {
     physics_stop_signal: Arc<AtomicBool>,
     /// Physics thread dirty flag - set when node_positions changed
     physics_dirty: Arc<AtomicBool>,
+    /// Incremental layout engine for streaming graphs
+    incremental_layout: IncrementalLayout,
+    /// Start time for physics timestamps
+    start_time: Instant,
 }
 
 /// Cached wallet data for multi-hop path discovery
 #[derive(Debug, Clone)]
 pub struct WalletCacheEntry {
     pub address: String,
-    pub inflows: Vec<(String, f64, String)>,  // (from_address, amount, token)
+    pub inflows: Vec<(String, f64, String)>, // (from_address, amount, token)
     pub outflows: Vec<(String, f64, String)>, // (to_address, amount, token)
     pub discovered_at_depth: usize,
-    pub is_rendered: bool,  // false if not yet connected to target
+    pub is_rendered: bool, // false if not yet connected to target
 }
 
 // MixerStats is now in graph_forensics module (re-exported above)
@@ -1208,21 +1611,21 @@ impl FilterModal {
     /// Get items for current tab
     pub fn current_items(&self) -> Vec<(String, bool)> {
         match self.current_tab {
-            FilterTab::Wallets => {
-                self.all_wallets.iter()
-                    .map(|(addr, _)| (addr.clone(), self.selected_wallets.contains(addr)))
-                    .collect()
-            }
-            FilterTab::Programs => {
-                self.all_programs.iter()
-                    .map(|addr| (addr.clone(), self.selected_programs.contains(addr)))
-                    .collect()
-            }
-            FilterTab::Tokens => {
-                self.all_tokens.iter()
-                    .map(|token| (token.clone(), self.selected_tokens.contains(token)))
-                    .collect()
-            }
+            FilterTab::Wallets => self
+                .all_wallets
+                .iter()
+                .map(|(addr, _)| (addr.clone(), self.selected_wallets.contains(addr)))
+                .collect(),
+            FilterTab::Programs => self
+                .all_programs
+                .iter()
+                .map(|addr| (addr.clone(), self.selected_programs.contains(addr)))
+                .collect(),
+            FilterTab::Tokens => self
+                .all_tokens
+                .iter()
+                .map(|token| (token.clone(), self.selected_tokens.contains(token)))
+                .collect(),
         }
     }
 
@@ -1342,7 +1745,7 @@ pub enum GraphInput {
     SearchNext,
     SearchPrev,
     Copy,
-    HopToWallet,  // Re-center graph on selected wallet
+    HopToWallet,      // Re-center graph on selected wallet
     ScrollDetailUp,   // Scroll detail panel up
     ScrollDetailDown, // Scroll detail panel down
     // Filter modal inputs
@@ -1358,20 +1761,21 @@ pub enum GraphInput {
     ToggleMinimap, // 'M' key - toggle minimap visibility
     ToggleHeatmap, // 'H' key - toggle minimap heatmap mode
     // Trail navigation (arrow keys when trail mode is active)
-    TrailExtend,   // RIGHT arrow - add tentative edge to trail and move to next node
-    TrailRetract,  // LEFT arrow - remove last step from trail
-    TrailEdgeUp,   // UP arrow - cycle to previous available edge
-    TrailEdgeDown, // DOWN arrow - cycle to next available edge
+    TrailExtend,     // RIGHT arrow - add tentative edge to trail and move to next node
+    TrailRetract,    // LEFT arrow - remove last step from trail
+    TrailEdgeUp,     // UP arrow - cycle to previous available edge
+    TrailEdgeDown,   // DOWN arrow - cycle to next available edge
     ToggleTrailMode, // 'T' key - toggle trail navigation mode
     // Trail persistence and branching
-    SaveTrails,       // Ctrl+S - save all trails to file
-    LoadTrails,       // Ctrl+L - load trails from file
-    ForkTrail,        // 'F' key - fork current trail into new branch
-    NextTrailBranch,  // Tab - switch to next trail branch
-    PrevTrailBranch,  // Shift+Tab - switch to previous trail branch
-    ToggleCompareMode, // 'C' key - toggle trail comparison overlay
-    DeleteTrailBranch, // 'X' key - delete current trail branch
-    RenameTrailBranch, // 'R' key - rename current branch (starts text input mode)
+    SaveTrails,          // Ctrl+S - save all trails to file
+    LoadTrails,          // Ctrl+L - load trails from file
+    ForkTrail,           // 'F' key - fork current trail into new branch
+    NextTrailBranch,     // Tab - switch to next trail branch
+    PrevTrailBranch,     // Shift+Tab - switch to previous trail branch
+    ToggleCompareMode,   // 'C' key - toggle trail comparison overlay
+    ToggleTrailOnlyMode, // '\' key - toggle showing only trail nodes/edges
+    DeleteTrailBranch,   // 'X' key - delete current trail branch
+    RenameTrailBranch,   // 'R' key - rename current branch (starts text input mode)
 }
 
 impl WalletGraph {
@@ -1379,7 +1783,11 @@ impl WalletGraph {
         let mut nodes = Vec::new();
 
         // Add target wallet as first node
-        let target_label = format!("{}...{}", &target_wallet[..6], &target_wallet[target_wallet.len()-4..]);
+        let target_label = format!(
+            "{}...{}",
+            &target_wallet[..6],
+            &target_wallet[target_wallet.len() - 4..]
+        );
         nodes.push((
             target_wallet.clone(),
             WalletNode {
@@ -1401,8 +1809,8 @@ impl WalletGraph {
             selection: SelectionMode::Node(0), // Start with target wallet selected
             collapsed_nodes: std::collections::HashSet::new(),
             node_positions: vec![(0.0, 0.0)], // Target wallet at origin
-            viewport: (0.0, 0.0, 1.0), // (center_x, center_y, zoom=1.0)
-            max_depth: 15, // Increased for deep blockchain investigation
+            viewport: (0.0, 0.0, 1.0),        // (center_x, center_y, zoom=1.0)
+            max_depth: 15,                    // Increased for deep blockchain investigation
             current_depth: 0,
             search_query: String::new(),
             search_active: false,
@@ -1414,14 +1822,19 @@ impl WalletGraph {
             connected_nodes,
             entity_clusters: Vec::new(),
             wallet_to_cluster: HashMap::new(),
-            investigation_trail: Some(InvestigationTrail::new(0, target_wallet.clone(), RiskLevel::Low)),
+            investigation_trail: Some(InvestigationTrail::new(
+                0,
+                target_wallet.clone(),
+                RiskLevel::Low,
+            )),
             all_trails: vec![InvestigationTrail::new(0, target_wallet, RiskLevel::Low)],
             active_trail_idx: 0,
             show_minimap: true,
-            minimap_heatmap: false,  // Start in normal node view
+            minimap_heatmap: false, // Start in normal node view
             show_trail: true,
-            trail_mode: true,  // Trail mode on by default - arrow keys navigate trail
+            trail_mode: true, // Trail mode on by default - arrow keys navigate trail
             trail_compare_mode: false,
+            trail_only_mode: false, // Start with all nodes visible
             detail_scroll: 0,
             filtered_nodes: std::collections::HashSet::new(),
             folded_groups: HashMap::new(),
@@ -1429,7 +1842,7 @@ impl WalletGraph {
             user_filter_active: false,
             cached_risk_explanation: None,
             risk_cache_dirty: true,
-            layout_dirty: true,  // Need initial layout calculation
+            layout_dirty: true, // Need initial layout calculation
             incremental_updates_pending: 0,
             incremental_relayout_threshold: 50, // Only relayout after 50 streaming updates
             streaming_mode: false,
@@ -1439,15 +1852,18 @@ impl WalletGraph {
             cached_wallet_behaviors: HashMap::new(),
             cached_mixer_nodes: HashSet::new(),
             entity_clusters_dirty: true, // Need computation on first access
-            node_velocities: vec![(0.0, 0.0)],  // Target wallet starts at rest
+            node_velocities: vec![(0.0, 0.0)], // Target wallet starts at rest
             physics: ForceDirectedPhysics::default(),
-            layout_mode: LayoutMode::default(),  // Force-directed by default
+            layout_mode: LayoutMode::default(), // Force-directed by default
             // Double-buffer initialization
-            render_positions: vec![(0.0, 0.0)],  // Copy of node_positions for rendering
+            render_positions: vec![(0.0, 0.0)], // Copy of node_positions for rendering
             physics_frame: Arc::new(AtomicU64::new(0)),
             last_rendered_frame: 0,
             physics_stop_signal: Arc::new(AtomicBool::new(false)),
             physics_dirty: Arc::new(AtomicBool::new(true)),
+            // Incremental layout engine
+            incremental_layout: IncrementalLayout::new(),
+            start_time: Instant::now(),
         }
     }
 
@@ -1484,7 +1900,8 @@ impl WalletGraph {
     /// This is a fast O(n) copy operation
     pub fn sync_render_buffer(&mut self) {
         if self.node_positions.len() != self.render_positions.len() {
-            self.render_positions.resize(self.node_positions.len(), (0.0, 0.0));
+            self.render_positions
+                .resize(self.node_positions.len(), (0.0, 0.0));
         }
         self.render_positions.clone_from(&self.node_positions);
         self.physics_frame.fetch_add(1, Ordering::Release);
@@ -1506,6 +1923,9 @@ impl WalletGraph {
         // Maintain warmth in streaming mode
         if self.streaming_mode {
             self.physics.maintain_warmth(2.0);
+
+            // === INCREMENTAL LAYOUT: Tick per-node temperatures ===
+            self.incremental_layout.tick();
         }
 
         if !self.physics.should_continue() {
@@ -1514,7 +1934,13 @@ impl WalletGraph {
 
         // Run physics steps based on graph size
         let n = self.nodes.len();
-        let iterations = if n < 100 { 3 } else if n < 500 { 2 } else { 1 };
+        let iterations = if n < 100 {
+            3
+        } else if n < 500 {
+            2
+        } else {
+            1
+        };
 
         for _ in 0..iterations {
             self.step_force_directed_layout();
@@ -1583,11 +2009,13 @@ impl WalletGraph {
                     self.viewport.1 = pos.1;
                 }
             }
-            SelectionMode::Edge { from_node, to_node, .. } => {
+            SelectionMode::Edge {
+                from_node, to_node, ..
+            } => {
                 // Center on edge midpoint
                 if let (Some(from_pos), Some(to_pos)) = (
                     self.node_positions.get(*from_node),
-                    self.node_positions.get(*to_node)
+                    self.node_positions.get(*to_node),
                 ) {
                     self.viewport.0 = (from_pos.0 + to_pos.0) / 2.0;
                     self.viewport.1 = (from_pos.1 + to_pos.1) / 2.0;
@@ -1630,7 +2058,7 @@ impl WalletGraph {
     /// Triggers layout recalculation
     pub fn toggle_layout_mode(&mut self) {
         self.layout_mode.toggle();
-        self.layout_dirty = true;  // Trigger recalculation
+        self.layout_dirty = true; // Trigger recalculation
         self.show_toast(format!("Layout: {} (L to toggle)", self.layout_mode.name()));
     }
 
@@ -1653,7 +2081,11 @@ impl WalletGraph {
                             self.update_trail_on_selection(new_idx);
                         }
                     }
-                    SelectionMode::Edge { edge_idx, from_node, to_node } => {
+                    SelectionMode::Edge {
+                        edge_idx,
+                        from_node,
+                        to_node,
+                    } => {
                         // When on edge, up/down cycles through edges from same source
                         let outgoing = self.outgoing_edges(*from_node);
                         if let Some(pos) = outgoing.iter().position(|e| e == edge_idx) {
@@ -1685,7 +2117,11 @@ impl WalletGraph {
                             self.update_trail_on_selection(new_idx);
                         }
                     }
-                    SelectionMode::Edge { edge_idx, from_node, to_node } => {
+                    SelectionMode::Edge {
+                        edge_idx,
+                        from_node,
+                        to_node,
+                    } => {
                         // Cycle through outgoing edges
                         let outgoing = self.outgoing_edges(*from_node);
                         if let Some(pos) = outgoing.iter().position(|e| e == edge_idx) {
@@ -1798,11 +2234,10 @@ impl WalletGraph {
                 }
                 None
             }
-            GraphInput::Select => {
-                self.selected_node()
-                    .and_then(|idx| self.nodes.get(idx))
-                    .map(|(addr, _)| addr.clone())
-            }
+            GraphInput::Select => self
+                .selected_node()
+                .and_then(|idx| self.nodes.get(idx))
+                .map(|(addr, _)| addr.clone()),
             GraphInput::Escape => {
                 // Escape deselects (go back to target wallet)
                 self.set_selected_node(Some(0));
@@ -1845,10 +2280,14 @@ impl WalletGraph {
             }
             GraphInput::SearchNext => {
                 if !self.search_results.is_empty() {
-                    self.search_result_idx = (self.search_result_idx + 1) % self.search_results.len();
+                    self.search_result_idx =
+                        (self.search_result_idx + 1) % self.search_results.len();
                     self.set_selected_node(Some(self.search_results[self.search_result_idx]));
                     // Center viewport on result
-                    if let Some(pos) = self.node_positions.get(self.search_results[self.search_result_idx]) {
+                    if let Some(pos) = self
+                        .node_positions
+                        .get(self.search_results[self.search_result_idx])
+                    {
                         self.viewport.0 = pos.0;
                         self.viewport.1 = pos.1;
                     }
@@ -1864,7 +2303,10 @@ impl WalletGraph {
                     };
                     self.set_selected_node(Some(self.search_results[self.search_result_idx]));
                     // Center viewport on result
-                    if let Some(pos) = self.node_positions.get(self.search_results[self.search_result_idx]) {
+                    if let Some(pos) = self
+                        .node_positions
+                        .get(self.search_results[self.search_result_idx])
+                    {
                         self.viewport.0 = pos.0;
                         self.viewport.1 = pos.1;
                     }
@@ -1875,9 +2317,14 @@ impl WalletGraph {
             GraphInput::Copy => {
                 if let Some(idx) = self.selected_node() {
                     if let Some((addr, _)) = self.nodes.get(idx) {
-                        match Clipboard::new().and_then(|mut clip| clip.set_text(addr.to_string())) {
+                        match Clipboard::new().and_then(|mut clip| clip.set_text(addr.to_string()))
+                        {
                             Ok(_) => {
-                                self.show_toast(format!("Copied: {}...{}", &addr[..8], &addr[addr.len()-8..]));
+                                self.show_toast(format!(
+                                    "Copied: {}...{}",
+                                    &addr[..8],
+                                    &addr[addr.len() - 8..]
+                                ));
                             }
                             Err(e) => {
                                 self.show_toast(format!("Copy failed: {}", e));
@@ -1897,7 +2344,11 @@ impl WalletGraph {
 
                         // Show confirmation toast
                         if let Some((addr, _)) = self.nodes.get(idx) {
-                            self.show_toast(format!("Centered on: {}...{}", &addr[..8], &addr[addr.len()-8..]));
+                            self.show_toast(format!(
+                                "Centered on: {}...{}",
+                                &addr[..8],
+                                &addr[addr.len() - 8..]
+                            ));
                         }
                     }
                 }
@@ -1954,12 +2405,22 @@ impl WalletGraph {
             }
             GraphInput::ToggleMinimap => {
                 self.show_minimap = !self.show_minimap;
-                self.show_toast(format!("Minimap: {}", if self.show_minimap { "ON" } else { "OFF" }));
+                self.show_toast(format!(
+                    "Minimap: {}",
+                    if self.show_minimap { "ON" } else { "OFF" }
+                ));
                 None
             }
             GraphInput::ToggleHeatmap => {
                 self.minimap_heatmap = !self.minimap_heatmap;
-                self.show_toast(format!("Minimap mode: {}", if self.minimap_heatmap { "Heatmap 🔥" } else { "Nodes 🔵" }));
+                self.show_toast(format!(
+                    "Minimap mode: {}",
+                    if self.minimap_heatmap {
+                        "Heatmap 🔥"
+                    } else {
+                        "Nodes 🔵"
+                    }
+                ));
                 None
             }
             GraphInput::ToggleTrailMode => {
@@ -1968,7 +2429,10 @@ impl WalletGraph {
                     // Initialize available edges for current node when entering trail mode
                     self.refresh_trail_available_edges();
                 }
-                self.show_toast(format!("Trail mode: {} [←→↑↓]", if self.trail_mode { "ON 🔍" } else { "OFF" }));
+                self.show_toast(format!(
+                    "Trail mode: {} [←→↑↓]",
+                    if self.trail_mode { "ON 🔍" } else { "OFF" }
+                ));
                 None
             }
             GraphInput::TrailEdgeUp => {
@@ -2026,7 +2490,11 @@ impl WalletGraph {
 
                 if let Some((to_node, edge_idx, amount, token)) = edge_info {
                     // Get node info
-                    let address = self.nodes.get(to_node).map(|(a, _)| a.clone()).unwrap_or_default();
+                    let address = self
+                        .nodes
+                        .get(to_node)
+                        .map(|(a, _)| a.clone())
+                        .unwrap_or_default();
                     let risk_level = self.calculate_node_risk_level(to_node);
 
                     // Generate contextual note
@@ -2107,8 +2575,11 @@ impl WalletGraph {
                     self.all_trails.push(forked.clone());
                     self.active_trail_idx = self.all_trails.len() - 1;
                     self.investigation_trail = Some(forked);
-                    self.show_toast(format!("Forked to branch '{}' [{}]",
-                        new_name, self.all_trails.len()));
+                    self.show_toast(format!(
+                        "Forked to branch '{}' [{}]",
+                        new_name,
+                        self.all_trails.len()
+                    ));
                 }
                 None
             }
@@ -2118,9 +2589,17 @@ impl WalletGraph {
                 }
                 self.active_trail_idx = (self.active_trail_idx + 1) % self.all_trails.len();
                 self.investigation_trail = Some(self.all_trails[self.active_trail_idx].clone());
-                let name = self.investigation_trail.as_ref().map(|t| t.branch_name.clone()).unwrap_or_default();
-                self.show_toast(format!("Trail: '{}' [{}/{}]",
-                    name, self.active_trail_idx + 1, self.all_trails.len()));
+                let name = self
+                    .investigation_trail
+                    .as_ref()
+                    .map(|t| t.branch_name.clone())
+                    .unwrap_or_default();
+                self.show_toast(format!(
+                    "Trail: '{}' [{}/{}]",
+                    name,
+                    self.active_trail_idx + 1,
+                    self.all_trails.len()
+                ));
                 self.refresh_trail_available_edges();
                 None
             }
@@ -2134,16 +2613,42 @@ impl WalletGraph {
                     self.active_trail_idx -= 1;
                 }
                 self.investigation_trail = Some(self.all_trails[self.active_trail_idx].clone());
-                let name = self.investigation_trail.as_ref().map(|t| t.branch_name.clone()).unwrap_or_default();
-                self.show_toast(format!("Trail: '{}' [{}/{}]",
-                    name, self.active_trail_idx + 1, self.all_trails.len()));
+                let name = self
+                    .investigation_trail
+                    .as_ref()
+                    .map(|t| t.branch_name.clone())
+                    .unwrap_or_default();
+                self.show_toast(format!(
+                    "Trail: '{}' [{}/{}]",
+                    name,
+                    self.active_trail_idx + 1,
+                    self.all_trails.len()
+                ));
                 self.refresh_trail_available_edges();
                 None
             }
             GraphInput::ToggleCompareMode => {
                 self.trail_compare_mode = !self.trail_compare_mode;
-                self.show_toast(format!("Compare mode: {}",
-                    if self.trail_compare_mode { "ON (all branches)" } else { "OFF" }));
+                self.show_toast(format!(
+                    "Compare mode: {}",
+                    if self.trail_compare_mode {
+                        "ON (all branches)"
+                    } else {
+                        "OFF"
+                    }
+                ));
+                None
+            }
+            GraphInput::ToggleTrailOnlyMode => {
+                self.trail_only_mode = !self.trail_only_mode;
+                self.show_toast(format!(
+                    "Trail-only mode: {}",
+                    if self.trail_only_mode {
+                        "ON (showing trail nodes only)"
+                    } else {
+                        "OFF (showing all nodes)"
+                    }
+                ));
                 None
             }
             GraphInput::DeleteTrailBranch => {
@@ -2157,13 +2662,25 @@ impl WalletGraph {
                     self.active_trail_idx = self.all_trails.len() - 1;
                 }
                 self.investigation_trail = Some(self.all_trails[self.active_trail_idx].clone());
-                self.show_toast(format!("Deleted '{}', now on '{}'",
-                    deleted_name, self.investigation_trail.as_ref().map(|t| &t.branch_name).unwrap_or(&String::new())));
+                self.show_toast(format!(
+                    "Deleted '{}', now on '{}'",
+                    deleted_name,
+                    self.investigation_trail
+                        .as_ref()
+                        .map(|t| &t.branch_name)
+                        .unwrap_or(&String::new())
+                ));
                 None
             }
             GraphInput::RenameTrailBranch => {
                 // TODO: This would need text input mode - for now just show a message
                 self.show_toast("Rename: use :rename <name> in future version".to_string());
+                None
+            }
+            GraphInput::ToggleTrailOnlyMode => {
+                // Toggle showing only trail nodes/edges vs full graph
+                // TODO: Implement trail-only rendering mode
+                self.show_toast("Trail-only mode: coming soon".to_string());
                 None
             }
         }
@@ -2172,7 +2689,8 @@ impl WalletGraph {
     /// Refresh available edges for trail navigation from current trail node
     fn refresh_trail_available_edges(&mut self) {
         // First get the current node from trail (immutable borrow)
-        let current_node = self.investigation_trail
+        let current_node = self
+            .investigation_trail
             .as_ref()
             .map(|t| t.current_step().node_index);
 
@@ -2190,7 +2708,9 @@ impl WalletGraph {
     /// Refresh the filter lists from current graph data
     pub fn refresh_filter_lists(&mut self) {
         // Collect all wallets
-        self.filter_modal.all_wallets = self.nodes.iter()
+        self.filter_modal.all_wallets = self
+            .nodes
+            .iter()
             .map(|(addr, node)| (addr.clone(), node.node_type.clone()))
             .collect();
 
@@ -2203,7 +2723,9 @@ impl WalletGraph {
         self.filter_modal.all_tokens.sort();
 
         // Collect programs (DeFi nodes)
-        self.filter_modal.all_programs = self.nodes.iter()
+        self.filter_modal.all_programs = self
+            .nodes
+            .iter()
             .filter(|(_, node)| matches!(node.node_type, WalletNodeType::DeFi))
             .map(|(addr, _)| addr.clone())
             .collect();
@@ -2211,7 +2733,8 @@ impl WalletGraph {
         // If no selections yet, select all by default
         if self.filter_modal.selected_wallets.is_empty()
             && self.filter_modal.selected_tokens.is_empty()
-            && self.filter_modal.selected_programs.is_empty() {
+            && self.filter_modal.selected_programs.is_empty()
+        {
             // Select all wallets
             for (addr, _) in &self.filter_modal.all_wallets {
                 self.filter_modal.selected_wallets.insert(addr.clone());
@@ -2244,7 +2767,9 @@ impl WalletGraph {
         let trail_file = TrailFile {
             version: 1,
             target_wallet: self.target_wallet.clone(),
-            trails: self.all_trails.iter()
+            trails: self
+                .all_trails
+                .iter()
                 .map(|t| t.to_saved(&self.target_wallet))
                 .collect(),
             active_branch: self.active_trail_idx,
@@ -2258,8 +2783,7 @@ impl WalletGraph {
         // Serialize and write
         let json = serde_json::to_string_pretty(&trail_file)
             .map_err(|e| format!("Serialize failed: {}", e))?;
-        std::fs::write(&path, json)
-            .map_err(|e| format!("Write failed: {}", e))?;
+        std::fs::write(&path, json).map_err(|e| format!("Write failed: {}", e))?;
 
         Ok(format!("~/.osvm/trails/{}", filename))
     }
@@ -2277,10 +2801,9 @@ impl WalletGraph {
         }
 
         // Read and parse
-        let json = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Read failed: {}", e))?;
-        let trail_file: TrailFile = serde_json::from_str(&json)
-            .map_err(|e| format!("Parse failed: {}", e))?;
+        let json = std::fs::read_to_string(&path).map_err(|e| format!("Read failed: {}", e))?;
+        let trail_file: TrailFile =
+            serde_json::from_str(&json).map_err(|e| format!("Parse failed: {}", e))?;
 
         // Convert saved trails back to InvestigationTrail
         // Note: We can't fully restore node indices, so this recreates trails
@@ -2288,18 +2811,29 @@ impl WalletGraph {
         let mut loaded_trails = Vec::new();
         for (idx, saved) in trail_file.trails.iter().enumerate() {
             // Find the starting node in current graph
-            let start_node = self.find_node_by_address(&saved.steps.first()
-                .map(|s| &s.wallet_address)
-                .unwrap_or(&self.target_wallet));
+            let start_node = self.find_node_by_address(
+                &saved
+                    .steps
+                    .first()
+                    .map(|s| &s.wallet_address)
+                    .unwrap_or(&self.target_wallet),
+            );
 
             if let Some(start_idx) = start_node {
-                let risk = self.parse_risk_level(&saved.steps.first()
-                    .map(|s| &s.risk_level)
-                    .unwrap_or(&"Low".to_string()));
+                let risk = self.parse_risk_level(
+                    &saved
+                        .steps
+                        .first()
+                        .map(|s| &s.risk_level)
+                        .unwrap_or(&"Low".to_string()),
+                );
 
                 let mut trail = InvestigationTrail::new_branch(
                     start_idx,
-                    saved.steps.first().map(|s| s.wallet_address.clone())
+                    saved
+                        .steps
+                        .first()
+                        .map(|s| s.wallet_address.clone())
                         .unwrap_or_default(),
                     risk,
                     saved.branch_name.clone(),
@@ -2354,7 +2888,9 @@ impl WalletGraph {
 
     /// Get AI analysis context for current trail (for trail-guided AI)
     pub fn get_trail_ai_context(&self) -> Option<String> {
-        self.investigation_trail.as_ref().map(|t| t.generate_ai_context())
+        self.investigation_trail
+            .as_ref()
+            .map(|t| t.generate_ai_context())
     }
 
     /// Get AI comparison context for all trails (when compare mode is on)
@@ -2362,8 +2898,17 @@ impl WalletGraph {
         let mut ctx = String::from("=== Multi-Trail Comparison ===\n\n");
 
         for (i, trail) in self.all_trails.iter().enumerate() {
-            let active = if i == self.active_trail_idx { " ← ACTIVE" } else { "" };
-            ctx.push_str(&format!("--- Branch {}: '{}'{} ---\n", i + 1, trail.branch_name, active));
+            let active = if i == self.active_trail_idx {
+                " ← ACTIVE"
+            } else {
+                ""
+            };
+            ctx.push_str(&format!(
+                "--- Branch {}: '{}'{} ---\n",
+                i + 1,
+                trail.branch_name,
+                active
+            ));
             ctx.push_str(&trail.generate_ai_context());
             ctx.push('\n');
         }
@@ -2371,7 +2916,8 @@ impl WalletGraph {
         // Summary comparison
         ctx.push_str("\n=== Trail Comparison Summary ===\n");
         for trail in &self.all_trails {
-            ctx.push_str(&format!("• '{}': {} steps, {:.2} total flow, {} tokens\n",
+            ctx.push_str(&format!(
+                "• '{}': {} steps, {:.2} total flow, {} tokens\n",
                 trail.branch_name,
                 trail.steps.len(),
                 trail.total_amount(),
@@ -2384,14 +2930,16 @@ impl WalletGraph {
 
     /// Check if a node is in the current trail
     pub fn is_node_in_trail(&self, node_idx: usize) -> bool {
-        self.investigation_trail.as_ref()
+        self.investigation_trail
+            .as_ref()
             .map(|t| t.trail_nodes().contains(&node_idx))
             .unwrap_or(false)
     }
 
     /// Check if an edge is in the current trail
     pub fn is_edge_in_trail(&self, edge_idx: usize) -> bool {
-        self.investigation_trail.as_ref()
+        self.investigation_trail
+            .as_ref()
             .map(|t| t.trail_edges().contains(&edge_idx))
             .unwrap_or(false)
     }
@@ -2513,12 +3061,14 @@ impl WalletGraph {
                     info.push_str(&format!("Label: {}\n\n", node.label));
 
                     // Get incoming and outgoing transfers
-                    let incoming: Vec<_> = self.connections
+                    let incoming: Vec<_> = self
+                        .connections
                         .iter()
                         .enumerate()
                         .filter(|(_, (_, to, _))| *to == *idx)
                         .collect();
-                    let outgoing: Vec<_> = self.connections
+                    let outgoing: Vec<_> = self
+                        .connections
                         .iter()
                         .enumerate()
                         .filter(|(_, (from, _, _))| *from == *idx)
@@ -2536,15 +3086,22 @@ impl WalletGraph {
                                 continue; // Skip scrolled-past items
                             }
                             if i >= self.detail_scroll + 10 {
-                                info.push_str(&format!("  ... and {} more (scroll down)\n", incoming.len() - i));
+                                info.push_str(&format!(
+                                    "  ... and {} more (scroll down)\n",
+                                    incoming.len() - i
+                                ));
                                 break;
                             }
 
-                            let from_addr = self.nodes.get(*from)
-                                .map(|(a, _)| if a.len() > 12 {
-                                    format!("{}...{}", &a[..6], &a[a.len()-4..])
-                                } else {
-                                    a.clone()
+                            let from_addr = self
+                                .nodes
+                                .get(*from)
+                                .map(|(a, _)| {
+                                    if a.len() > 12 {
+                                        format!("{}...{}", &a[..6], &a[a.len() - 4..])
+                                    } else {
+                                        a.clone()
+                                    }
                                 })
                                 .unwrap_or_else(|| "Unknown".to_string());
 
@@ -2574,15 +3131,22 @@ impl WalletGraph {
                                 continue;
                             }
                             if i >= scroll_offset + 10 {
-                                info.push_str(&format!("  ... and {} more (scroll down)\n", outgoing.len() - i));
+                                info.push_str(&format!(
+                                    "  ... and {} more (scroll down)\n",
+                                    outgoing.len() - i
+                                ));
                                 break;
                             }
 
-                            let to_addr = self.nodes.get(*to)
-                                .map(|(a, _)| if a.len() > 12 {
-                                    format!("{}...{}", &a[..6], &a[a.len()-4..])
-                                } else {
-                                    a.clone()
+                            let to_addr = self
+                                .nodes
+                                .get(*to)
+                                .map(|(a, _)| {
+                                    if a.len() > 12 {
+                                        format!("{}...{}", &a[..6], &a[a.len() - 4..])
+                                    } else {
+                                        a.clone()
+                                    }
                                 })
                                 .unwrap_or_else(|| "Unknown".to_string());
 
@@ -2607,13 +3171,21 @@ impl WalletGraph {
                     info
                 })
             }
-            SelectionMode::Edge { edge_idx, from_node, to_node } => {
+            SelectionMode::Edge {
+                edge_idx,
+                from_node,
+                to_node,
+            } => {
                 // Get edge metadata
                 if let Some((from_addr, to_addr, edge_data)) = self.connections.get(*edge_idx) {
-                    let from_label = self.nodes.get(*from_node)
+                    let from_label = self
+                        .nodes
+                        .get(*from_node)
                         .map(|(_, n)| n.label.clone())
                         .unwrap_or_else(|| "Unknown".to_string());
-                    let to_label = self.nodes.get(*to_node)
+                    let to_label = self
+                        .nodes
+                        .get(*to_node)
                         .map(|(_, n)| n.label.clone())
                         .unwrap_or_else(|| "Unknown".to_string());
 
@@ -2636,11 +3208,13 @@ impl WalletGraph {
                         to_label,
                         edge_data.amount,
                         edge_data.token,
-                        "SPL Transfer",  // Default transfer type
+                        "SPL Transfer", // Default transfer type
                         edge_data.timestamp.as_deref().unwrap_or("Unknown"),
-                        edge_data.signature.as_deref()
+                        edge_data
+                            .signature
+                            .as_deref()
                             .and_then(|s| if s.len() > 16 {
-                                Some(format!("{}...{}", &s[..8], &s[s.len()-8..]))
+                                Some(format!("{}...{}", &s[..8], &s[s.len() - 8..]))
                             } else {
                                 Some(s.to_string())
                             })
@@ -2670,7 +3244,7 @@ impl WalletGraph {
         }
 
         let short_label = if address.len() > 12 {
-            format!("{}...{}", &address[..6], &address[address.len()-4..])
+            format!("{}...{}", &address[..6], &address[address.len() - 4..])
         } else {
             address.clone()
         };
@@ -2690,9 +3264,29 @@ impl WalletGraph {
         let idx = self.nodes.len() - 1;
 
         if self.streaming_mode && matches!(self.layout_mode, LayoutMode::ForceDirected) {
-            // In streaming mode with force-directed layout:
-            // Position near neighbor and let physics settle it
-            self.position_new_node_near_neighbor(idx, None);
+            // === INCREMENTAL LAYOUT: Queue node for intelligent positioning ===
+            // Find which existing nodes this will connect to (we don't know yet,
+            // but we can check if caller provided connected_to info)
+            // For now, use neighbor-based positioning with the incremental engine
+
+            // Use incremental layout to calculate inherited position
+            let connected_to: Vec<usize> = Vec::new(); // Will be populated when edges are added
+            let pos = self.incremental_layout.calculate_inherited_position(
+                &connected_to,
+                &self.node_positions,
+                self.physics.ideal_length,
+            );
+
+            // Add position directly (not via queue since we need it now)
+            self.node_positions.push(pos);
+            self.render_positions.push(pos);
+            self.node_velocities.push((0.0, 0.0));
+
+            // Register node with incremental layout engine
+            self.incremental_layout.ensure_capacity(idx + 1);
+            self.incremental_layout.mark_dirty(idx);
+
+            self.physics_dirty.store(true, Ordering::Release);
         } else {
             // Standard mode: use layered circular layout
             self.position_node_in_layer(idx);
@@ -2706,16 +3300,12 @@ impl WalletGraph {
         // Invalidate caches since graph structure changed
         self.risk_cache_dirty = true;
 
-        // In streaming mode, use incremental updates instead of full relayout
+        // In streaming mode, DON'T trigger full relayout - let incremental layout handle it
         if self.streaming_mode {
             self.incremental_updates_pending += 1;
-            // Only trigger full relayout after threshold is reached
-            if self.incremental_updates_pending >= self.incremental_relayout_threshold {
-                self.layout_dirty = true;
-                self.incremental_updates_pending = 0;
-            }
+            // Removed: full relayout trigger - incremental layout handles this now
         } else {
-            self.layout_dirty = true;  // New node requires layout recomputation
+            self.layout_dirty = true; // New node requires layout recomputation
         }
 
         idx
@@ -2732,7 +3322,8 @@ impl WalletGraph {
 
         // Calculate position in a circle for this layer
         let radius = 15.0 * (layer as f64 + 1.0); // Each layer 15 units apart
-        let angle = (position_in_layer as f64) * 2.0 * std::f64::consts::PI / (nodes_in_layer as f64 + 1.0).max(6.0);
+        let angle = (position_in_layer as f64) * 2.0 * std::f64::consts::PI
+            / (nodes_in_layer as f64 + 1.0).max(6.0);
 
         let pos = (radius * angle.cos(), radius * angle.sin());
         self.node_positions.push(pos);
@@ -2866,7 +3457,9 @@ impl WalletGraph {
     }
 
     fn count_nodes_in_layer(&self, layer: usize) -> usize {
-        self.nodes.iter().enumerate()
+        self.nodes
+            .iter()
+            .enumerate()
             .filter(|(idx, _)| self.calculate_node_layer(*idx) == layer)
             .count()
     }
@@ -2885,11 +3478,8 @@ impl WalletGraph {
 
         if let (Some(from), Some(to)) = (from_idx, to_idx) {
             // Update incremental risk stats BEFORE moving token
-            self.incremental_risk.on_edge_added(
-                amount,
-                &token,
-                timestamp.as_deref(),
-            );
+            self.incremental_risk
+                .on_edge_added(amount, &token, timestamp.as_deref());
 
             let edge_label = EdgeLabel {
                 amount,
@@ -2905,16 +3495,16 @@ impl WalletGraph {
             if self.streaming_mode {
                 self.incremental_updates_pending += 1;
 
-                // For force-directed mode: reheat physics to let new edge settle naturally
+                // For force-directed mode: use incremental layout engine
                 if matches!(self.layout_mode, LayoutMode::ForceDirected) {
+                    // Mark both endpoints as dirty for local force updates
+                    self.incremental_layout.mark_dirty(from);
+                    self.incremental_layout.mark_dirty(to);
+
+                    // Reheat the physics slightly (incremental layout handles per-node temps)
                     self.physics.reheat_incremental();
                 }
-
-                // Only trigger full relayout after threshold is reached
-                if self.incremental_updates_pending >= self.incremental_relayout_threshold {
-                    self.layout_dirty = true;
-                    self.incremental_updates_pending = 0;
-                }
+                // DON'T trigger full relayout - let incremental layout handle it
             } else {
                 self.layout_dirty = true;
             }
@@ -2971,7 +3561,11 @@ impl WalletGraph {
                         let node_flow = if current_flow != 0 {
                             current_flow // Inherit parent's direction
                         } else {
-                            if is_inflow { -1 } else { 1 } // First level: determine by edge
+                            if is_inflow {
+                                -1
+                            } else {
+                                1
+                            } // First level: determine by edge
                         };
                         flow_direction.insert(n, node_flow);
                         queue.push_back(n);
@@ -2999,7 +3593,9 @@ impl WalletGraph {
             });
 
             // Calculate total transfer amount for this node
-            let total = self.connections.iter()
+            let total = self
+                .connections
+                .iter()
                 .filter(|(from, to, _)| *from == *node_idx || *to == *node_idx)
                 .map(|(_, _, edge)| edge.amount)
                 .sum::<f64>();
@@ -3018,12 +3614,14 @@ impl WalletGraph {
         self.node_positions[center_idx] = (0.0, 0.0);
 
         // Row spacing (now vertical layout - inflows at top, outflows at bottom)
-        let row_height = 60.0;  // Was column_width, now controls Y spacing
+        let row_height = 60.0; // Was column_width, now controls Y spacing
         let node_spacing = 18.0; // Horizontal padding between nodes
 
         // Position nodes in rows (rotated 90 degrees)
         for ((depth, flow), mut group) in columns.into_iter() {
-            if depth == 0 { continue; } // Skip center
+            if depth == 0 {
+                continue;
+            } // Skip center
 
             // Sort nodes by total transfer amount (descending)
             group.nodes.sort_by(|a, b| {
@@ -3043,7 +3641,7 @@ impl WalletGraph {
                 let x = start_x + i as f64 * node_spacing;
 
                 if node_idx < self.node_positions.len() {
-                    self.node_positions[node_idx] = (x, y);  // Swapped from (x,y) to maintain (x,y) format
+                    self.node_positions[node_idx] = (x, y); // Swapped from (x,y) to maintain (x,y) format
                 }
             }
         }
@@ -3052,8 +3650,8 @@ impl WalletGraph {
         let mut edge_count = 0;
         for i in 0..self.nodes.len() {
             if !distances.contains_key(&i) {
-                let y = if edge_count % 2 == 0 { -200.0 } else { 200.0 };  // Swapped
-                let x = (edge_count / 2) as f64 * node_spacing;              // Swapped
+                let y = if edge_count % 2 == 0 { -200.0 } else { 200.0 }; // Swapped
+                let x = (edge_count / 2) as f64 * node_spacing; // Swapped
                 self.node_positions[i] = (x, y);
                 edge_count += 1;
             }
@@ -3070,13 +3668,40 @@ impl WalletGraph {
         use std::f64::consts::PI;
 
         let n = self.nodes.len();
-        if n == 0 { return; }
+        if n == 0 {
+            return;
+        }
+
+        // Track how many positions existed before this call
+        let existing_count = self.node_positions.len();
 
         // Ensure vectors are sized correctly (both physics and render buffers)
         self.node_positions.resize(n, (0.0, 0.0));
         self.render_positions.resize(n, (0.0, 0.0));
         self.node_velocities.resize(n, (0.0, 0.0));
 
+        // === STREAMING MODE: Only position NEW nodes, preserve existing ===
+        // This prevents the jarring "jump" when new nodes are added
+        if self.streaming_mode && existing_count > 0 {
+            // Just reheat physics slightly to integrate new nodes
+            self.physics.reheat_incremental();
+
+            // Position only NEW nodes (from existing_count to n)
+            // Place them near the outer edge where they'll flow into position
+            let radius = self.physics.ideal_length * 2.0;
+            for i in existing_count..n {
+                // Use golden angle for even distribution
+                let angle = (i as f64 * 2.399) % (2.0 * PI);
+                let pos = (radius * angle.cos(), radius * angle.sin());
+                self.node_positions[i] = pos;
+                self.render_positions[i] = pos;
+                self.node_velocities[i] = (0.0, 0.0);
+            }
+            self.physics_dirty.store(true, Ordering::Release);
+            return;
+        }
+
+        // === NON-STREAMING MODE: Full layout reset (initial load) ===
         // Reset physics simulation
         self.physics.reset(n, area_width, area_height);
 
@@ -3132,7 +3757,10 @@ impl WalletGraph {
 
         if use_barnes_hut {
             // Build Barnes-Hut quadtree for efficient force approximation
-            let tree = Arc::new(BarnesHutTree::build(&self.node_positions, self.physics.barnes_hut_theta));
+            let tree = Arc::new(BarnesHutTree::build(
+                &self.node_positions,
+                self.physics.barnes_hut_theta,
+            ));
             let positions = &self.node_positions;
 
             if use_parallel {
@@ -3170,7 +3798,9 @@ impl WalletGraph {
                     let mut fy = 0.0;
 
                     for j in 0..n {
-                        if i == j { continue; }
+                        if i == j {
+                            continue;
+                        }
                         let (xj, yj) = positions[j];
 
                         let dx = xi - xj;
@@ -3201,7 +3831,7 @@ impl WalletGraph {
                     let dx = xi - xj;
                     let dy = yi - yj;
                     let dist_sq = dx * dx + dy * dy;
-                    let dist = dist_sq.sqrt().max(0.1);  // Avoid division by zero
+                    let dist = dist_sq.sqrt().max(0.1); // Avoid division by zero
 
                     // Repulsion: k² / d
                     let force = repulsion * k2 / dist;
@@ -3221,7 +3851,9 @@ impl WalletGraph {
         for (from, to, edge_data) in &self.connections {
             let from = *from;
             let to = *to;
-            if from >= n || to >= n { continue; }
+            if from >= n || to >= n {
+                continue;
+            }
 
             let (x1, y1) = self.node_positions[from];
             let (x2, y2) = self.node_positions[to];
@@ -3254,6 +3886,9 @@ impl WalletGraph {
         }
 
         // 4. Apply forces with temperature limiting and damping
+        // In streaming mode, use per-node temperatures from incremental layout
+        let use_per_node_temp = self.streaming_mode && self.incremental_layout.enabled;
+
         for i in 0..n {
             // Skip pinned target wallet
             if self.physics.pin_target && i == 0 {
@@ -3263,14 +3898,28 @@ impl WalletGraph {
             let (fx, fy) = forces[i];
             let force_mag = (fx * fx + fy * fy).sqrt().max(0.01);
 
+            // Get effective temperature: global or per-node in streaming mode
+            let node_temp = if use_per_node_temp {
+                self.incremental_layout.get_temperature(i)
+            } else {
+                temp
+            };
+
             // Limit displacement by temperature
-            let scale = temp.min(force_mag) / force_mag;
+            let scale = node_temp.min(force_mag) / force_mag;
             let dx = fx * scale;
             let dy = fy * scale;
 
             // Update velocity with damping
-            self.node_velocities[i].0 = self.node_velocities[i].0 * damping + dx;
-            self.node_velocities[i].1 = self.node_velocities[i].1 * damping + dy;
+            // Hot nodes move more freely, cold nodes are more damped
+            let node_damping = if use_per_node_temp && node_temp < 10.0 {
+                damping * 0.95 // Extra damping for cold nodes
+            } else {
+                damping
+            };
+
+            self.node_velocities[i].0 = self.node_velocities[i].0 * node_damping + dx;
+            self.node_velocities[i].1 = self.node_velocities[i].1 * node_damping + dy;
 
             // Update position
             self.node_positions[i].0 += self.node_velocities[i].0;
@@ -3352,7 +4001,9 @@ impl WalletGraph {
         }
 
         // Find target wallet index (should be 0, but let's be safe)
-        let target_idx = self.nodes.iter()
+        let target_idx = self
+            .nodes
+            .iter()
             .position(|(addr, _)| addr == &self.target_wallet)
             .unwrap_or(0);
 
@@ -3395,10 +4046,14 @@ impl WalletGraph {
 
         // Identify nodes to filter (skip target wallet index 0)
         for idx in 1..self.nodes.len() {
-            let in_count = self.connections.iter()
+            let in_count = self
+                .connections
+                .iter()
                 .filter(|(_, to, _)| *to == idx)
                 .count();
-            let out_count = self.connections.iter()
+            let out_count = self
+                .connections
+                .iter()
                 .filter(|(from, _, _)| *from == idx)
                 .count();
 
@@ -3412,7 +4067,9 @@ impl WalletGraph {
 
     /// Get folded node info for a group (depth, direction)
     pub fn get_folded_group_info(&self, depth: usize, flow: i32) -> Option<(usize, Vec<String>)> {
-        let filtered_in_group: Vec<_> = self.filtered_nodes.iter()
+        let filtered_in_group: Vec<_> = self
+            .filtered_nodes
+            .iter()
             .filter(|&&idx| {
                 // Check if this node belongs to this depth/flow group
                 // This is a heuristic based on position
@@ -3441,7 +4098,8 @@ impl WalletGraph {
             return None;
         }
 
-        let addresses: Vec<String> = filtered_in_group.iter()
+        let addresses: Vec<String> = filtered_in_group
+            .iter()
             .filter_map(|&idx| self.nodes.get(idx).map(|(addr, _)| addr.clone()))
             .collect();
 
@@ -3461,7 +4119,9 @@ impl WalletGraph {
         visited.insert(from_idx);
 
         while let Some((current, depth)) = queue.pop_front() {
-            if depth >= 5 { continue; }
+            if depth >= 5 {
+                continue;
+            }
             max_depth = max_depth.max(depth);
 
             for (idx, (from, to, data)) in self.connections.iter().enumerate() {
@@ -3479,7 +4139,9 @@ impl WalletGraph {
         visited.insert(to_idx);
 
         while let Some((current, depth)) = queue.pop_front() {
-            if depth >= 5 { continue; }
+            if depth >= 5 {
+                continue;
+            }
             max_depth = max_depth.max(depth);
 
             for (idx, (from, to, data)) in self.connections.iter().enumerate() {
@@ -3500,10 +4162,12 @@ impl WalletGraph {
 
         // Simple heuristic: count mixers that are connected to both nodes
         for mixer_idx in mixers {
-            let has_from_connection = self.connections.iter()
-                .any(|(f, t, _)| (*f == from_idx && *t == mixer_idx) || (*f == mixer_idx && *t == from_idx));
-            let has_to_connection = self.connections.iter()
-                .any(|(f, t, _)| (*f == to_idx && *t == mixer_idx) || (*f == mixer_idx && *t == to_idx));
+            let has_from_connection = self.connections.iter().any(|(f, t, _)| {
+                (*f == from_idx && *t == mixer_idx) || (*f == mixer_idx && *t == from_idx)
+            });
+            let has_to_connection = self.connections.iter().any(|(f, t, _)| {
+                (*f == to_idx && *t == mixer_idx) || (*f == mixer_idx && *t == to_idx)
+            });
 
             if has_from_connection || has_to_connection {
                 count += 1;
@@ -3516,10 +4180,16 @@ impl WalletGraph {
     /// Calculate risk score based on mixer involvement and path complexity
     fn calculate_risk_score(&self, from_idx: usize, to_idx: usize) -> String {
         let mixer_count = self.count_mixers_in_path(from_idx, to_idx);
-        let from_connections = self.connections.iter()
-            .filter(|(f, _, _)| *f == from_idx).count();
-        let to_connections = self.connections.iter()
-            .filter(|(_, t, _)| *t == to_idx).count();
+        let from_connections = self
+            .connections
+            .iter()
+            .filter(|(f, _, _)| *f == from_idx)
+            .count();
+        let to_connections = self
+            .connections
+            .iter()
+            .filter(|(_, t, _)| *t == to_idx)
+            .count();
 
         let score = if mixer_count > 2 {
             "HIGH ⚠️"
@@ -3533,7 +4203,13 @@ impl WalletGraph {
     }
 
     /// Trace complete token flow path (inflows and outflows) for highlighting
-    fn trace_token_flow_path(&self, from_idx: usize, to_idx: usize, token: &str, max_depth: usize) -> Vec<usize> {
+    fn trace_token_flow_path(
+        &self,
+        from_idx: usize,
+        to_idx: usize,
+        token: &str,
+        max_depth: usize,
+    ) -> Vec<usize> {
         use std::collections::{HashSet, VecDeque};
 
         let mut path_edges = Vec::new();
@@ -3546,7 +4222,9 @@ impl WalletGraph {
         visited_nodes.insert(from_idx);
 
         while let Some((current, depth)) = queue.pop_front() {
-            if depth >= max_depth { continue; }
+            if depth >= max_depth {
+                continue;
+            }
 
             for (edge_idx, (from, to, data)) in self.connections.iter().enumerate() {
                 if *to == current && data.token == token && !visited_nodes.contains(from) {
@@ -3568,7 +4246,9 @@ impl WalletGraph {
         visited_nodes.insert(to_idx);
 
         while let Some((current, depth)) = queue.pop_front() {
-            if depth >= max_depth { continue; }
+            if depth >= max_depth {
+                continue;
+            }
 
             for (edge_idx, (from, to, data)) in self.connections.iter().enumerate() {
                 if *from == current && data.token == token && !visited_nodes.contains(to) {
@@ -3593,8 +4273,8 @@ impl WalletGraph {
     }
 
     pub fn render(&mut self, f: &mut Frame, area: Rect) {
-        use ratatui::widgets::{Paragraph, canvas::Canvas};
         use ratatui::text::{Line, Span};
+        use ratatui::widgets::{canvas::Canvas, Paragraph};
 
         // Split area: [main area | stats panel (if trail mode)]
         let (main_area, stats_area) = if self.trail_mode && self.investigation_trail.is_some() {
@@ -3602,7 +4282,7 @@ impl WalletGraph {
                 .direction(ratatui::layout::Direction::Horizontal)
                 .constraints([
                     ratatui::layout::Constraint::Min(40),
-                    ratatui::layout::Constraint::Length(30),  // Stats panel width
+                    ratatui::layout::Constraint::Length(30), // Stats panel width
                 ])
                 .split(area);
             (h_chunks[0], Some(h_chunks[1]))
@@ -3616,7 +4296,7 @@ impl WalletGraph {
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints([
                     ratatui::layout::Constraint::Min(10),
-                    ratatui::layout::Constraint::Length(5),  // Increased from 3 to 5 for better visibility
+                    ratatui::layout::Constraint::Length(5), // Increased from 3 to 5 for better visibility
                 ])
                 .split(main_area);
             (chunks[0], Some(chunks[1]))
@@ -3632,7 +4312,7 @@ impl WalletGraph {
         // Only recompute layout and cached data when graph structure changes
         // This is O(n²) and should NOT run every frame
         if self.layout_dirty && !self.nodes.is_empty() && !self.connections.is_empty() {
-            self.compute_bfs_distances();  // Compute proper BFS distances
+            self.compute_bfs_distances(); // Compute proper BFS distances
             self.update_node_filtering();
             // Update cached mixer nodes (converts Vec to HashSet for O(1) lookup)
             let mixer_vec = self.forensics.detect_mixer_nodes(self);
@@ -3647,7 +4327,7 @@ impl WalletGraph {
                 LayoutMode::Hierarchical => {
                     // Use BFS-based hierarchical layout (inflows/outflows)
                     self.compute_hierarchical_layout();
-                    self.physics.running = false;  // Disable physics simulation
+                    self.physics.running = false; // Disable physics simulation
                 }
             }
             self.layout_dirty = false;
@@ -3661,10 +4341,12 @@ impl WalletGraph {
         if self.nodes.is_empty() {
             let widget = Paragraph::new("  Waiting for transfer data...")
                 .style(Style::default().fg(Color::DarkGray))
-                .block(Block::default()
-                    .title(" Graph │ 0w 0tx ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Green)));
+                .block(
+                    Block::default()
+                        .title(" Graph │ 0w 0tx ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Green)),
+                );
             f.render_widget(widget, graph_area);
             return;
         }
@@ -3701,15 +4383,23 @@ impl WalletGraph {
         };
 
         let canvas = Canvas::default()
-            .block(Block::default()
-                .title(format!(" 🔗 Graph │ {}w {}tx │ d:{}/{} │ z:{:.1}x │ {} │{}?=help L=layout ",
-                    self.nodes.len(), self.connections.len(),
-                    self.current_depth, self.max_depth, zoom,
-                    layout_indicator, trail_indicator))
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Green)))
-            .x_bounds([cx - 80.0 / zoom, cx + 80.0 / zoom])   // Narrower horizontal (nodes stack horizontally)
+            .block(
+                Block::default()
+                    .title(format!(
+                        " 🔗 Graph │ {}w {}tx │ d:{}/{} │ z:{:.1}x │ {} │{}?=help L=layout ",
+                        self.nodes.len(),
+                        self.connections.len(),
+                        self.current_depth,
+                        self.max_depth,
+                        zoom,
+                        layout_indicator,
+                        trail_indicator
+                    ))
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Green)),
+            )
+            .x_bounds([cx - 80.0 / zoom, cx + 80.0 / zoom]) // Narrower horizontal (nodes stack horizontally)
             .y_bounds([cy - 100.0 / zoom, cy + 100.0 / zoom]) // Taller vertical (flows top-to-bottom)
             .paint(|ctx| {
                 // Use render_positions for drawing (double-buffered, never blocks)
@@ -3733,18 +4423,35 @@ impl WalletGraph {
                 };
 
                 // Collect trail edges and nodes for highlighting
-                let (trail_edges, trail_nodes, tentative_edge) = if let Some(ref trail) = self.investigation_trail {
-                    let edges: std::collections::HashSet<usize> = trail.trail_edges().into_iter().collect();
-                    let nodes: std::collections::HashSet<usize> = trail.trail_nodes().into_iter().collect();
-                    let tentative = trail.get_tentative_edge();
-                    (edges, nodes, tentative)
-                } else {
-                    (std::collections::HashSet::new(), std::collections::HashSet::new(), None)
-                };
+                let (trail_edges, trail_nodes, tentative_edge) =
+                    if let Some(ref trail) = self.investigation_trail {
+                        let edges: std::collections::HashSet<usize> =
+                            trail.trail_edges().into_iter().collect();
+                        let nodes: std::collections::HashSet<usize> =
+                            trail.trail_nodes().into_iter().collect();
+                        let tentative = trail.get_tentative_edge();
+                        (edges, nodes, tentative)
+                    } else {
+                        (
+                            std::collections::HashSet::new(),
+                            std::collections::HashSet::new(),
+                            None,
+                        )
+                    };
 
                 // Draw ALL edges (even to off-screen nodes) with improved visual encoding
                 // This includes edges where one or both endpoints are outside the visible viewport
-                for (edge_idx, (from_idx, to_idx, edge_label)) in self.connections.iter().enumerate() {
+                for (edge_idx, (from_idx, to_idx, edge_label)) in
+                    self.connections.iter().enumerate()
+                {
+                    // FILTER: Trail-only mode - skip edges where either endpoint is not in any trail
+                    if self.trail_only_mode
+                        && self.is_node_in_any_trail(*from_idx).is_none()
+                        && self.is_node_in_any_trail(*to_idx).is_none()
+                    {
+                        continue;
+                    }
+
                     // Only check if positions exist, NOT if nodes are visible/filtered
                     if *from_idx < positions.len() && *to_idx < positions.len() {
                         let (x1, y1) = positions[*from_idx];
@@ -3761,28 +4468,29 @@ impl WalletGraph {
 
                         let (edge_color, thickness) = if is_tentative {
                             // Tentative edge - cyan (#44ccff) for "preview" before confirming
-                            (Color::Rgb(68, 204, 255), 4)  // Cyan, extra thick
+                            (Color::Rgb(68, 204, 255), 4) // Cyan, extra thick
                         } else if Some(edge_idx) == selected_edge_idx {
-                            (Color::Yellow, 3)  // Selected edge - bright and thick
+                            (Color::Yellow, 3) // Selected edge - bright and thick
                         } else if is_trail_edge {
                             // Trail edge - thick yellow line (finalized path)
-                            (Color::Yellow, 4)  // Yellow, thick
+                            (Color::Yellow, 4) // Yellow, thick
                         } else if highlighted_path.contains(&edge_idx) {
-                            (Color::LightYellow, 2)  // Related flow - medium
+                            (Color::LightYellow, 2) // Related flow - medium
                         } else {
                             // Distance-based fade for unselected edges
-                            let dist_from_center = ((x1.powi(2) + y1.powi(2)).sqrt() +
-                                                   (x2.powi(2) + y2.powi(2)).sqrt()) / 2.0;
+                            let dist_from_center = ((x1.powi(2) + y1.powi(2)).sqrt()
+                                + (x2.powi(2) + y2.powi(2)).sqrt())
+                                / 2.0;
 
                             // Color intensity based on transfer amount
                             let color = if amount > 1000.0 {
-                                Color::Cyan  // Large transfer
+                                Color::Cyan // Large transfer
                             } else if amount > 100.0 {
-                                Color::Blue  // Medium transfer
+                                Color::Blue // Medium transfer
                             } else if dist_from_center < 50.0 {
-                                Color::LightBlue  // Close to center
+                                Color::LightBlue // Close to center
                             } else {
-                                Color::DarkGray  // Small/distant
+                                Color::DarkGray // Small/distant
                             };
 
                             // Thickness based on amount
@@ -3792,7 +4500,11 @@ impl WalletGraph {
 
                         // Draw edge with appropriate thickness
                         for i in 0..thickness {
-                            let offset = if thickness > 1 { (i as f64 - thickness as f64 / 2.0) * 0.3 } else { 0.0 };
+                            let offset = if thickness > 1 {
+                                (i as f64 - thickness as f64 / 2.0) * 0.3
+                            } else {
+                                0.0
+                            };
                             let dx = (y2 - y1) / edge_length * offset;
                             let dy = (x1 - x2) / edge_length * offset;
 
@@ -3853,6 +4565,11 @@ impl WalletGraph {
                         continue;
                     }
 
+                    // FILTER: Trail-only mode - skip nodes not in any trail
+                    if self.trail_only_mode && self.is_node_in_any_trail(idx).is_none() {
+                        continue;
+                    }
+
                     if idx < positions.len() {
                         let (x, y) = positions[idx];
 
@@ -3862,16 +4579,28 @@ impl WalletGraph {
                         let is_search_match = self.search_results.contains(&idx);
 
                         // Calculate node metrics for visual encoding
-                        let in_degree = self.connections.iter()
-                            .filter(|(_, to, _)| *to == idx).count();
-                        let out_degree = self.connections.iter()
-                            .filter(|(from, _, _)| *from == idx).count();
+                        let in_degree = self
+                            .connections
+                            .iter()
+                            .filter(|(_, to, _)| *to == idx)
+                            .count();
+                        let out_degree = self
+                            .connections
+                            .iter()
+                            .filter(|(from, _, _)| *from == idx)
+                            .count();
                         let total_degree = in_degree + out_degree;
 
                         // Size based on connection count (more connections = larger)
-                        let base_radius = if idx == 0 { 5.0 } // Target largest
-                            else if is_mixer { 4.5 }
-                            else { 2.0 + (total_degree as f64).sqrt() * 0.5 };
+                        let base_radius = if idx == 0 {
+                            5.0
+                        }
+                        // Target largest
+                        else if is_mixer {
+                            4.5
+                        } else {
+                            2.0 + (total_degree as f64).sqrt() * 0.5
+                        };
                         let radius = base_radius.min(6.0); // Cap maximum size
 
                         // Check if this node is on the trail
@@ -3880,32 +4609,33 @@ impl WalletGraph {
                         // Color determination with cluster support and trail highlighting
                         // Priority: selected > trail > mixer > search_match > target > cluster > flow-based
                         let color = if is_selected {
-                            Color::White  // Selected node
+                            Color::White // Selected node
                         } else if is_trail_node {
-                            Color::Rgb(30, 144, 255)  // Dodger Blue for trail nodes
+                            Color::Rgb(30, 144, 255) // Dodger Blue for trail nodes
                         } else if is_mixer {
-                            Color::Red  // MIXER - highlight in RED
+                            Color::Red // MIXER - highlight in RED
                         } else if is_search_match {
-                            Color::Yellow  // Search match
+                            Color::Yellow // Search match
                         } else if idx == 0 {
-                            Color::Magenta  // Target wallet
+                            Color::Magenta // Target wallet
                         } else if let Some((r, g, b)) = self.get_cluster_color(&self.nodes[idx].0) {
                             // Clustered wallet - use cluster color
                             Color::Rgb(r, g, b)
                         } else {
                             // Use color based on flow direction
                             if in_degree > out_degree {
-                                Color::Green  // Net receiver
+                                Color::Green // Net receiver
                             } else if out_degree > in_degree {
-                                Color::Blue  // Net sender
+                                Color::Blue // Net sender
                             } else {
-                                Color::Cyan  // Balanced
+                                Color::Cyan // Balanced
                             }
                         };
 
                         // Draw main circle
                         ctx.draw(&Circle {
-                            x, y,
+                            x,
+                            y,
                             radius,
                             color,
                         });
@@ -3913,29 +4643,41 @@ impl WalletGraph {
                         // Draw inner circle for visual depth
                         if radius > 2.5 {
                             ctx.draw(&Circle {
-                                x, y,
+                                x,
+                                y,
                                 radius: radius * 0.6,
-                                color: if is_selected { Color::Yellow }
-                                    else if is_mixer { Color::DarkGray }
-                                    else { Color::Black },
+                                color: if is_selected {
+                                    Color::Yellow
+                                } else if is_mixer {
+                                    Color::DarkGray
+                                } else {
+                                    Color::Black
+                                },
                             });
                         }
 
                         // Add halo for selected/important/trail nodes
                         if is_selected || idx == 0 || is_trail_node {
                             ctx.draw(&Circle {
-                                x, y,
+                                x,
+                                y,
                                 radius: radius + 2.0,
-                                color: if is_selected { Color::Yellow }
-                                    else if is_trail_node { Color::Rgb(100, 180, 255) }  // Light blue halo for trail
-                                    else { Color::Magenta },
+                                color: if is_selected {
+                                    Color::Yellow
+                                } else if is_trail_node {
+                                    Color::Rgb(100, 180, 255)
+                                }
+                                // Light blue halo for trail
+                                else {
+                                    Color::Magenta
+                                },
                             });
                         }
 
                         // Show abbreviated address (first 3 + last 3 chars)
                         let (addr, _) = &self.nodes[idx];
                         let short_addr = if addr.len() >= 6 {
-                            format!("{}{}", &addr[..3], &addr[addr.len()-3..])
+                            format!("{}{}", &addr[..3], &addr[addr.len() - 3..])
                         } else {
                             addr.clone()
                         };
@@ -3946,7 +4688,11 @@ impl WalletGraph {
                             ctx.print(x, y - radius - 2.0, format!("🎯{}", short_addr));
                         } else if is_mixer {
                             // Mixer - show with warning marker and degree
-                            ctx.print(x, y - radius - 2.0, format!("⚠{}:{}↔{}", short_addr, in_degree, out_degree));
+                            ctx.print(
+                                x,
+                                y - radius - 2.0,
+                                format!("⚠{}:{}↔{}", short_addr, in_degree, out_degree),
+                            );
                         } else if is_selected {
                             // Selected - highlight
                             ctx.print(x, y - radius - 2.0, format!("▶{}", short_addr));
@@ -3970,7 +4716,10 @@ impl WalletGraph {
                     let (_, y) = positions[filtered_idx];
                     // Determine row based on Y position (now using Y for rows)
                     let row = (y / 60.0).round() as i32;
-                    row_groups.entry(row).or_insert_with(Vec::new).push(filtered_idx);
+                    row_groups
+                        .entry(row)
+                        .or_insert_with(Vec::new)
+                        .push(filtered_idx);
                 }
 
                 // Draw one folded circle per row
@@ -3981,9 +4730,11 @@ impl WalletGraph {
 
                     let count = nodes_in_row.len();
                     // Calculate average X position for this group (horizontal now)
-                    let avg_x: f64 = nodes_in_row.iter()
+                    let avg_x: f64 = nodes_in_row
+                        .iter()
                         .filter_map(|&idx| positions.get(idx).map(|(x, _)| x))
-                        .sum::<f64>() / count as f64;
+                        .sum::<f64>()
+                        / count as f64;
 
                     let fold_x = avg_x;
                     let fold_y = *row as f64 * 60.0;
@@ -4020,7 +4771,12 @@ impl WalletGraph {
             let search_text = if self.search_results.is_empty() && !self.search_query.is_empty() {
                 format!("Search: {} (no results)", self.search_query)
             } else if !self.search_results.is_empty() {
-                format!("Search: {} ({}/{} results)", self.search_query, self.search_result_idx + 1, self.search_results.len())
+                format!(
+                    "Search: {} ({}/{} results)",
+                    self.search_query,
+                    self.search_result_idx + 1,
+                    self.search_results.len()
+                )
             } else {
                 format!("Search: {}_", self.search_query)
             };
@@ -4033,10 +4789,12 @@ impl WalletGraph {
             };
 
             let search_widget = Paragraph::new(search_text)
-                .block(Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow))
-                    .title(" Search (ESC to cancel, n/N for next/prev) "))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Yellow))
+                        .title(" Search (ESC to cancel, n/N for next/prev) "),
+                )
                 .style(Style::default().fg(Color::White));
 
             f.render_widget(search_widget, search_area);
@@ -4044,8 +4802,8 @@ impl WalletGraph {
 
         // Render toast notification if present
         if let Some(ref toast_msg) = self.toast_message {
-            use ratatui::widgets::Paragraph;
             use ratatui::text::Span;
+            use ratatui::widgets::Paragraph;
 
             let toast_area = Rect {
                 x: area.x + (area.width.saturating_sub(toast_msg.len() as u16 + 4)) / 2,
@@ -4054,15 +4812,18 @@ impl WalletGraph {
                 height: 3,
             };
 
-            let toast_widget = Paragraph::new(vec![
-                ratatui::text::Line::from(Span::styled(
-                    toast_msg.as_str(),
-                    Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)
-                ))
-            ])
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green)));
+            let toast_widget = Paragraph::new(vec![ratatui::text::Line::from(Span::styled(
+                toast_msg.as_str(),
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ))])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Green)),
+            );
 
             f.render_widget(toast_widget, toast_area);
         }
@@ -4076,8 +4837,8 @@ impl WalletGraph {
     /// Render a minimap in the bottom-right corner showing full graph extent with viewport indicator
     /// Supports two modes: normal (node dots) and heatmap (density grid)
     fn render_minimap(&self, f: &mut Frame, area: Rect) {
-        use ratatui::widgets::{Paragraph, canvas::Canvas};
         use ratatui::text::Span;
+        use ratatui::widgets::{canvas::Canvas, Paragraph};
 
         // Minimap dimensions (fixed size overlay)
         let minimap_width = 22u16;
@@ -4149,11 +4910,13 @@ impl WalletGraph {
         };
 
         let minimap = Canvas::default()
-            .block(Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(Color::DarkGray)))
+            .block(
+                Block::default()
+                    .title(title)
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::DarkGray)),
+            )
             .x_bounds([min_x, max_x])
             .y_bounds([min_y, max_y])
             .paint(|ctx| {
@@ -4166,7 +4929,7 @@ impl WalletGraph {
                                 // Color based on density (blue → green → yellow → red)
                                 let intensity = count as f64 / max_density as f64;
                                 let color = if intensity > 0.75 {
-                                    Color::Red  // Hot spot
+                                    Color::Red // Hot spot
                                 } else if intensity > 0.5 {
                                     Color::LightRed
                                 } else if intensity > 0.25 {
@@ -4198,11 +4961,16 @@ impl WalletGraph {
                     // NORMAL MODE: Draw edges and nodes
                     // Draw all edges as thin lines (simplified for minimap)
                     for (from_idx, to_idx, _) in &self.connections {
-                        if *from_idx < self.render_positions.len() && *to_idx < self.render_positions.len() {
+                        if *from_idx < self.render_positions.len()
+                            && *to_idx < self.render_positions.len()
+                        {
                             let (x1, y1) = self.render_positions[*from_idx];
                             let (x2, y2) = self.render_positions[*to_idx];
                             ctx.draw(&CanvasLine {
-                                x1, y1, x2, y2,
+                                x1,
+                                y1,
+                                x2,
+                                y2,
                                 color: Color::DarkGray,
                             });
                         }
@@ -4214,13 +4982,13 @@ impl WalletGraph {
 
                         // Determine base color
                         let color = if is_selected {
-                            Color::White  // Selected - bright white
+                            Color::White // Selected - bright white
                         } else if idx == 0 {
-                            Color::Magenta  // Target
+                            Color::Magenta // Target
                         } else if self.cached_mixer_nodes.contains(&idx) {
-                            Color::Red  // Mixer
+                            Color::Red // Mixer
                         } else {
-                            Color::Green  // Normal
+                            Color::Green // Normal
                         };
 
                         // Draw selection halo first (larger circle behind)
@@ -4246,26 +5014,34 @@ impl WalletGraph {
                 // Draw viewport rectangle (both modes)
                 // Top edge
                 ctx.draw(&CanvasLine {
-                    x1: view_min_x, y1: view_max_y,
-                    x2: view_max_x, y2: view_max_y,
+                    x1: view_min_x,
+                    y1: view_max_y,
+                    x2: view_max_x,
+                    y2: view_max_y,
                     color: Color::Yellow,
                 });
                 // Bottom edge
                 ctx.draw(&CanvasLine {
-                    x1: view_min_x, y1: view_min_y,
-                    x2: view_max_x, y2: view_min_y,
+                    x1: view_min_x,
+                    y1: view_min_y,
+                    x2: view_max_x,
+                    y2: view_min_y,
                     color: Color::Yellow,
                 });
                 // Left edge
                 ctx.draw(&CanvasLine {
-                    x1: view_min_x, y1: view_min_y,
-                    x2: view_min_x, y2: view_max_y,
+                    x1: view_min_x,
+                    y1: view_min_y,
+                    x2: view_min_x,
+                    y2: view_max_y,
                     color: Color::Yellow,
                 });
                 // Right edge
                 ctx.draw(&CanvasLine {
-                    x1: view_max_x, y1: view_min_y,
-                    x2: view_max_x, y2: view_max_y,
+                    x1: view_max_x,
+                    y1: view_min_y,
+                    x2: view_max_x,
+                    y2: view_max_y,
                     color: Color::Yellow,
                 });
             });
@@ -4323,7 +5099,8 @@ impl WalletGraph {
 
     /// Get whale flows (transfers above threshold)
     pub fn get_whale_flows(&self, threshold: f64) -> Vec<&EdgeLabel> {
-        self.connections.iter()
+        self.connections
+            .iter()
             .map(|(_, _, label)| label)
             .filter(|label| label.amount >= threshold)
             .collect()
@@ -4354,11 +5131,11 @@ impl WalletGraph {
                 let out_ratio = out_amt / total;
 
                 if out_ratio > 0.8 {
-                    sources += 1;  // Mostly outflows
+                    sources += 1; // Mostly outflows
                 } else if out_ratio < 0.2 {
-                    sinks += 1;    // Mostly inflows
+                    sinks += 1; // Mostly inflows
                 } else if total > 100.0 {
-                    hubs += 1;     // High throughput
+                    hubs += 1; // High throughput
                 }
             }
         }
@@ -4406,7 +5183,9 @@ impl WalletGraph {
         risk += (hubs as f64 * 3.0).min(15.0);
 
         // Mixer nodes are high risk
-        let mixer_count = self.nodes.iter()
+        let mixer_count = self
+            .nodes
+            .iter()
             .filter(|(_, node)| matches!(node.node_type, WalletNodeType::Mixer))
             .count();
         risk += (mixer_count as f64 * 10.0).min(20.0);
@@ -4436,7 +5215,8 @@ impl WalletGraph {
 
         // Compute and cache (use local implementation)
         let behavior = self.classify_wallet_behavior_impl(wallet_idx);
-        self.cached_wallet_behaviors.insert(wallet_idx, behavior.clone());
+        self.cached_wallet_behaviors
+            .insert(wallet_idx, behavior.clone());
         behavior
     }
 
@@ -4447,7 +5227,8 @@ impl WalletGraph {
         let mut outgoing = 0;
         let mut total_in = 0.0;
         let mut total_out = 0.0;
-        let mut counterparties: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+        let mut counterparties: std::collections::HashMap<usize, usize> =
+            std::collections::HashMap::new();
         let mut timestamps = Vec::new();
 
         for (from, to, label) in &self.connections {
@@ -4497,12 +5278,14 @@ impl WalletGraph {
             timestamps.sort();
             let mut intervals = Vec::new();
             for i in 1..timestamps.len() {
-                intervals.push(timestamps[i] - timestamps[i-1]);
+                intervals.push(timestamps[i] - timestamps[i - 1]);
             }
             let avg_interval = intervals.iter().sum::<u64>() as f64 / intervals.len() as f64;
-            let variance: f64 = intervals.iter()
+            let variance: f64 = intervals
+                .iter()
                 .map(|&x| (x as f64 - avg_interval).powi(2))
-                .sum::<f64>() / intervals.len() as f64;
+                .sum::<f64>()
+                / intervals.len() as f64;
             let std_dev = variance.sqrt();
 
             // Low variance = regular intervals = bot
@@ -4552,7 +5335,9 @@ impl WalletGraph {
             let result = self.calculate_explainable_risk_impl();
             // Update cached values in incremental stats
             self.incremental_risk.cached_circular_count = self.detect_circular_flows().len();
-            self.incremental_risk.cached_rapid_alerts = self.incremental_risk.detect_rapid_transfers_incremental(60, 5);
+            self.incremental_risk.cached_rapid_alerts = self
+                .incremental_risk
+                .detect_rapid_transfers_incremental(60, 5);
             self.incremental_risk.needs_deep_recalc = false;
             self.incremental_risk.updates_since_deep_recalc = 0;
             result
@@ -4576,49 +5361,72 @@ impl WalletGraph {
         let complexity_ratio = self.connections.len() as f64 / self.nodes.len().max(1) as f64;
         if complexity_ratio > 5.0 {
             score += 30.0;
-            alerts.push(format!("🚨 CRITICAL: Very high network complexity ({:.1} edges/node)", complexity_ratio));
-            reasons.push(format!("Network complexity ratio of {:.1} indicates potential mixing/obfuscation", complexity_ratio));
+            alerts.push(format!(
+                "🚨 CRITICAL: Very high network complexity ({:.1} edges/node)",
+                complexity_ratio
+            ));
+            reasons.push(format!(
+                "Network complexity ratio of {:.1} indicates potential mixing/obfuscation",
+                complexity_ratio
+            ));
         } else if complexity_ratio > 3.0 {
             score += 15.0;
-            reasons.push(format!("Elevated network complexity ({:.1} edges/node)", complexity_ratio));
+            reasons.push(format!(
+                "Elevated network complexity ({:.1} edges/node)",
+                complexity_ratio
+            ));
         }
 
         // 2. Rapid transfer detection (use cached from incremental stats)
-        for alert in self.incremental_risk.cached_rapid_alerts.iter()
-            .filter(|a| matches!(a.severity, AlertSeverity::Critical | AlertSeverity::High)) {
+        for alert in self
+            .incremental_risk
+            .cached_rapid_alerts
+            .iter()
+            .filter(|a| matches!(a.severity, AlertSeverity::Critical | AlertSeverity::High))
+        {
             score += 15.0;
             alerts.push(format!(
                 "⚡ RAPID ACTIVITY: {} transfers in {}s ({:.2} {})",
-                alert.transfer_count,
-                alert.time_window_secs,
-                alert.total_volume,
-                alert.token
+                alert.transfer_count, alert.time_window_secs, alert.total_volume, alert.token
             ));
         }
         if !self.incremental_risk.cached_rapid_alerts.is_empty() {
-            reasons.push(format!("Detected {} rapid transfer burst(s)", self.incremental_risk.cached_rapid_alerts.len()));
+            reasons.push(format!(
+                "Detected {} rapid transfer burst(s)",
+                self.incremental_risk.cached_rapid_alerts.len()
+            ));
         }
 
         // 3. Circular flow detection (use cached count)
         let circular_count = self.incremental_risk.cached_circular_count;
         if circular_count > 0 {
             score += (circular_count.min(3) as f64) * 20.0;
-            alerts.push(format!("🔄 CIRCULAR FLOW: {} pattern(s) detected", circular_count));
-            reasons.push(format!("Detected {} circular flow pattern(s) - potential wash trading", circular_count));
+            alerts.push(format!(
+                "🔄 CIRCULAR FLOW: {} pattern(s) detected",
+                circular_count
+            ));
+            reasons.push(format!(
+                "Detected {} circular flow pattern(s) - potential wash trading",
+                circular_count
+            ));
         }
 
         // 4. Whale activity (O(1) - use pre-computed from incremental stats)
         if self.incremental_risk.whale_count > 5 {
             score += 15.0;
-            reasons.push(format!("High whale activity: {} large transfers totaling {:.2} SOL",
-                self.incremental_risk.whale_count, self.incremental_risk.whale_total_volume));
+            reasons.push(format!(
+                "High whale activity: {} large transfers totaling {:.2} SOL",
+                self.incremental_risk.whale_count, self.incremental_risk.whale_total_volume
+            ));
         }
 
         // 5. Token diversity (O(1) - check HashSet size)
         if self.incremental_risk.unique_tokens.len() > 20 {
             score += 10.0;
-            reasons.push(format!("Very high token diversity ({} tokens) may indicate portfolio mixing",
-                self.incremental_risk.unique_tokens.len()));
+            reasons.push(format!(
+                "Very high token diversity ({} tokens) may indicate portfolio mixing",
+                self.incremental_risk.unique_tokens.len()
+            ));
         }
 
         // 6. Hub wallet detection (O(1) - use cached)
@@ -4662,35 +5470,56 @@ impl WalletGraph {
 
     /// Detect entity clusters in the wallet graph (internal implementation)
     fn detect_entity_clusters_impl(&mut self) {
-        use crate::utils::entity_clustering::{EntityClusterer, WalletMetadata, TransferMetadata};
+        use crate::utils::entity_clustering::{EntityClusterer, TransferMetadata, WalletMetadata};
 
         // Build metadata from graph
-        let wallets: Vec<(String, WalletMetadata)> = self.nodes.iter().map(|(addr, node)| {
-            (addr.clone(), WalletMetadata {
-                address: addr.clone(),
-                first_seen: None, // TODO: extract from timestamps
-                transaction_count: self.connections.iter().filter(|(from, to, _)| {
-                    self.nodes[*from].0 == *addr || self.nodes[*to].0 == *addr
-                }).count(),
-                behavior_type: Some(format!("{:?}", node.node_type)),
+        let wallets: Vec<(String, WalletMetadata)> = self
+            .nodes
+            .iter()
+            .map(|(addr, node)| {
+                (
+                    addr.clone(),
+                    WalletMetadata {
+                        address: addr.clone(),
+                        first_seen: None, // TODO: extract from timestamps
+                        transaction_count: self
+                            .connections
+                            .iter()
+                            .filter(|(from, to, _)| {
+                                self.nodes[*from].0 == *addr || self.nodes[*to].0 == *addr
+                            })
+                            .count(),
+                        behavior_type: Some(format!("{:?}", node.node_type)),
+                    },
+                )
             })
-        }).collect();
+            .collect();
 
-        let connections: Vec<(usize, usize, TransferMetadata)> = self.connections.iter().map(|(from, to, label)| {
-            let timestamp = label.timestamp.as_ref()
-                .and_then(|ts| ts.parse::<u64>().ok());
+        let connections: Vec<(usize, usize, TransferMetadata)> = self
+            .connections
+            .iter()
+            .map(|(from, to, label)| {
+                let timestamp = label
+                    .timestamp
+                    .as_ref()
+                    .and_then(|ts| ts.parse::<u64>().ok());
 
-            // Heuristic for initial funding: first transfer or large amount
-            let is_initial_funding = label.amount > 1.0; // >1 SOL
+                // Heuristic for initial funding: first transfer or large amount
+                let is_initial_funding = label.amount > 1.0; // >1 SOL
 
-            (*from, *to, TransferMetadata {
-                amount: label.amount,
-                token: label.token.clone(),
-                timestamp,
-                is_initial_funding,
-                gas_price: None,
+                (
+                    *from,
+                    *to,
+                    TransferMetadata {
+                        amount: label.amount,
+                        token: label.token.clone(),
+                        timestamp,
+                        is_initial_funding,
+                        gas_price: None,
+                    },
+                )
             })
-        }).collect();
+            .collect();
 
         // Run clustering
         let clusterer = EntityClusterer::default();
@@ -4700,21 +5529,27 @@ impl WalletGraph {
         self.wallet_to_cluster.clear();
         for cluster in &self.entity_clusters {
             for wallet in &cluster.wallet_addresses {
-                self.wallet_to_cluster.insert(wallet.clone(), cluster.cluster_id);
+                self.wallet_to_cluster
+                    .insert(wallet.clone(), cluster.cluster_id);
             }
         }
     }
 
     /// Get cluster info for a wallet
-    pub fn get_wallet_cluster(&self, wallet: &str) -> Option<&crate::utils::entity_clustering::EntityCluster> {
-        self.wallet_to_cluster.get(wallet)
+    pub fn get_wallet_cluster(
+        &self,
+        wallet: &str,
+    ) -> Option<&crate::utils::entity_clustering::EntityCluster> {
+        self.wallet_to_cluster
+            .get(wallet)
             .and_then(|cluster_id| self.entity_clusters.get(*cluster_id))
     }
 
     /// Get cluster color for visualization
     pub fn get_cluster_color(&self, wallet: &str) -> Option<(u8, u8, u8)> {
-        self.wallet_to_cluster.get(wallet)
-            .map(|cluster_id| crate::utils::entity_clustering::EntityClusterer::get_cluster_color(*cluster_id))
+        self.wallet_to_cluster.get(wallet).map(|cluster_id| {
+            crate::utils::entity_clustering::EntityClusterer::get_cluster_color(*cluster_id)
+        })
     }
 
     /// Calculate risk level for a specific node (simplified for trail)
@@ -4731,12 +5566,22 @@ impl WalletGraph {
             WalletNodeType::Target => RiskLevel::Low, // Target itself is neutral
             _ => {
                 // Check transfer patterns
-                let in_degree = self.connections.iter().filter(|(_, to, _)| *to == node_idx).count();
-                let out_degree = self.connections.iter().filter(|(from, _, _)| *from == node_idx).count();
+                let in_degree = self
+                    .connections
+                    .iter()
+                    .filter(|(_, to, _)| *to == node_idx)
+                    .count();
+                let out_degree = self
+                    .connections
+                    .iter()
+                    .filter(|(from, _, _)| *from == node_idx)
+                    .count();
                 let total_degree = in_degree + out_degree;
 
                 // Check total volume
-                let total_volume: f64 = self.connections.iter()
+                let total_volume: f64 = self
+                    .connections
+                    .iter()
                     .filter(|(from, to, _)| *from == node_idx || *to == node_idx)
                     .map(|(_, _, label)| label.amount)
                     .sum();
@@ -4771,7 +5616,11 @@ impl WalletGraph {
             let note = if matches!(self.nodes[new_node_idx].1.node_type, WalletNodeType::Mixer) {
                 Some("Mixer detected".to_string())
             } else if let Some(cluster) = self.get_wallet_cluster(&address) {
-                Some(format!("Cluster #{} ({} wallets)", cluster.cluster_id, cluster.wallet_addresses.len()))
+                Some(format!(
+                    "Cluster #{} ({} wallets)",
+                    cluster.cluster_id,
+                    cluster.wallet_addresses.len()
+                ))
             } else {
                 None
             };
@@ -4785,9 +5634,9 @@ impl WalletGraph {
 
     /// Render investigation trail breadcrumb bar with statistics
     fn render_investigation_trail(&self, f: &mut Frame, area: Rect) {
+        use ratatui::layout::{Constraint, Direction, Layout};
         use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
-        use ratatui::layout::{Layout, Constraint, Direction};
 
         let Some(ref trail) = self.investigation_trail else {
             return;
@@ -4796,10 +5645,7 @@ impl WalletGraph {
         // Split area: trail on left (70%), stats on right (30%)
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(70),
-                Constraint::Percentage(30),
-            ])
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
             .split(area);
 
         let trail_area = chunks[0];
@@ -4808,10 +5654,18 @@ impl WalletGraph {
         // === Trail Breadcrumb (Left Panel) ===
         let trail_mode_indicator = if self.trail_mode { "🔍" } else { "📍" };
         let trail_block = Block::default()
-            .title(format!(" {} Trail ({}/{}) [T]=toggle [←→↑↓]=nav ",
-                trail_mode_indicator, trail.current_index + 1, trail.steps.len()))
+            .title(format!(
+                " {} Trail ({}/{}) [T]=toggle [←→↑↓]=nav ",
+                trail_mode_indicator,
+                trail.current_index + 1,
+                trail.steps.len()
+            ))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(if self.trail_mode { Color::Rgb(30, 144, 255) } else { Color::Blue }));
+            .border_style(Style::default().fg(if self.trail_mode {
+                Color::Rgb(30, 144, 255)
+            } else {
+                Color::Blue
+            }));
 
         let trail_inner = trail_block.inner(trail_area);
         f.render_widget(trail_block, trail_area);
@@ -4842,13 +5696,19 @@ impl WalletGraph {
             };
 
             let addr = if step.wallet_address.len() > 10 {
-                format!("{}...{}", &step.wallet_address[..4], &step.wallet_address[step.wallet_address.len().saturating_sub(3)..])
+                format!(
+                    "{}...{}",
+                    &step.wallet_address[..4],
+                    &step.wallet_address[step.wallet_address.len().saturating_sub(3)..]
+                )
             } else {
                 step.wallet_address.clone()
             };
 
             let style = if is_current {
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             };
@@ -4889,12 +5749,19 @@ impl WalletGraph {
         // Trail stats (compact format)
         stats_spans.push(Span::styled("Trail: ", Style::default().fg(Color::Yellow)));
         stats_spans.push(Span::styled(
-            format!("{:.1} ", if trail_total > 1000.0 { format!("{:.1}K", trail_total / 1000.0) } else { format!("{:.1}", trail_total) }),
-            Style::default().fg(Color::White)
+            format!(
+                "{:.1} ",
+                if trail_total > 1000.0 {
+                    format!("{:.1}K", trail_total / 1000.0)
+                } else {
+                    format!("{:.1}", trail_total)
+                }
+            ),
+            Style::default().fg(Color::White),
         ));
         stats_spans.push(Span::styled(
             format!("{}tx ", trail_transfers),
-            Style::default().fg(Color::Green)
+            Style::default().fg(Color::Green),
         ));
 
         // Token list (abbreviated)
@@ -4906,14 +5773,20 @@ impl WalletGraph {
             format!("{}+{}", trail_tokens[0], trail_tokens.len() - 1)
         };
         if !token_str.is_empty() {
-            stats_spans.push(Span::styled(format!("[{}] ", token_str), Style::default().fg(Color::Magenta)));
+            stats_spans.push(Span::styled(
+                format!("[{}] ", token_str),
+                Style::default().fg(Color::Magenta),
+            ));
         }
 
         // Graph stats (second line if space permits)
-        stats_spans.push(Span::styled("│ Graph: ", Style::default().fg(Color::DarkGray)));
+        stats_spans.push(Span::styled(
+            "│ Graph: ",
+            Style::default().fg(Color::DarkGray),
+        ));
         stats_spans.push(Span::styled(
             format!("{}w {}e", graph_nodes, graph_edges),
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(Color::DarkGray),
         ));
 
         let stats_line = Line::from(stats_spans);
@@ -4923,9 +5796,9 @@ impl WalletGraph {
 
     /// Render detailed trail statistics panel (right side when trail mode active)
     fn render_trail_stats(&self, f: &mut Frame, area: Rect) {
+        use ratatui::layout::{Constraint, Direction, Layout};
         use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
-        use ratatui::layout::{Layout, Constraint, Direction};
 
         let Some(ref trail) = self.investigation_trail else {
             return;
@@ -4944,9 +5817,9 @@ impl WalletGraph {
         let sections = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(6),  // Trail summary (5 lines + 1 padding)
-                Constraint::Length(6),  // Graph summary
-                Constraint::Min(4),     // Navigation hint
+                Constraint::Length(6), // Trail summary (5 lines + 1 padding)
+                Constraint::Length(6), // Graph summary
+                Constraint::Min(4),    // Navigation hint
             ])
             .split(inner);
 
@@ -4954,8 +5827,16 @@ impl WalletGraph {
         let trail_total = trail.total_amount();
         let trail_tokens = trail.unique_tokens();
         let trail_transfers = trail.steps.len().saturating_sub(1);
-        let critical_count = trail.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::Critical)).count();
-        let high_count = trail.steps.iter().filter(|s| matches!(s.risk_level, RiskLevel::High)).count();
+        let critical_count = trail
+            .steps
+            .iter()
+            .filter(|s| matches!(s.risk_level, RiskLevel::Critical))
+            .count();
+        let high_count = trail
+            .steps
+            .iter()
+            .filter(|s| matches!(s.risk_level, RiskLevel::High))
+            .count();
 
         // Format token list
         let token_str = if trail_tokens.is_empty() {
@@ -4968,21 +5849,40 @@ impl WalletGraph {
 
         let trail_lines = vec![
             Line::from(vec![
-                Span::styled("🔗 Trail ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("'{}'", trail.branch_name), Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    "🔗 Trail ",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("'{}'", trail.branch_name),
+                    Style::default().fg(Color::Cyan),
+                ),
             ]),
             Line::from(vec![
                 Span::raw("  Steps: "),
-                Span::styled(format!("{}", trail.steps.len()), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("{}", trail.steps.len()),
+                    Style::default().fg(Color::White),
+                ),
                 Span::raw(" │ Txs: "),
-                Span::styled(format!("{}", trail_transfers), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("{}", trail_transfers),
+                    Style::default().fg(Color::Green),
+                ),
             ]),
             Line::from(vec![
                 Span::raw("  Flow: "),
                 Span::styled(
-                    if trail_total > 1000.0 { format!("{:.1}K", trail_total / 1000.0) }
-                    else { format!("{:.2}", trail_total) },
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    if trail_total > 1000.0 {
+                        format!("{:.1}K", trail_total / 1000.0)
+                    } else {
+                        format!("{:.2}", trail_total)
+                    },
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
@@ -4991,9 +5891,15 @@ impl WalletGraph {
             ]),
             Line::from(vec![
                 Span::raw("  Risk: "),
-                Span::styled(format!("{}🔴", critical_count), Style::default().fg(Color::Red)),
+                Span::styled(
+                    format!("{}🔴", critical_count),
+                    Style::default().fg(Color::Red),
+                ),
                 Span::raw(" "),
-                Span::styled(format!("{}🟠", high_count), Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{}🟠", high_count),
+                    Style::default().fg(Color::Yellow),
+                ),
             ]),
         ];
 
@@ -5011,29 +5917,49 @@ impl WalletGraph {
         let current_edge_idx = trail.tentative_edge_idx.unwrap_or(0);
 
         let graph_lines = vec![
-            Line::from(vec![
-                Span::styled("📈 Graph", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "📈 Graph",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::raw("  Wallets: "),
-                Span::styled(format!("{}", graph_nodes), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("{}", graph_nodes),
+                    Style::default().fg(Color::White),
+                ),
             ]),
             Line::from(vec![
                 Span::raw("  Edges: "),
-                Span::styled(format!("{}", graph_edges), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("{}", graph_edges),
+                    Style::default().fg(Color::White),
+                ),
             ]),
             Line::from(vec![
                 Span::raw("  Total: "),
                 Span::styled(
-                    if graph_total > 1000000.0 { format!("{:.1}M", graph_total / 1000000.0) }
-                    else if graph_total > 1000.0 { format!("{:.1}K", graph_total / 1000.0) }
-                    else { format!("{:.0}", graph_total) },
-                    Style::default().fg(Color::Green)
+                    if graph_total > 1000000.0 {
+                        format!("{:.1}M", graph_total / 1000000.0)
+                    } else if graph_total > 1000.0 {
+                        format!("{:.1}K", graph_total / 1000.0)
+                    } else {
+                        format!("{:.0}", graph_total)
+                    },
+                    Style::default().fg(Color::Green),
                 ),
             ]),
             Line::from(vec![
                 Span::raw("  Mixers: "),
-                Span::styled(format!("{}", mixer_count), Style::default().fg(if mixer_count > 0 { Color::Red } else { Color::Green })),
+                Span::styled(
+                    format!("{}", mixer_count),
+                    Style::default().fg(if mixer_count > 0 {
+                        Color::Red
+                    } else {
+                        Color::Green
+                    }),
+                ),
             ]),
         ];
 
@@ -5042,15 +5968,18 @@ impl WalletGraph {
 
         // === NAVIGATION HINT ===
         let nav_lines = vec![
-            Line::from(vec![
-                Span::styled("━━━ Navigate ━━━", Style::default().fg(Color::DarkGray)),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    format!("Edge {}/{}", current_edge_idx + 1, available_edge_count.max(1)),
-                    Style::default().fg(Color::Rgb(68, 204, 255))
+            Line::from(vec![Span::styled(
+                "━━━ Navigate ━━━",
+                Style::default().fg(Color::DarkGray),
+            )]),
+            Line::from(vec![Span::styled(
+                format!(
+                    "Edge {}/{}",
+                    current_edge_idx + 1,
+                    available_edge_count.max(1)
                 ),
-            ]),
+                Style::default().fg(Color::Rgb(68, 204, 255)),
+            )]),
             Line::from(vec![
                 Span::styled("↑↓", Style::default().fg(Color::Yellow)),
                 Span::raw(" cycle edges"),
@@ -5068,7 +5997,6 @@ impl WalletGraph {
         let nav_para = Paragraph::new(nav_lines);
         f.render_widget(nav_para, sections[2]);
     }
-
 }
 
 // ============================================================================
@@ -5090,15 +6018,13 @@ impl GraphData for WalletGraph {
     }
 
     fn node_type(&self, idx: usize) -> Option<&str> {
-        self.nodes.get(idx).map(|(_, node)| {
-            match node.node_type {
-                WalletNodeType::Target => "Target",
-                WalletNodeType::Funding => "Funding",
-                WalletNodeType::Recipient => "Recipient",
-                WalletNodeType::DeFi => "DeFi",
-                WalletNodeType::Token => "Token",
-                WalletNodeType::Mixer => "Mixer",
-            }
+        self.nodes.get(idx).map(|(_, node)| match node.node_type {
+            WalletNodeType::Target => "Target",
+            WalletNodeType::Funding => "Funding",
+            WalletNodeType::Recipient => "Recipient",
+            WalletNodeType::DeFi => "DeFi",
+            WalletNodeType::Token => "Token",
+            WalletNodeType::Mixer => "Mixer",
         })
     }
 
@@ -5106,7 +6032,13 @@ impl GraphData for WalletGraph {
         self.connections
             .iter()
             .map(|(from, to, label)| {
-                (*from, *to, label.amount, label.token.clone(), label.timestamp.clone())
+                (
+                    *from,
+                    *to,
+                    label.amount,
+                    label.token.clone(),
+                    label.timestamp.clone(),
+                )
             })
             .collect()
     }
@@ -5141,7 +6073,13 @@ impl GraphData for WalletGraph {
 
     fn edge_data(&self, edge_idx: usize) -> Option<(usize, usize, f64, String, Option<String>)> {
         self.connections.get(edge_idx).map(|(from, to, label)| {
-            (*from, *to, label.amount, label.token.clone(), label.timestamp.clone())
+            (
+                *from,
+                *to,
+                label.amount,
+                label.token.clone(),
+                label.timestamp.clone(),
+            )
         })
     }
 }
@@ -5155,14 +6093,18 @@ pub struct TransferData {
     pub token: String,
     pub is_defi: bool,
     pub timestamp: Option<String>,
-    pub signature: Option<String>,  // Transaction signature
+    pub signature: Option<String>, // Transaction signature
 }
 
 impl TransferData {
     pub fn from_json(data: &serde_json::Value) -> Vec<Self> {
         let mut transfers = Vec::new();
 
-        if let Some(data_array) = data.get("data").and_then(|d| d.get("data")).and_then(|d| d.as_array()) {
+        if let Some(data_array) = data
+            .get("data")
+            .and_then(|d| d.get("data"))
+            .and_then(|d| d.as_array())
+        {
             for item in data_array {
                 if let (Some(from), Some(to), Some(token_amount), Some(token_symbol)) = (
                     item.get("from").and_then(|v| v.as_str()),
@@ -5171,16 +6113,19 @@ impl TransferData {
                     item.get("tokenSymbol").and_then(|v| v.as_str()),
                 ) {
                     let amount: f64 = token_amount.parse().unwrap_or(0.0);
-                    let is_defi = item.get("txType")
+                    let is_defi = item
+                        .get("txType")
                         .and_then(|v| v.as_str())
                         .map(|t| t == "defi")
                         .unwrap_or(false);
 
-                    let timestamp = item.get("date")
+                    let timestamp = item
+                        .get("date")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
 
-                    let signature = item.get("signature")
+                    let signature = item
+                        .get("signature")
                         .or_else(|| item.get("txHash"))
                         .or_else(|| item.get("transactionHash"))
                         .and_then(|v| v.as_str())

@@ -115,10 +115,7 @@ pub fn build_collab_command() -> Command {
                 ),
         )
         // List annotations
-        .subcommand(
-            Command::new("annotations")
-                .about("List all annotations in the session"),
-        )
+        .subcommand(Command::new("annotations").about("List all annotations in the session"))
         // Start WebSocket server
         .subcommand(
             Command::new("server")
@@ -145,15 +142,13 @@ pub fn build_collab_command() -> Command {
                 .about("Manage federation peers")
                 .arg_required_else_help(true)
                 .subcommand(
-                    Command::new("add")
-                        .about("Add a federation peer")
-                        .arg(
-                            Arg::new("address")
-                                .value_name("ADDRESS")
-                                .help("Peer address (e.g., http://192.168.1.100:8080)")
-                                .required(true)
-                                .index(1),
-                        ),
+                    Command::new("add").about("Add a federation peer").arg(
+                        Arg::new("address")
+                            .value_name("ADDRESS")
+                            .help("Peer address (e.g., http://192.168.1.100:8080)")
+                            .required(true)
+                            .index(1),
+                    ),
                 )
                 .subcommand(
                     Command::new("remove")
@@ -166,15 +161,11 @@ pub fn build_collab_command() -> Command {
                                 .index(1),
                         ),
                 )
-                .subcommand(
-                    Command::new("list")
-                        .about("List configured federation peers"),
-                ),
+                .subcommand(Command::new("list").about("List configured federation peers")),
         )
         // Federation: Discover sessions
         .subcommand(
-            Command::new("discover")
-                .about("Discover collaborative sessions from federated peers"),
+            Command::new("discover").about("Discover collaborative sessions from federated peers"),
         )
         // Federation: Publish session
         .subcommand(
@@ -188,13 +179,7 @@ pub fn build_collab_command() -> Command {
                 ),
         )
         // Federation: Status
-        .subcommand(
-            Command::new("status")
-                .about("Show federation network status"),
-        )
+        .subcommand(Command::new("status").about("Show federation network status"))
         // Help
-        .subcommand(
-            Command::new("help")
-                .about("Show help for collab commands"),
-        )
+        .subcommand(Command::new("help").about("Show help for collab commands"))
 }

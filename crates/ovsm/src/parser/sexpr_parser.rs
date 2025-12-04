@@ -1903,7 +1903,12 @@ mod tests {
             assert_eq!(name, "define");
             assert_eq!(args.len(), 2);
             // Second arg should be a TypedLambda
-            if let Expression::TypedLambda { typed_params, return_type, .. } = &args[1].value {
+            if let Expression::TypedLambda {
+                typed_params,
+                return_type,
+                ..
+            } = &args[1].value
+            {
                 assert_eq!(typed_params.len(), 2);
                 assert_eq!(typed_params[0].0, "x");
                 assert!(typed_params[0].1.is_some());
@@ -1926,7 +1931,12 @@ mod tests {
 
         if let Statement::Expression(Expression::ToolCall { name, args }) = &program.statements[0] {
             assert_eq!(name, "define");
-            if let Expression::TypedLambda { typed_params, return_type, .. } = &args[1].value {
+            if let Expression::TypedLambda {
+                typed_params,
+                return_type,
+                ..
+            } = &args[1].value
+            {
                 assert_eq!(typed_params.len(), 2);
                 assert!(return_type.is_some());
                 // Check return type is i64

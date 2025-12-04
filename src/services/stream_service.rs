@@ -1,18 +1,18 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use solana_client::rpc_client::RpcClient;
 use solana_client::nonblocking::pubsub_client::PubsubClient;
+use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::{RpcTransactionLogsConfig, RpcTransactionLogsFilter};
 use solana_commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::str::FromStr;
 use tokio::sync::broadcast;
 use tokio::time;
-use futures_util::StreamExt;
 
 /// Event types that can be streamed
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -62,7 +62,7 @@ pub enum SolanaEvent {
 }
 
 /// Filter configuration for event streaming
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventFilter {
     /// Filter by program ID
     pub program_ids: Option<Vec<String>>,
@@ -74,18 +74,6 @@ pub struct EventFilter {
     pub min_fee: Option<u64>,
     /// Only successful transactions
     pub success_only: bool,
-}
-
-impl Default for EventFilter {
-    fn default() -> Self {
-        Self {
-            program_ids: None,
-            accounts: None,
-            event_types: None,
-            min_fee: None,
-            success_only: false,
-        }
-    }
 }
 
 impl EventFilter {
@@ -148,13 +136,18 @@ impl EventFilter {
         // Check program_id filter
         if let Some(ref programs) = self.program_ids {
             match event {
-                SolanaEvent::Transaction { program_ids: Some(tx_programs), .. } => {
+                SolanaEvent::Transaction {
+                    program_ids: Some(tx_programs),
+                    ..
+                } => {
                     // Transaction must involve at least one of the filtered programs
                     if !tx_programs.iter().any(|p| programs.contains(p)) {
                         return false;
                     }
                 }
-                SolanaEvent::Transaction { program_ids: None, .. } => {
+                SolanaEvent::Transaction {
+                    program_ids: None, ..
+                } => {
                     // Transaction without program_ids can't be filtered, skip it
                     return false;
                 }
@@ -248,7 +241,9 @@ impl StreamService {
             // Use WebSocket logsSubscribe for program-specific streaming
             tracing::info!("Using WebSocket programSubscribe for program-specific streaming");
             tokio::spawn(async move {
-                if let Err(e) = Self::subscribe_to_programs(&rpc_url, &tx, &filters, &running, &stats).await {
+                if let Err(e) =
+                    Self::subscribe_to_programs(&rpc_url, &tx, &filters, &running, &stats).await
+                {
                     tracing::error!("Program subscription error: {}", e);
                 }
             });
@@ -296,19 +291,26 @@ impl StreamService {
         stats: &Arc<Mutex<StreamStats>>,
     ) -> Result<()> {
         // Convert HTTP URL to WebSocket URL
-        let ws_url = rpc_url.replace("https://", "wss://").replace("http://", "ws://");
+        let ws_url = rpc_url
+            .replace("https://", "wss://")
+            .replace("http://", "ws://");
 
         // Get all program IDs from filters
         let program_ids: Vec<String> = {
             let filters_vec = filters.lock().unwrap();
-            filters_vec.iter()
+            filters_vec
+                .iter()
                 .filter_map(|f| f.program_ids.as_ref())
                 .flatten()
                 .cloned()
                 .collect()
         };
 
-        tracing::info!("Subscribing to {} programs via WebSocket: {}", program_ids.len(), ws_url);
+        tracing::info!(
+            "Subscribing to {} programs via WebSocket: {}",
+            program_ids.len(),
+            ws_url
+        );
 
         // Subscribe to logs for each program
         for program_id in program_ids {
@@ -365,7 +367,8 @@ impl StreamService {
 
                             // Check filters
                             let filters_vec = filters_clone.lock().unwrap();
-                            let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&event));
+                            let should_send = filters_vec.is_empty()
+                                || filters_vec.iter().any(|f| f.matches(&event));
 
                             if should_send {
                                 let _ = tx_clone.send(event);
@@ -438,7 +441,8 @@ impl StreamService {
         filters: &Arc<Mutex<Vec<EventFilter>>>,
         stats: &Arc<Mutex<StreamStats>>,
     ) -> Result<()> {
-        let client = RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
+        let client =
+            RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
 
         // Get current slot
         let slot = client.get_slot().context("Failed to get current slot")?;
@@ -455,7 +459,8 @@ impl StreamService {
         };
 
         let filters_vec = filters.lock().unwrap().clone();
-        let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&slot_event));
+        let should_send =
+            filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&slot_event));
 
         stats.lock().unwrap().events_processed += 1;
 
@@ -471,8 +476,17 @@ impl StreamService {
             for tx_with_meta in block.transactions.iter().take(10) {
                 if let Some(transaction) = &tx_with_meta.transaction.decode() {
                     if let Some(meta) = &tx_with_meta.meta {
-                        let signature = transaction.signatures.get(0).map(|s| s.to_string()).unwrap_or_default();
-                        let signer = transaction.message.static_account_keys().get(0).map(|k| k.to_string()).unwrap_or_default();
+                        let signature = transaction
+                            .signatures
+                            .first()
+                            .map(|s| s.to_string())
+                            .unwrap_or_default();
+                        let signer = transaction
+                            .message
+                            .static_account_keys()
+                            .first()
+                            .map(|k| k.to_string())
+                            .unwrap_or_default();
 
                         // Extract all program IDs from the transaction
                         let program_ids: Vec<String> = transaction
@@ -480,7 +494,10 @@ impl StreamService {
                             .instructions()
                             .iter()
                             .filter_map(|ix| {
-                                transaction.message.static_account_keys().get(ix.program_id_index as usize)
+                                transaction
+                                    .message
+                                    .static_account_keys()
+                                    .get(ix.program_id_index as usize)
                             })
                             .map(|pubkey| pubkey.to_string())
                             .collect();
@@ -492,12 +509,17 @@ impl StreamService {
                             success: meta.status.is_ok(),
                             fee: meta.fee,
                             signer,
-                            program_ids: if program_ids.is_empty() { None } else { Some(program_ids) },
+                            program_ids: if program_ids.is_empty() {
+                                None
+                            } else {
+                                Some(program_ids)
+                            },
                         };
 
                         stats.lock().unwrap().events_processed += 1;
 
-                        let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&event));
+                        let should_send =
+                            filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&event));
 
                         if should_send {
                             let _ = tx.send(event);
@@ -511,12 +533,17 @@ impl StreamService {
                         use solana_transaction_status::option_serializer::OptionSerializer;
 
                         // Try to parse SPL token transfers from pre/post token balances
-                        if let (OptionSerializer::Some(pre_balances), OptionSerializer::Some(post_balances)) =
-                            (&meta.pre_token_balances, &meta.post_token_balances)
+                        if let (
+                            OptionSerializer::Some(pre_balances),
+                            OptionSerializer::Some(post_balances),
+                        ) = (&meta.pre_token_balances, &meta.post_token_balances)
                         {
                             // Match pre and post balances to detect transfers
                             for post in post_balances {
-                                if let Some(pre) = pre_balances.iter().find(|p| p.account_index == post.account_index) {
+                                if let Some(pre) = pre_balances
+                                    .iter()
+                                    .find(|p| p.account_index == post.account_index)
+                                {
                                     // Calculate change in balance
                                     let pre_amount = pre.ui_token_amount.ui_amount.unwrap_or(0.0);
                                     let post_amount = post.ui_token_amount.ui_amount.unwrap_or(0.0);
@@ -526,12 +553,16 @@ impl StreamService {
                                         let token_transfer = SolanaEvent::TokenTransfer {
                                             signature: signature.clone(),
                                             from: if change < 0.0 {
-                                                post.owner.clone().unwrap_or_else(|| "unknown".to_string())
+                                                post.owner
+                                                    .clone()
+                                                    .unwrap_or_else(|| "unknown".to_string())
                                             } else {
                                                 "unknown".to_string()
                                             },
                                             to: if change > 0.0 {
-                                                post.owner.clone().unwrap_or_else(|| "unknown".to_string())
+                                                post.owner
+                                                    .clone()
+                                                    .unwrap_or_else(|| "unknown".to_string())
                                             } else {
                                                 "unknown".to_string()
                                             },
@@ -542,7 +573,10 @@ impl StreamService {
 
                                         stats.lock().unwrap().events_processed += 1;
 
-                                        let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&token_transfer));
+                                        let should_send = filters_vec.is_empty()
+                                            || filters_vec
+                                                .iter()
+                                                .any(|f| f.matches(&token_transfer));
 
                                         if should_send {
                                             let _ = tx.send(token_transfer);
@@ -557,9 +591,9 @@ impl StreamService {
 
                         // Also emit log messages for transfer instructions
                         if let OptionSerializer::Some(log_messages) = &meta.log_messages {
-                            let has_transfer = log_messages.iter().any(|log|
-                                log.contains("Program log: Instruction: Transfer")
-                            );
+                            let has_transfer = log_messages
+                                .iter()
+                                .any(|log| log.contains("Program log: Instruction: Transfer"));
 
                             if has_transfer {
                                 let log_event = SolanaEvent::LogMessage {
@@ -570,7 +604,8 @@ impl StreamService {
 
                                 stats.lock().unwrap().events_processed += 1;
 
-                                let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&log_event));
+                                let should_send = filters_vec.is_empty()
+                                    || filters_vec.iter().any(|f| f.matches(&log_event));
 
                                 if should_send {
                                     let _ = tx.send(log_event);

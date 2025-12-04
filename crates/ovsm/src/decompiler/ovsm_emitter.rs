@@ -3,12 +3,11 @@
 //! Generates readable OVSM LISP code from disassembled sBPF instructions.
 
 use super::{
-    DisassembledInstr,
-    cfg::{ControlFlowGraph, BasicBlock},
+    cfg::{BasicBlock, ControlFlowGraph},
     idl::AnchorIdl,
-    DecompileOptions,
+    DecompileOptions, DisassembledInstr,
 };
-use crate::{Result, Error};
+use crate::{Error, Result};
 use std::collections::HashMap;
 
 /// OVSM code emitter
@@ -35,7 +34,11 @@ impl<'a> OvsmEmitter<'a> {
     }
 
     /// Emit OVSM code from CFG
-    pub fn emit(&self, cfg: &ControlFlowGraph, instructions: &[DisassembledInstr]) -> Result<String> {
+    pub fn emit(
+        &self,
+        cfg: &ControlFlowGraph,
+        instructions: &[DisassembledInstr],
+    ) -> Result<String> {
         let mut output = String::new();
 
         // Header comment
@@ -66,14 +69,21 @@ impl<'a> OvsmEmitter<'a> {
         Ok(output)
     }
 
-    fn emit_block(&self, block: &BasicBlock, instructions: &[DisassembledInstr], cfg: &ControlFlowGraph) -> Result<String> {
+    fn emit_block(
+        &self,
+        block: &BasicBlock,
+        instructions: &[DisassembledInstr],
+        cfg: &ControlFlowGraph,
+    ) -> Result<String> {
         let mut output = String::new();
         let indent = "    ";
 
         // Block label comment
         if self.options.show_addresses {
-            output.push_str(&format!("{}  ;; Block {} (offset 0x{:x})\n",
-                indent, block.id, block.start_offset));
+            output.push_str(&format!(
+                "{}  ;; Block {} (offset 0x{:x})\n",
+                indent, block.id, block.start_offset
+            ));
         }
 
         // Check if this is a loop header
@@ -92,8 +102,12 @@ impl<'a> OvsmEmitter<'a> {
 
             if !ovsm.is_empty() {
                 if self.options.show_addresses {
-                    output.push_str(&format!("{}  ;; 0x{:04x}: {}\n",
-                        indent, instr.offset, instr.to_asm()));
+                    output.push_str(&format!(
+                        "{}  ;; 0x{:04x}: {}\n",
+                        indent,
+                        instr.offset,
+                        instr.to_asm()
+                    ));
                 }
                 output.push_str(&format!("{}  {}\n", indent, ovsm));
             }
@@ -235,7 +249,10 @@ impl<'a> OvsmEmitter<'a> {
                     // Try to use IDL for semantic names
                     Ok(format!("(define {} (load {} {}))", dst, base, instr.off))
                 } else {
-                    Ok(format!("(define {} (mem-load {} {}))", dst, base, instr.off))
+                    Ok(format!(
+                        "(define {} (mem-load {} {}))",
+                        dst, base, instr.off
+                    ))
                 }
             }
 
@@ -247,61 +264,71 @@ impl<'a> OvsmEmitter<'a> {
             }
 
             // Unconditional jump
-            0x05 => {
-                Ok(format!(";; jump +{}", instr.off))
-            }
+            0x05 => Ok(format!(";; jump +{}", instr.off)),
 
             // Conditional jumps
-            0x15 => { // jeq imm
+            0x15 => {
+                // jeq imm
                 let reg = reg_name(instr.dst);
                 Ok(format!("(if (= {} {}) ...)", reg, instr.imm))
             }
-            0x1d => { // jeq reg
+            0x1d => {
+                // jeq reg
                 let r1 = reg_name(instr.dst);
                 let r2 = reg_name(instr.src);
                 Ok(format!("(if (= {} {}) ...)", r1, r2))
             }
-            0x55 => { // jne imm
+            0x55 => {
+                // jne imm
                 let reg = reg_name(instr.dst);
                 Ok(format!("(if (!= {} {}) ...)", reg, instr.imm))
             }
-            0x5d => { // jne reg
+            0x5d => {
+                // jne reg
                 let r1 = reg_name(instr.dst);
                 let r2 = reg_name(instr.src);
                 Ok(format!("(if (!= {} {}) ...)", r1, r2))
             }
-            0x25 => { // jgt imm
+            0x25 => {
+                // jgt imm
                 let reg = reg_name(instr.dst);
                 Ok(format!("(if (> {} {}) ...)", reg, instr.imm))
             }
-            0x2d => { // jgt reg
+            0x2d => {
+                // jgt reg
                 let r1 = reg_name(instr.dst);
                 let r2 = reg_name(instr.src);
                 Ok(format!("(if (> {} {}) ...)", r1, r2))
             }
-            0x35 => { // jge imm
+            0x35 => {
+                // jge imm
                 let reg = reg_name(instr.dst);
                 Ok(format!("(if (>= {} {}) ...)", reg, instr.imm))
             }
-            0x3d => { // jge reg
+            0x3d => {
+                // jge reg
                 let r1 = reg_name(instr.dst);
                 let r2 = reg_name(instr.src);
                 Ok(format!("(if (>= {} {}) ...)", r1, r2))
             }
-            0xa5 => { // jlt imm
+            0xa5 => {
+                // jlt imm
                 let reg = reg_name(instr.dst);
                 Ok(format!("(if (< {} {}) ...)", reg, instr.imm))
             }
-            0xad => { // jlt reg
+            0xad => {
+                // jlt reg
                 let r1 = reg_name(instr.dst);
                 let r2 = reg_name(instr.src);
                 Ok(format!("(if (< {} {}) ...)", r1, r2))
             }
-            0xb5 => { // jle imm
+            0xb5 => {
+                // jle imm
                 let reg = reg_name(instr.dst);
                 Ok(format!("(if (<= {} {}) ...)", reg, instr.imm))
             }
-            0xbd => { // jle reg
+            0xbd => {
+                // jle reg
                 let r1 = reg_name(instr.dst);
                 let r2 = reg_name(instr.src);
                 Ok(format!("(if (<= {} {}) ...)", r1, r2))
@@ -314,9 +341,7 @@ impl<'a> OvsmEmitter<'a> {
             }
 
             // Exit
-            0x95 => {
-                Ok("(return result)".into())
-            }
+            0x95 => Ok("(return result)".into()),
 
             _ => {
                 if self.options.show_addresses {

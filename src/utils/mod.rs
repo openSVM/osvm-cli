@@ -20,16 +20,14 @@ pub mod agent_chat_tests;
 pub mod agent_chat_v2;
 /// CLI-based agent execution without UI
 pub mod agent_cli;
+/// FrozenBBS integration for Meshtastic-based agent-human communication
+pub mod bbs;
+/// Collaborative real-time investigation system with shared TUI sessions
+pub mod collab;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Cryptographic security utilities for key validation and secure storage
 pub mod crypto_security;
-/// Forensics configuration for blockchain analysis thresholds
-pub mod forensics_config;
-/// Investigation database for persistent forensic tracking
-pub mod investigation_db;
-/// RocksDB snapshot storage for high-performance Solana queries
-pub mod snapshot_db;
 /// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
 /// Entity clustering for blockchain forensics
@@ -38,8 +36,12 @@ pub mod entity_clustering;
 pub mod error_boundary;
 /// Example command utilities for displaying usage examples
 pub mod examples;
+/// Forensics configuration for blockchain analysis thresholds
+pub mod forensics_config;
 /// Input sanitization and validation utilities for security
 pub mod input_sanitization;
+/// Investigation database for persistent forensic tracking
+pub mod investigation_db;
 /// Isolation runtime support for unikernels and microVMs
 pub mod isolation;
 /// Custom keybinding system for agent interfaces
@@ -73,28 +75,32 @@ pub mod screenshot;
 pub mod secure_logger;
 /// Secure system operations without privilege escalation
 pub mod secure_system;
+/// Lightweight self-play curriculum seeds (OVSM only) to improve agent reasoning over time
+pub mod selfplay;
+/// RocksDB snapshot storage for high-performance Solana queries
+pub mod snapshot_db;
 /// Streaming agent with real-time terminal output (for `osvm {query}`)
 pub mod streaming_agent;
-/// Web terminal streaming server for browser-based research viewing
-pub mod web_terminal;
-/// Web TUI backend - streams ratatui output to browser
-pub mod web_tui_backend;
 /// Modern theme system with gradients and effects
 pub mod theme;
 /// Advanced theme customization system
 pub mod themes;
 /// TUI (Terminal User Interface) with ratatui and tui-nodes
 pub mod tui;
-/// FrozenBBS integration for Meshtastic-based agent-human communication
-pub mod bbs;
-/// Collaborative real-time investigation system with shared TUI sessions
-pub mod collab;
+/// Web terminal streaming server for browser-based research viewing
+pub mod web_terminal;
+/// Web TUI backend - streams ratatui output to browser
+pub mod web_tui_backend;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions
 pub mod ast_analyzer;
 /// Security audit system for comprehensive vulnerability analysis
 pub mod audit;
+/// User flow and call graph analysis for tracing data paths
+pub mod audit_flow_analysis;
+/// Intelligent multi-stage audit system with context-aware analysis
+pub mod audit_intelligent;
 /// Modular audit system with structured vulnerability checks
 pub mod audit_modular;
 /// Structured Rust code parser for security analysis
@@ -140,6 +146,8 @@ pub mod ssh_deploy;
 pub mod svm_info;
 
 // Self-repair and diagnostics
+/// Solana CLI config file loader (replaces solana-cli-config)
+pub mod config_loader;
 /// System diagnostics and health monitoring
 pub mod diagnostics;
 /// Continuous log monitoring and automatic repair
@@ -150,8 +158,6 @@ pub mod osvm_logger;
 pub mod self_repair;
 /// Input validators for CLI arguments (replaces solana-clap-utils)
 pub mod validators;
-/// Solana CLI config file loader (replaces solana-cli-config)
-pub mod config_loader;
 
 // External dependency wrappers
 

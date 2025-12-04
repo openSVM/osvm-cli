@@ -12,8 +12,12 @@ struct TestContext {
 
 impl solana_rbpf::vm::ContextObject for TestContext {
     fn trace(&mut self, _state: [u64; 12]) {}
-    fn consume(&mut self, amount: u64) { self.remaining = self.remaining.saturating_sub(amount); }
-    fn get_remaining(&self) -> u64 { self.remaining }
+    fn consume(&mut self, amount: u64) {
+        self.remaining = self.remaining.saturating_sub(amount);
+    }
+    fn get_remaining(&self) -> u64 {
+        self.remaining
+    }
 }
 
 fn main() {
@@ -25,7 +29,10 @@ fn main() {
     match Executable::<TestContext>::from_elf(&elf_bytes, loader) {
         Ok(exe) => {
             println!("✅ Valid sBPF ELF (loaded)!");
-            println!("   Entry offset: {}", exe.get_entrypoint_instruction_offset());
+            println!(
+                "   Entry offset: {}",
+                exe.get_entrypoint_instruction_offset()
+            );
 
             // Verify bytecode
             match exe.verify::<RequisiteVerifier>() {

@@ -636,7 +636,7 @@ fn format_bytes(bytes: u64) -> String {
 
 /// Download snapshot to remote server via SSH
 async fn download_snapshot(matches: &ArgMatches) -> Result<()> {
-    use crate::utils::ssh_deploy::{SshClient, ServerConfig};
+    use crate::utils::ssh_deploy::{ServerConfig, SshClient};
 
     let connection = matches
         .get_one::<String>("connection")
@@ -652,27 +652,29 @@ async fn download_snapshot(matches: &ArgMatches) -> Result<()> {
         .map(|s| s.as_str())
         .unwrap_or("/opt/osvm/solana/ledger");
 
-    println!("📥 Downloading {} snapshot via SSH to {}...", network, connection);
+    println!(
+        "📥 Downloading {} snapshot via SSH to {}...",
+        network, connection
+    );
 
     // Parse connection string
     let server_config = ServerConfig::from_connection_string(connection)
         .context("Invalid connection string format (use user@host[:port])")?;
 
     // Create and connect SSH client
-    let mut client = SshClient::new(server_config).map_err(|e| {
-        anyhow::anyhow!("Failed to create SSH client: {}", e)
-    })?;
+    let mut client = SshClient::new(server_config)
+        .map_err(|e| anyhow::anyhow!("Failed to create SSH client: {}", e))?;
 
-    client.connect().map_err(|e| {
-        anyhow::anyhow!("Failed to establish SSH connection: {}", e)
-    })?;
+    client
+        .connect()
+        .map_err(|e| anyhow::anyhow!("Failed to establish SSH connection: {}", e))?;
 
     println!("✅ Connected to {}", connection);
 
     // Ensure ledger directory exists
-    client.create_directory(ledger_dir).map_err(|e| {
-        anyhow::anyhow!("Failed to create ledger directory: {}", e)
-    })?;
+    client
+        .create_directory(ledger_dir)
+        .map_err(|e| anyhow::anyhow!("Failed to create ledger directory: {}", e))?;
 
     println!("📂 Ledger directory: {}", ledger_dir);
 
@@ -720,9 +722,9 @@ async fn download_snapshot(matches: &ArgMatches) -> Result<()> {
         }
     );
 
-    let result = client.execute_command(&download_cmd).map_err(|e| {
-        anyhow::anyhow!("Snapshot download failed: {}", e)
-    })?;
+    let result = client
+        .execute_command(&download_cmd)
+        .map_err(|e| anyhow::anyhow!("Snapshot download failed: {}", e))?;
 
     println!("✅ Snapshot downloaded successfully!");
     println!("\n📊 Download result:\n{}", result);

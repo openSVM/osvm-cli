@@ -17,9 +17,9 @@
 //! (define y : {y : u64 | (< y 10)} 15)
 //! ```
 
-use std::collections::HashMap;
-use super::{Type, RefinementType, RefinementChecker, RefinementError, ProofObligation};
+use super::{ProofObligation, RefinementChecker, RefinementError, RefinementType, Type};
 use crate::parser::Expression;
+use std::collections::HashMap;
 
 /// Verification error with source location
 #[derive(Debug, Clone)]
@@ -166,10 +166,7 @@ impl RefinementVerifier {
             // For tool calls, add obligation
             Expression::ToolCall { name, args: _ } => {
                 self.result.add_obligation(ProofObligation {
-                    description: format!(
-                        "Result of '{}' must satisfy {}",
-                        name, refined.predicate
-                    ),
+                    description: format!("Result of '{}' must satisfy {}", name, refined.predicate),
                     predicate: refined.predicate.clone(),
                     location: None,
                 });
@@ -178,10 +175,7 @@ impl RefinementVerifier {
             // Other expressions - add obligation
             _ => {
                 self.result.add_obligation(ProofObligation {
-                    description: format!(
-                        "Expression must satisfy {}",
-                        refined.predicate
-                    ),
+                    description: format!("Expression must satisfy {}", refined.predicate),
                     predicate: refined.predicate.clone(),
                     location: None,
                 });
@@ -199,7 +193,8 @@ impl RefinementVerifier {
     /// This checks that the value satisfies the type's refinement predicate.
     pub fn verify_define(&mut self, var_name: &str, declared_type: &Type, value_expr: &Expression) {
         // Record the variable's type
-        self.var_types.insert(var_name.to_string(), declared_type.clone());
+        self.var_types
+            .insert(var_name.to_string(), declared_type.clone());
 
         // Verify the value satisfies the type
         self.verify_expr(value_expr, declared_type);
@@ -211,7 +206,8 @@ impl RefinementVerifier {
         for err in self.checker.errors() {
             self.result.add_error(
                 err.message.clone(),
-                err.location.map_or("unknown".to_string(), |loc| format!("{:?}", loc)),
+                err.location
+                    .map_or("unknown".to_string(), |loc| format!("{:?}", loc)),
             );
         }
 
@@ -248,7 +244,11 @@ mod tests {
         verifier.verify_expr(&expr, &refined_type);
 
         let result = verifier.finish();
-        assert!(!result.has_errors(), "Expected no errors, got: {:?}", result.errors);
+        assert!(
+            !result.has_errors(),
+            "Expected no errors, got: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -280,7 +280,11 @@ mod tests {
         verifier.verify_define("x", &refined_type, &value_expr);
 
         let result = verifier.finish();
-        assert!(!result.has_errors(), "Expected no errors, got: {:?}", result.errors);
+        assert!(
+            !result.has_errors(),
+            "Expected no errors, got: {:?}",
+            result.errors
+        );
     }
 
     #[test]

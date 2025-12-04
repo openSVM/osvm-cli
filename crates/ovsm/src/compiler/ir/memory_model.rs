@@ -91,15 +91,24 @@ pub enum RegType {
 
 impl RegType {
     pub fn u64() -> Self {
-        RegType::Value { size: 8, signed: false }
+        RegType::Value {
+            size: 8,
+            signed: false,
+        }
     }
 
     pub fn i64() -> Self {
-        RegType::Value { size: 8, signed: true }
+        RegType::Value {
+            size: 8,
+            signed: true,
+        }
     }
 
     pub fn u8() -> Self {
-        RegType::Value { size: 1, signed: false }
+        RegType::Value {
+            size: 1,
+            signed: false,
+        }
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -136,14 +145,18 @@ pub struct PointerType {
 
 impl PointerType {
     /// Create a pointer to account data
-    pub fn account_data(account_idx: u8, struct_name: Option<String>, data_len: Option<i64>) -> Self {
+    pub fn account_data(
+        account_idx: u8,
+        struct_name: Option<String>,
+        data_len: Option<i64>,
+    ) -> Self {
         PointerType {
             region: MemoryRegion::AccountData(account_idx),
             bounds: data_len.map(|len| (0, len)),
             struct_type: struct_name,
             offset: 0,
             alignment: Alignment::Byte1, // Account data may not be aligned
-            writable: true, // Will be validated separately
+            writable: true,              // Will be validated separately
         }
     }
 
@@ -298,21 +311,13 @@ pub enum MemoryError {
     },
 
     /// Attempting to write to read-only memory
-    ReadOnlyWrite {
-        region: MemoryRegion,
-    },
+    ReadOnlyWrite { region: MemoryRegion },
 
     /// Type mismatch: expected pointer but got value (or vice versa)
-    TypeMismatch {
-        expected: String,
-        got: String,
-    },
+    TypeMismatch { expected: String, got: String },
 
     /// Invalid account index
-    InvalidAccountIndex {
-        index: u8,
-        max_accounts: u8,
-    },
+    InvalidAccountIndex { index: u8, max_accounts: u8 },
 
     /// Field not found in struct
     FieldNotFound {
@@ -321,9 +326,7 @@ pub enum MemoryError {
     },
 
     /// Struct not defined
-    StructNotDefined {
-        name: String,
-    },
+    StructNotDefined { name: String },
 
     /// Pointer arithmetic on incompatible pointers
     IncompatiblePointers {
@@ -336,11 +339,28 @@ pub enum MemoryError {
 impl std::fmt::Display for MemoryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MemoryError::OutOfBounds { region, offset, size, bounds } => {
-                write!(f, "Out of bounds access in {:?}: offset {} + size {} exceeds bounds [{}, {})",
-                       region, offset, size, bounds.0, bounds.0 + bounds.1)
+            MemoryError::OutOfBounds {
+                region,
+                offset,
+                size,
+                bounds,
+            } => {
+                write!(
+                    f,
+                    "Out of bounds access in {:?}: offset {} + size {} exceeds bounds [{}, {})",
+                    region,
+                    offset,
+                    size,
+                    bounds.0,
+                    bounds.0 + bounds.1
+                )
             }
-            MemoryError::MisalignedAccess { region, offset, required, actual } => {
+            MemoryError::MisalignedAccess {
+                region,
+                offset,
+                required,
+                actual,
+            } => {
                 write!(f, "Misaligned access in {:?}: offset {} requires {}-byte alignment but has remainder {}",
                        region, offset, required, actual)
             }
@@ -350,17 +370,35 @@ impl std::fmt::Display for MemoryError {
             MemoryError::TypeMismatch { expected, got } => {
                 write!(f, "Type mismatch: expected {}, got {}", expected, got)
             }
-            MemoryError::InvalidAccountIndex { index, max_accounts } => {
-                write!(f, "Invalid account index {}: only {} accounts available", index, max_accounts)
+            MemoryError::InvalidAccountIndex {
+                index,
+                max_accounts,
+            } => {
+                write!(
+                    f,
+                    "Invalid account index {}: only {} accounts available",
+                    index, max_accounts
+                )
             }
-            MemoryError::FieldNotFound { struct_name, field_name } => {
-                write!(f, "Field '{}' not found in struct '{}'", field_name, struct_name)
+            MemoryError::FieldNotFound {
+                struct_name,
+                field_name,
+            } => {
+                write!(
+                    f,
+                    "Field '{}' not found in struct '{}'",
+                    field_name, struct_name
+                )
             }
             MemoryError::StructNotDefined { name } => {
                 write!(f, "Struct '{}' is not defined", name)
             }
             MemoryError::IncompatiblePointers { op, lhs, rhs } => {
-                write!(f, "Cannot {} pointers from different regions: {:?} and {:?}", op, lhs, rhs)
+                write!(
+                    f,
+                    "Cannot {} pointers from different regions: {:?} and {:?}",
+                    op, lhs, rhs
+                )
             }
         }
     }
@@ -475,7 +513,10 @@ impl TypeEnv {
     }
 
     /// Validate that a register holds a pointer
-    pub fn expect_pointer(&self, reg: super::instruction::IrReg) -> Result<&PointerType, MemoryError> {
+    pub fn expect_pointer(
+        &self,
+        reg: super::instruction::IrReg,
+    ) -> Result<&PointerType, MemoryError> {
         match self.get_type(reg) {
             Some(RegType::Pointer(p)) => Ok(p),
             Some(other) => Err(MemoryError::TypeMismatch {
@@ -610,7 +651,10 @@ impl TypeEnv {
                 PrimitiveType::U64 | PrimitiveType::I64 => 8,
             },
             FieldType::Pubkey => 32,
-            FieldType::Array { element_type, count } => {
+            FieldType::Array {
+                element_type,
+                count,
+            } => {
                 let elem_size = match element_type {
                     PrimitiveType::U8 | PrimitiveType::I8 => 1,
                     PrimitiveType::U16 | PrimitiveType::I16 => 2,
@@ -619,9 +663,11 @@ impl TypeEnv {
                 };
                 elem_size * (*count as i64)
             }
-            FieldType::Struct(name) => {
-                self.struct_defs.get(name).map(|s| s.total_size).unwrap_or(0)
-            }
+            FieldType::Struct(name) => self
+                .struct_defs
+                .get(name)
+                .map(|s| s.total_size)
+                .unwrap_or(0),
         }
     }
 
@@ -717,10 +763,10 @@ pub mod heap_layout {
     pub const ACCOUNT_TABLE_SIZE: i64 = 512; // 64 accounts * 8 bytes
     /// CPI data region
     pub const CPI_OFFSET: i64 = 0x100; // 256 bytes after base
-    pub const CPI_SIZE: i64 = 0xF00;   // ~4KB for CPI
+    pub const CPI_SIZE: i64 = 0xF00; // ~4KB for CPI
     /// Event buffer region
     pub const EVENT_OFFSET: i64 = 0x1000; // 4KB after base
-    pub const EVENT_SIZE: i64 = 0x1000;   // 4KB for events
+    pub const EVENT_SIZE: i64 = 0x1000; // 4KB for events
     /// Scratch space
     pub const SCRATCH_OFFSET: i64 = 0x2000;
 }
@@ -748,7 +794,7 @@ mod tests {
         assert!(ptr.check_alignment(8).is_ok()); // 0 % 8 == 0
 
         let offset_ptr = ptr.offset_by(1);
-        assert!(offset_ptr.check_alignment(1).is_ok());  // 1-byte always ok
+        assert!(offset_ptr.check_alignment(1).is_ok()); // 1-byte always ok
         assert!(offset_ptr.check_alignment(2).is_err()); // 1 % 2 != 0
         assert!(offset_ptr.check_alignment(4).is_err()); // 1 % 4 != 0
     }

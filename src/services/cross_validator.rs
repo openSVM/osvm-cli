@@ -1,10 +1,10 @@
+use crate::services::ai_service::AiService;
 use anyhow::{Context, Result};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use crate::services::ai_service::AiService;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use rand::Rng;
 
 /// Cross-validation system for verifying investigation findings
 #[derive(Clone)]
@@ -50,12 +50,12 @@ pub struct Evidence {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ValidationMethod {
-    DirectVerification,      // Direct on-chain verification
-    TriangulatedSources,    // Multiple independent sources agree
-    StatisticalAnalysis,    // Statistical validation
-    TemporalConsistency,    // Consistent over time
-    BehavioralPattern,      // Matches known patterns
-    PeerComparison,         // Compared with similar entities
+    DirectVerification,  // Direct on-chain verification
+    TriangulatedSources, // Multiple independent sources agree
+    StatisticalAnalysis, // Statistical validation
+    TemporalConsistency, // Consistent over time
+    BehavioralPattern,   // Matches known patterns
+    PeerComparison,      // Compared with similar entities
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +96,10 @@ impl CrossValidator {
         {
             let cache = self.validation_cache.lock().await;
             if let Some(cached) = cache.validated_claims.get(&claim) {
-                println!("  ✓ Using cached validation (confidence: {:.2})", cached.confidence);
+                println!(
+                    "  ✓ Using cached validation (confidence: {:.2})",
+                    cached.confidence
+                );
                 return Ok(cached.clone());
             }
         }
@@ -150,10 +153,15 @@ impl CrossValidator {
         // Cache the result
         {
             let mut cache = self.validation_cache.lock().await;
-            cache.validated_claims.insert(claim.clone(), validation_result.clone());
+            cache
+                .validated_claims
+                .insert(claim.clone(), validation_result.clone());
         }
 
-        println!("  ✓ Validation complete (confidence: {:.2})", combined_confidence);
+        println!(
+            "  ✓ Validation complete (confidence: {:.2})",
+            combined_confidence
+        );
         Ok(validation_result)
     }
 
@@ -246,7 +254,8 @@ impl CrossValidator {
                 "Hypothesis needs refinement"
             } else {
                 "Hypothesis should be reconsidered"
-            }.to_string(),
+            }
+            .to_string(),
         })
     }
 
@@ -256,7 +265,8 @@ impl CrossValidator {
         // Extract the main claim from a finding
         if let Some(claim) = finding.get("claim").and_then(|c| c.as_str()) {
             Ok(claim.to_string())
-        } else if let Some(interpretation) = finding.get("interpretation").and_then(|i| i.as_str()) {
+        } else if let Some(interpretation) = finding.get("interpretation").and_then(|i| i.as_str())
+        {
             Ok(interpretation.chars().take(100).collect())
         } else {
             Ok(serde_json::to_string(finding)?.chars().take(100).collect())
@@ -280,12 +290,15 @@ impl CrossValidator {
         let response = ai.query(&verification_prompt).await?;
 
         // Parse response (simplified)
-        Ok((0.7, vec![Evidence {
-            source: "direct_verification".to_string(),
-            data: serde_json::json!({"response": response}),
-            reliability: 0.9,
-            correlation_strength: 0.8,
-        }]))
+        Ok((
+            0.7,
+            vec![Evidence {
+                source: "direct_verification".to_string(),
+                data: serde_json::json!({"response": response}),
+                reliability: 0.9,
+                correlation_strength: 0.8,
+            }],
+        ))
     }
 
     async fn triangulate_sources(
@@ -294,7 +307,12 @@ impl CrossValidator {
         context: &ValidationContext,
     ) -> Result<(f64, Vec<Evidence>)> {
         // Check multiple independent sources
-        let sources = ["blockchain", "dex_analytics", "social_signals", "market_data"];
+        let sources = [
+            "blockchain",
+            "dex_analytics",
+            "social_signals",
+            "market_data",
+        ];
         let mut evidence = Vec::new();
         let mut agreements = 0;
         let mut rng = rand::rng();
@@ -303,7 +321,7 @@ impl CrossValidator {
             // Simulate checking each source with weighted probability
             // In production, this would actually query different data sources
             let source_reliability = match *source {
-                "blockchain" => 0.9,  // On-chain data is most reliable
+                "blockchain" => 0.9, // On-chain data is most reliable
                 "dex_analytics" => 0.8,
                 "social_signals" => 0.6,
                 "market_data" => 0.7,
@@ -337,12 +355,15 @@ impl CrossValidator {
         context: &ValidationContext,
     ) -> Result<(f64, Vec<Evidence>)> {
         // Statistical analysis of claim
-        Ok((0.75, vec![Evidence {
-            source: "statistical_analysis".to_string(),
-            data: serde_json::json!({"p_value": 0.03, "confidence_interval": [0.65, 0.85]}),
-            reliability: 0.85,
-            correlation_strength: 0.75,
-        }]))
+        Ok((
+            0.75,
+            vec![Evidence {
+                source: "statistical_analysis".to_string(),
+                data: serde_json::json!({"p_value": 0.03, "confidence_interval": [0.65, 0.85]}),
+                reliability: 0.85,
+                correlation_strength: 0.75,
+            }],
+        ))
     }
 
     async fn temporal_consistency_check(
@@ -351,12 +372,15 @@ impl CrossValidator {
         context: &ValidationContext,
     ) -> Result<(f64, Vec<Evidence>)> {
         // Check if claim is consistent over time
-        Ok((0.8, vec![Evidence {
-            source: "temporal_analysis".to_string(),
-            data: serde_json::json!({"consistency_over_time": true}),
-            reliability: 0.9,
-            correlation_strength: 0.8,
-        }]))
+        Ok((
+            0.8,
+            vec![Evidence {
+                source: "temporal_analysis".to_string(),
+                data: serde_json::json!({"consistency_over_time": true}),
+                reliability: 0.9,
+                correlation_strength: 0.8,
+            }],
+        ))
     }
 
     async fn pattern_validation(
@@ -365,20 +389,21 @@ impl CrossValidator {
         context: &ValidationContext,
     ) -> Result<(f64, Vec<Evidence>)> {
         // Validate against known patterns
-        Ok((0.65, vec![Evidence {
-            source: "pattern_matching".to_string(),
-            data: serde_json::json!({"matches_known_pattern": "trading_bot"}),
-            reliability: 0.7,
-            correlation_strength: 0.65,
-        }]))
+        Ok((
+            0.65,
+            vec![Evidence {
+                source: "pattern_matching".to_string(),
+                data: serde_json::json!({"matches_known_pattern": "trading_bot"}),
+                reliability: 0.7,
+                correlation_strength: 0.65,
+            }],
+        ))
     }
 
     fn combine_validation_scores(&self, scores: &[f64]) -> f64 {
         // Weighted average with penalty for disagreement
         let mean = scores.iter().sum::<f64>() / scores.len() as f64;
-        let variance = scores.iter()
-            .map(|s| (s - mean).powi(2))
-            .sum::<f64>() / scores.len() as f64;
+        let variance = scores.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / scores.len() as f64;
 
         // Penalize high variance (disagreement between methods)
         mean * (1.0 - variance.min(0.5))
@@ -463,7 +488,8 @@ impl CrossValidator {
             recommendations.push("⚠️ Low overall consistency - investigate conflicts".to_string());
         }
         if consistency > 0.8 {
-            recommendations.push("✅ High consistency - findings are mutually reinforcing".to_string());
+            recommendations
+                .push("✅ High consistency - findings are mutually reinforcing".to_string());
         }
 
         Ok(recommendations)
@@ -485,7 +511,8 @@ impl CrossValidator {
         let response = ai.query(&prompt).await?;
 
         // Parse into queries
-        Ok(response.lines()
+        Ok(response
+            .lines()
             .filter(|l| !l.is_empty())
             .map(|l| l.to_string())
             .collect())
@@ -500,24 +527,24 @@ impl CrossValidator {
 
         // Analyze query type to determine likely outcome
         let query_lower = query.to_lowercase();
-        let is_negative_query = query_lower.contains("contradict") ||
-                               query_lower.contains("disprove") ||
-                               query_lower.contains("false");
+        let is_negative_query = query_lower.contains("contradict")
+            || query_lower.contains("disprove")
+            || query_lower.contains("false");
 
         // Simulate query execution with context-aware probabilities
         let (contradicts, supports) = if is_negative_query {
-            (rng.random_bool(0.3), rng.random_bool(0.1))  // More likely to find contradictions
+            (rng.random_bool(0.3), rng.random_bool(0.1)) // More likely to find contradictions
         } else {
-            (rng.random_bool(0.1), rng.random_bool(0.4))  // More likely to find support
+            (rng.random_bool(0.1), rng.random_bool(0.4)) // More likely to find support
         };
 
         // Generate evidence based on query result
         let correlation_strength = if contradicts {
-            -0.5 - rng.random::<f64>() * 0.3  // Negative correlation
+            -0.5 - rng.random::<f64>() * 0.3 // Negative correlation
         } else if supports {
-            0.5 + rng.random::<f64>() * 0.3   // Positive correlation
+            0.5 + rng.random::<f64>() * 0.3 // Positive correlation
         } else {
-            rng.random::<f64>() * 0.2 - 0.1   // Near zero correlation
+            rng.random::<f64>() * 0.2 - 0.1 // Near zero correlation
         };
 
         Ok(QueryResult {
@@ -594,4 +621,3 @@ struct QueryResult {
     supports: bool,
     evidence: Evidence,
 }
-

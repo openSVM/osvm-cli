@@ -19,8 +19,8 @@
 //! println!("Risk: {:?}", analysis.risk.level);
 //! ```
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use crate::utils::forensics_config::ForensicsConfig;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 // ============================================================================
 // TYPES - Core forensics data structures
@@ -125,7 +125,7 @@ pub struct RapidFlowAlert {
 /// Circular flow pattern detection result
 #[derive(Debug, Clone)]
 pub struct CircularFlow {
-    pub path: Vec<String>,      // Wallet addresses in the cycle
+    pub path: Vec<String>, // Wallet addresses in the cycle
     pub total_amount: f64,
     pub token: String,
     pub cycle_length: usize,
@@ -144,10 +144,10 @@ pub struct MixerStats {
 /// Explainable risk assessment with detailed reasoning
 #[derive(Debug, Clone)]
 pub struct RiskExplanation {
-    pub score: f64,              // 0-100
+    pub score: f64, // 0-100
     pub level: RiskLevel,
-    pub reasons: Vec<String>,    // Human-readable explanations
-    pub alerts: Vec<String>,     // Critical findings
+    pub reasons: Vec<String>, // Human-readable explanations
+    pub alerts: Vec<String>,  // Critical findings
 }
 
 impl Default for RiskExplanation {
@@ -310,7 +310,15 @@ impl GraphForensics {
             for (next, amount, token) in neighbors {
                 path.push((current, token.clone(), *amount));
                 self.dfs_find_cycles(
-                    graph, start, *next, adj, visited, path, cycles, depth + 1, max_depth,
+                    graph,
+                    start,
+                    *next,
+                    adj,
+                    visited,
+                    path,
+                    cycles,
+                    depth + 1,
+                    max_depth,
                 );
                 path.pop();
             }
@@ -465,7 +473,8 @@ impl GraphForensics {
                     let days_since_epoch = (year - 1970) * 365
                         + (year - 1969) / 4  // Leap years
                         + (month - 1) * 30   // Approximate
-                        + day - 1;
+                        + day
+                        - 1;
                     let unix = days_since_epoch * 86400 + hour * 3600 + minute * 60 + second;
 
                     return Some(unix as u64);
@@ -727,7 +736,8 @@ impl GraphForensics {
                 }
                 WalletBehaviorType::Bot => {
                     score += self.config.risk.bot_behavior_weight;
-                    reasons.push("Programmatic bot activity detected (regular intervals)".to_string());
+                    reasons
+                        .push("Programmatic bot activity detected (regular intervals)".to_string());
                 }
                 WalletBehaviorType::Exchange => {
                     score -= 5.0; // Exchanges are high-volume but legitimate
@@ -988,7 +998,10 @@ mod tests {
                 .collect()
         }
 
-        fn edge_data(&self, edge_idx: usize) -> Option<(usize, usize, f64, String, Option<String>)> {
+        fn edge_data(
+            &self,
+            edge_idx: usize,
+        ) -> Option<(usize, usize, f64, String, Option<String>)> {
             self.edges.get(edge_idx).cloned()
         }
     }

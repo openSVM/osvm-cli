@@ -72,15 +72,13 @@ impl AuthService {
         let content = fs::read_to_string(&path)
             .with_context(|| format!("Failed to read auth config: {:?}", path))?;
 
-        serde_yaml::from_str(&content)
-            .context("Failed to parse auth config")
+        serde_yaml::from_str(&content).context("Failed to parse auth config")
     }
 
     /// Save the authentication configuration to file
     fn save_auth_config(&self, config: &AuthConfig) -> Result<()> {
         let path = self.auth_config_path();
-        let content = serde_yaml::to_string(config)
-            .context("Failed to serialize auth config")?;
+        let content = serde_yaml::to_string(config).context("Failed to serialize auth config")?;
 
         fs::write(&path, content)
             .with_context(|| format!("Failed to write auth config: {:?}", path))?;
@@ -122,14 +120,18 @@ impl AuthService {
         if !response_json.success {
             anyhow::bail!(
                 "API key creation failed: {}",
-                response_json.message.unwrap_or_else(|| "Unknown error".to_string())
+                response_json
+                    .message
+                    .unwrap_or_else(|| "Unknown error".to_string())
             );
         }
 
-        let raw_key = response_json.raw_key
+        let raw_key = response_json
+            .raw_key
             .context("API key not returned in response")?;
 
-        let mut auth_link = response_json.auth_link
+        let mut auth_link = response_json
+            .auth_link
             .context("Auth link not returned in response")?;
 
         // Fix localhost:3000 bug (backend configuration issue)

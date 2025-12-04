@@ -3,19 +3,18 @@
 //! Progressive rendering system that updates the graph display in real-time
 //! as new blockchain data arrives, without waiting for complete data fetch.
 
+use anyhow::Result;
+use crossterm::{
+    cursor, execute,
+    style::{Color, Print, ResetColor, SetForegroundColor, Stylize},
+    terminal::{self, ClearType},
+    ExecutableCommand,
+};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::io::{stdout, Write};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{interval, Duration};
-use anyhow::Result;
-use crossterm::{
-    cursor,
-    execute,
-    terminal::{self, ClearType},
-    style::{Color, Print, ResetColor, SetForegroundColor, Stylize},
-    ExecutableCommand,
-};
-use std::io::{stdout, Write};
 
 /// Events that trigger graph updates
 #[derive(Debug, Clone)]
@@ -83,7 +82,7 @@ struct StreamNode {
     incoming_count: usize,
     outgoing_count: usize,
     total_volume: f64,
-    is_new: bool,  // For animation
+    is_new: bool, // For animation
 }
 
 #[derive(Debug, Clone)]
@@ -93,7 +92,7 @@ struct StreamEdge {
     amount: f64,
     token: String,
     timestamp: Option<String>,
-    is_new: bool,  // For animation
+    is_new: bool, // For animation
     animation_progress: f32,
 }
 
@@ -139,7 +138,7 @@ struct StreamStats {
     edges_discovered: usize,
     clusters_found: usize,
     render_fps: f32,
-    data_rate: f32,  // nodes per second
+    data_rate: f32, // nodes per second
     start_time: std::time::Instant,
 }
 
@@ -163,7 +162,10 @@ impl StreamingGraph {
                 needs_relayout: false,
                 depth_positions: HashMap::new(),
             })),
-            render_buffer: Arc::new(RwLock::new(RenderBuffer::new(width as usize, height as usize))),
+            render_buffer: Arc::new(RwLock::new(RenderBuffer::new(
+                width as usize,
+                height as usize,
+            ))),
             update_channel: tx,
             stats: Arc::new(RwLock::new(StreamStats {
                 nodes_discovered: 0,
@@ -179,7 +181,10 @@ impl StreamingGraph {
     }
 
     /// Start the real-time rendering loop
-    pub async fn start_rendering(&self, mut event_rx: mpsc::UnboundedReceiver<GraphUpdateEvent>) -> Result<()> {
+    pub async fn start_rendering(
+        &self,
+        mut event_rx: mpsc::UnboundedReceiver<GraphUpdateEvent>,
+    ) -> Result<()> {
         // Setup terminal for real-time updates
         terminal::enable_raw_mode()?;
         execute!(stdout(), terminal::Clear(ClearType::All), cursor::Hide)?;
@@ -201,7 +206,17 @@ impl StreamingGraph {
                 render_interval.tick().await;
 
                 // Perform incremental render
-                if let Err(e) = Self::render_frame(&nodes, &edges, &clusters, &layout, &render_buffer, &stats, frame_count).await {
+                if let Err(e) = Self::render_frame(
+                    &nodes,
+                    &edges,
+                    &clusters,
+                    &layout,
+                    &render_buffer,
+                    &stats,
+                    frame_count,
+                )
+                .await
+                {
                     eprintln!("Render error: {}", e);
                     break;
                 }
@@ -220,14 +235,54 @@ impl StreamingGraph {
         let event_handle = tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
                 match event {
-                    GraphUpdateEvent::NodeDiscovered { address, label, depth, node_type } => {
-                        Self::handle_new_node(&nodes_clone, &layout_clone, &stats_clone, address, label, depth, node_type).await;
+                    GraphUpdateEvent::NodeDiscovered {
+                        address,
+                        label,
+                        depth,
+                        node_type,
+                    } => {
+                        Self::handle_new_node(
+                            &nodes_clone,
+                            &layout_clone,
+                            &stats_clone,
+                            address,
+                            label,
+                            depth,
+                            node_type,
+                        )
+                        .await;
                     }
-                    GraphUpdateEvent::EdgeDiscovered { from, to, amount, token, timestamp } => {
-                        Self::handle_new_edge(&edges_clone, &nodes_clone, &stats_clone, from, to, amount, token, timestamp).await;
+                    GraphUpdateEvent::EdgeDiscovered {
+                        from,
+                        to,
+                        amount,
+                        token,
+                        timestamp,
+                    } => {
+                        Self::handle_new_edge(
+                            &edges_clone,
+                            &nodes_clone,
+                            &stats_clone,
+                            from,
+                            to,
+                            amount,
+                            token,
+                            timestamp,
+                        )
+                        .await;
                     }
-                    GraphUpdateEvent::ClusterDetected { addresses, cluster_type } => {
-                        Self::handle_new_cluster(&clusters_clone, &nodes_clone, &stats_clone, addresses, cluster_type).await;
+                    GraphUpdateEvent::ClusterDetected {
+                        addresses,
+                        cluster_type,
+                    } => {
+                        Self::handle_new_cluster(
+                            &clusters_clone,
+                            &nodes_clone,
+                            &stats_clone,
+                            addresses,
+                            cluster_type,
+                        )
+                        .await;
                     }
                     GraphUpdateEvent::DataFetchComplete => {
                         // Final layout optimization
@@ -297,6 +352,7 @@ impl StreamingGraph {
     }
 
     /// Handle new edge discovery
+    #[allow(clippy::too_many_arguments)]
     async fn handle_new_edge(
         edges: &Arc<RwLock<Vec<StreamEdge>>>,
         nodes: &Arc<RwLock<HashMap<String, StreamNode>>>,
@@ -427,8 +483,16 @@ impl StreamingGraph {
                 let to_y = (to_node.y * layout.zoom) as usize;
 
                 // Draw animated flow line
-                Self::draw_animated_edge(&mut buffer, from_x, from_y, to_x, to_y,
-                                        edge.amount, edge.animation_progress, frame);
+                Self::draw_animated_edge(
+                    &mut buffer,
+                    from_x,
+                    from_y,
+                    to_x,
+                    to_y,
+                    edge.amount,
+                    edge.animation_progress,
+                    frame,
+                );
             }
         }
 
@@ -437,7 +501,13 @@ impl StreamingGraph {
             let x = (cluster.center_x * layout.zoom) as usize;
             let y = (cluster.center_y * layout.zoom) as usize;
 
-            Self::draw_cluster(&mut buffer, x, y, &cluster.cluster_type, cluster.addresses.len());
+            Self::draw_cluster(
+                &mut buffer,
+                x,
+                y,
+                &cluster.cluster_type,
+                cluster.addresses.len(),
+            );
         }
 
         // Draw nodes
@@ -474,6 +544,7 @@ impl StreamingGraph {
     }
 
     /// Draw an animated edge with flow effect
+    #[allow(clippy::too_many_arguments)]
     fn draw_animated_edge(
         buffer: &mut RenderBuffer,
         from_x: usize,
@@ -504,7 +575,7 @@ impl StreamingGraph {
             let y = (from_y as f32 + (to_y as f32 - from_y as f32) * t) as usize;
 
             // Animated dots along the line
-            let is_dot = (i + frame as usize / 4) % 8 == 0;
+            let is_dot = (i + frame as usize / 4).is_multiple_of(8);
             let ch = if is_dot { '●' } else { line_char };
 
             buffer.put_back(x, y, ch, color);
@@ -545,35 +616,45 @@ impl StreamingGraph {
 
         // Top border
         buffer.put_back(x, y, '┌', final_color);
-        for i in 1..width-1 {
+        for i in 1..width - 1 {
             buffer.put_back(x + i, y, '─', final_color);
         }
         buffer.put_back(x + width - 1, y, '┐', final_color);
 
         // Content
-        let addr_display = format!("{} {}...{}",
+        let addr_display = format!(
+            "{} {}...{}",
             icon,
             &node.address[..6],
-            &node.address[node.address.len().saturating_sub(4)..]);
+            &node.address[node.address.len().saturating_sub(4)..]
+        );
         buffer.put_string_back(x + 1, y + 1, &addr_display, final_color);
 
         // Stats
-        let stats = format!("↓{} ↑{} ${:.1}K",
+        let stats = format!(
+            "↓{} ↑{} ${:.1}K",
             node.incoming_count,
             node.outgoing_count,
-            node.total_volume / 1000.0);
+            node.total_volume / 1000.0
+        );
         buffer.put_string_back(x + width - stats.len() - 1, y + 1, &stats, Color::DarkGrey);
 
         // Bottom border
         buffer.put_back(x, y + height - 1, '└', final_color);
-        for i in 1..width-1 {
+        for i in 1..width - 1 {
             buffer.put_back(x + i, y + height - 1, '─', final_color);
         }
         buffer.put_back(x + width - 1, y + height - 1, '┘', final_color);
     }
 
     /// Draw cluster visualization
-    fn draw_cluster(buffer: &mut RenderBuffer, x: usize, y: usize, cluster_type: &ClusterType, size: usize) {
+    fn draw_cluster(
+        buffer: &mut RenderBuffer,
+        x: usize,
+        y: usize,
+        cluster_type: &ClusterType,
+        size: usize,
+    ) {
         let (label, color) = match cluster_type {
             ClusterType::RoundTrip => ("ROUND-TRIP", Color::Red),
             ClusterType::Mixer => ("MIXER", Color::Magenta),
@@ -599,8 +680,11 @@ impl StreamingGraph {
 
     /// Draw stats overlay
     fn draw_stats_overlay(buffer: &mut RenderBuffer, stats: &StreamStats) {
-        let lines = vec![
-            format!("Nodes: {} ({:.1}/s)", stats.nodes_discovered, stats.data_rate),
+        let lines = [
+            format!(
+                "Nodes: {} ({:.1}/s)",
+                stats.nodes_discovered, stats.data_rate
+            ),
             format!("Edges: {}", stats.edges_discovered),
             format!("Clusters: {}", stats.clusters_found),
             format!("Time: {:.1}s", stats.start_time.elapsed().as_secs_f32()),
@@ -722,9 +806,7 @@ pub async fn demo_streaming_investigation(wallet: &str) -> Result<()> {
     let wallet_owned = wallet.to_string(); // Clone wallet for the spawned task
 
     // Start rendering in background
-    let graph_handle = tokio::spawn(async move {
-        graph.start_rendering(rx).await
-    });
+    let graph_handle = tokio::spawn(async move { graph.start_rendering(rx).await });
 
     // Simulate progressive data discovery
     tokio::spawn(async move {
@@ -734,7 +816,8 @@ pub async fn demo_streaming_investigation(wallet: &str) -> Result<()> {
             label: Some("Target".to_string()),
             depth: 0,
             node_type: NodeType::Target,
-        }).unwrap();
+        })
+        .unwrap();
 
         tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -746,7 +829,8 @@ pub async fn demo_streaming_investigation(wallet: &str) -> Result<()> {
                 label: None,
                 depth: 1,
                 node_type: NodeType::Normal,
-            }).unwrap();
+            })
+            .unwrap();
 
             tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -757,7 +841,8 @@ pub async fn demo_streaming_investigation(wallet: &str) -> Result<()> {
                 amount: 100000.0 * i as f64,
                 token: "SOL".to_string(),
                 timestamp: None,
-            }).unwrap();
+            })
+            .unwrap();
         }
 
         // Detect cluster
@@ -765,7 +850,8 @@ pub async fn demo_streaming_investigation(wallet: &str) -> Result<()> {
         tx.send(GraphUpdateEvent::ClusterDetected {
             addresses: vec!["wallet_1".to_string(), "wallet_2".to_string()],
             cluster_type: ClusterType::RoundTrip,
-        }).unwrap();
+        })
+        .unwrap();
 
         // Signal completion
         tokio::time::sleep(Duration::from_secs(2)).await;

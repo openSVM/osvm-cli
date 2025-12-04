@@ -76,21 +76,21 @@
 //! osvm collab annotations
 //! ```
 
-pub mod session;
-pub mod presence;
 pub mod annotations;
-pub mod websocket;
 pub mod federation;
+pub mod presence;
+pub mod session;
+pub mod websocket;
 
-pub use session::{CollaborativeSession, SessionConfig, SessionRole};
-pub use presence::{PresenceManager, UserPresence, CursorPosition};
-pub use annotations::{Annotation, AnnotationType, AnnotationStore, AnnotationSeverity};
-pub use websocket::{CollabWebSocketServer, CollabEvent};
+pub use annotations::{Annotation, AnnotationSeverity, AnnotationStore, AnnotationType};
 pub use federation::{
-    CollabFederationManager, FederatedSessionAnnouncement, FederatedSessionStatus,
-    FederatedAnnotation, SessionRelayInfo, FederatedSessionBuilder, FederationState,
-    COLLAB_SESSIONS_BOARD, COLLAB_ANNOTATIONS_BOARD,
+    CollabFederationManager, FederatedAnnotation, FederatedSessionAnnouncement,
+    FederatedSessionBuilder, FederatedSessionStatus, FederationState, SessionRelayInfo,
+    COLLAB_ANNOTATIONS_BOARD, COLLAB_SESSIONS_BOARD,
 };
+pub use presence::{CursorPosition, PresenceManager, UserPresence};
+pub use session::{CollaborativeSession, SessionConfig, SessionRole};
+pub use websocket::{CollabEvent, CollabWebSocketServer};
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -108,7 +108,10 @@ impl CollabRegistry {
     }
 
     /// Create a new collaborative session
-    pub async fn create_session(&self, config: SessionConfig) -> Result<Arc<CollaborativeSession>, CollabError> {
+    pub async fn create_session(
+        &self,
+        config: SessionConfig,
+    ) -> Result<Arc<CollaborativeSession>, CollabError> {
         let session = Arc::new(CollaborativeSession::new(config).await?);
         let session_id = session.id().to_string();
 
@@ -127,7 +130,8 @@ impl CollabRegistry {
     /// List all active sessions
     pub async fn list_sessions(&self) -> Vec<(String, String)> {
         let sessions = self.sessions.read().await;
-        sessions.iter()
+        sessions
+            .iter()
             .map(|(id, session)| (id.clone(), session.name().to_string()))
             .collect()
     }

@@ -186,7 +186,11 @@ impl KnowledgeProfile {
 
         // Merge function frequencies
         for (func, freq) in &self.function_patterns {
-            let existing = patterns.function_frequency.get(func).copied().unwrap_or(0.0);
+            let existing = patterns
+                .function_frequency
+                .get(func)
+                .copied()
+                .unwrap_or(0.0);
 
             let new_value = match options.frequency_strategy {
                 MergeStrategy::WeightedAverage => {
@@ -264,12 +268,19 @@ impl KnowledgeProfile {
         for profile in profiles {
             // Sum function frequencies
             for (func, freq) in &profile.function_patterns {
-                *aggregate.function_patterns.entry(func.clone()).or_insert(0.0) += freq;
+                *aggregate
+                    .function_patterns
+                    .entry(func.clone())
+                    .or_insert(0.0) += freq;
             }
 
             // Collect all sequences
             for seq in &profile.sequences {
-                if !aggregate.sequences.iter().any(|s| s.functions == seq.functions) {
+                if !aggregate
+                    .sequences
+                    .iter()
+                    .any(|s| s.functions == seq.functions)
+                {
                     aggregate.sequences.push(seq.clone());
                 }
             }
@@ -336,13 +347,25 @@ impl CommunityProfiles {
     pub fn dex_investigation() -> KnowledgeProfile {
         let mut profile = KnowledgeProfile::new("DEX Investigation Expert");
         profile.author = Some("OVSM Community".to_string());
-        profile.tags = vec!["dex".to_string(), "trading".to_string(), "expert".to_string()];
+        profile.tags = vec![
+            "dex".to_string(),
+            "trading".to_string(),
+            "expert".to_string(),
+        ];
 
         // Common DEX investigation functions
-        profile.function_patterns.insert("getSignatures".to_string(), 0.9);
-        profile.function_patterns.insert("getTransaction".to_string(), 0.85);
-        profile.function_patterns.insert("getTokenAccounts".to_string(), 0.8);
-        profile.function_patterns.insert("getBalance".to_string(), 0.75);
+        profile
+            .function_patterns
+            .insert("getSignatures".to_string(), 0.9);
+        profile
+            .function_patterns
+            .insert("getTransaction".to_string(), 0.85);
+        profile
+            .function_patterns
+            .insert("getTokenAccounts".to_string(), 0.8);
+        profile
+            .function_patterns
+            .insert("getBalance".to_string(), 0.75);
         profile.function_patterns.insert("filter".to_string(), 0.7);
         profile.function_patterns.insert("map".to_string(), 0.65);
 
@@ -374,11 +397,21 @@ impl CommunityProfiles {
     pub fn nft_investigation() -> KnowledgeProfile {
         let mut profile = KnowledgeProfile::new("NFT Investigation Expert");
         profile.author = Some("OVSM Community".to_string());
-        profile.tags = vec!["nft".to_string(), "collections".to_string(), "expert".to_string()];
+        profile.tags = vec![
+            "nft".to_string(),
+            "collections".to_string(),
+            "expert".to_string(),
+        ];
 
-        profile.function_patterns.insert("getAccountInfo".to_string(), 0.9);
-        profile.function_patterns.insert("getSignatures".to_string(), 0.85);
-        profile.function_patterns.insert("getTransaction".to_string(), 0.8);
+        profile
+            .function_patterns
+            .insert("getAccountInfo".to_string(), 0.9);
+        profile
+            .function_patterns
+            .insert("getSignatures".to_string(), 0.85);
+        profile
+            .function_patterns
+            .insert("getTransaction".to_string(), 0.8);
         profile.function_patterns.insert("filter".to_string(), 0.75);
 
         profile.sequences.push(InvestigationSequence {
@@ -398,12 +431,24 @@ impl CommunityProfiles {
     pub fn wallet_tracking() -> KnowledgeProfile {
         let mut profile = KnowledgeProfile::new("Wallet Tracking Expert");
         profile.author = Some("OVSM Community".to_string());
-        profile.tags = vec!["wallet".to_string(), "tracking".to_string(), "forensics".to_string()];
+        profile.tags = vec![
+            "wallet".to_string(),
+            "tracking".to_string(),
+            "forensics".to_string(),
+        ];
 
-        profile.function_patterns.insert("getSignatures".to_string(), 0.95);
-        profile.function_patterns.insert("getTransaction".to_string(), 0.9);
-        profile.function_patterns.insert("getBalance".to_string(), 0.85);
-        profile.function_patterns.insert("getTokenAccounts".to_string(), 0.8);
+        profile
+            .function_patterns
+            .insert("getSignatures".to_string(), 0.95);
+        profile
+            .function_patterns
+            .insert("getTransaction".to_string(), 0.9);
+        profile
+            .function_patterns
+            .insert("getBalance".to_string(), 0.85);
+        profile
+            .function_patterns
+            .insert("getTokenAccounts".to_string(), 0.8);
 
         profile.sequences.push(InvestigationSequence {
             functions: vec![
@@ -453,7 +498,9 @@ mod tests {
     #[test]
     fn test_profile_save_load() {
         let mut profile = KnowledgeProfile::new("Test");
-        profile.function_patterns.insert("test_func".to_string(), 0.5);
+        profile
+            .function_patterns
+            .insert("test_func".to_string(), 0.5);
 
         let path = "/tmp/test_profile.json";
         profile.save_to_file(path).unwrap();

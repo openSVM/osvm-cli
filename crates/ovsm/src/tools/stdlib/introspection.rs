@@ -107,7 +107,9 @@ impl Tool for DescribeTool {
             Value::Function { .. } => println!("Function\n  Type: FUNCTION"),
             Value::Multiple(_) => println!("Multiple Values\n  Type: MULTIPLE"),
             Value::Macro { .. } => println!("Macro\n  Type: MACRO"),
-            Value::AsyncHandle { id, .. } => println!("AsyncHandle\n  Type: ASYNC-HANDLE\n  ID: {}", id),
+            Value::AsyncHandle { id, .. } => {
+                println!("AsyncHandle\n  Type: ASYNC-HANDLE\n  ID: {}", id)
+            }
         }
         Ok(Value::Null)
     }

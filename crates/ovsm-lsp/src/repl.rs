@@ -15,9 +15,7 @@ use ovsm::parser::SExprParser;
 use ovsm::runtime::LispEvaluator;
 use ovsm::Value;
 use std::time::Instant;
-use tower_lsp::lsp_types::{
-    CodeLens, Command, Position, Range,
-};
+use tower_lsp::lsp_types::{CodeLens, Command, Position, Range};
 
 /// Result of evaluating an expression
 #[derive(Debug, Clone)]
@@ -125,8 +123,14 @@ pub fn generate_code_lenses(source: &str, uri: &str) -> Vec<CodeLens> {
     if !expressions.is_empty() {
         lenses.push(CodeLens {
             range: Range {
-                start: Position { line: 0, character: 0 },
-                end: Position { line: 0, character: 0 },
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 0,
+                },
             },
             command: Some(Command {
                 title: "▶ Run All".to_string(),
@@ -377,7 +381,10 @@ mod tests {
     #[test]
     fn test_format_value() {
         assert_eq!(format_value(&Value::Int(42)), "42");
-        assert_eq!(format_value(&Value::String("hello".to_string())), "\"hello\"");
+        assert_eq!(
+            format_value(&Value::String("hello".to_string())),
+            "\"hello\""
+        );
         assert_eq!(format_value(&Value::Bool(true)), "true");
         assert_eq!(format_value(&Value::Null), "null");
     }
@@ -389,6 +396,11 @@ mod tests {
 
         // Should have "Run All" + 2 individual "Run" lenses
         assert_eq!(lenses.len(), 3);
-        assert!(lenses[0].command.as_ref().unwrap().title.contains("Run All"));
+        assert!(lenses[0]
+            .command
+            .as_ref()
+            .unwrap()
+            .title
+            .contains("Run All"));
     }
 }

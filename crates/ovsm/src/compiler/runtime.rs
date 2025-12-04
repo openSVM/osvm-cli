@@ -3,7 +3,7 @@
 //! Provides stack frame management, heap allocation, and runtime data structures
 //! for programs compiled to sBPF.
 
-use super::sbpf_codegen::{SbpfInstruction, SbpfReg, memory, syscall_hash, SolanaSymbols};
+use super::sbpf_codegen::{memory, syscall_hash, SbpfInstruction, SbpfReg, SolanaSymbols};
 use super::SbpfVersion;
 
 /// Stack frame layout for OVSM functions
@@ -61,7 +61,12 @@ impl StackFrame {
 
         for &reg in &self.saved_regs {
             // stxdw [r10 + offset], reg
-            instrs.push(SbpfInstruction::stx(0x18, SbpfReg::R10 as u8, reg as u8, offset));
+            instrs.push(SbpfInstruction::stx(
+                0x18,
+                SbpfReg::R10 as u8,
+                reg as u8,
+                offset,
+            ));
             offset -= 8;
         }
 
@@ -77,7 +82,12 @@ impl StackFrame {
 
         for &reg in &self.saved_regs {
             // ldxdw reg, [r10 + offset]
-            instrs.push(SbpfInstruction::ldx(0x18, reg as u8, SbpfReg::R10 as u8, offset));
+            instrs.push(SbpfInstruction::ldx(
+                0x18,
+                reg as u8,
+                SbpfReg::R10 as u8,
+                offset,
+            ));
             offset -= 8;
         }
 
@@ -125,14 +135,21 @@ impl HeapAllocator {
 
         // Move size to R1 if not already there
         if size_reg != SbpfReg::R1 as u8 {
-            instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R1 as u8, size_reg));
+            instrs.push(SbpfInstruction::alu64_reg(
+                0xb0,
+                SbpfReg::R1 as u8,
+                size_reg,
+            ));
         }
 
         // R2 = 0 (allocate, not free)
         instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R2 as u8, 0));
 
         // Call sol_alloc_free_
-        instrs.push(SbpfInstruction::call_syscall(self.alloc_hash, SbpfVersion::V1));
+        instrs.push(SbpfInstruction::call_syscall(
+            self.alloc_hash,
+            SbpfVersion::V1,
+        ));
 
         // Result is in R0
 
@@ -141,18 +158,14 @@ impl HeapAllocator {
 
     /// Generate code to allocate a fixed size
     pub fn gen_alloc_const(&self, size: i32) -> Vec<SbpfInstruction> {
-        let mut instrs = Vec::new();
-
-        // R1 = size
-        instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R1 as u8, size));
-
-        // R2 = 0 (allocate)
-        instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R2 as u8, 0));
-
-        // Call sol_alloc_free_
-        instrs.push(SbpfInstruction::call_syscall(self.alloc_hash, SbpfVersion::V1));
-
-        instrs
+        vec![
+            // R1 = size
+            SbpfInstruction::alu64_imm(0xb0, SbpfReg::R1 as u8, size),
+            // R2 = 0 (allocate)
+            SbpfInstruction::alu64_imm(0xb0, SbpfReg::R2 as u8, 0),
+            // Call sol_alloc_free_
+            SbpfInstruction::call_syscall(self.alloc_hash, SbpfVersion::V1),
+        ]
     }
 }
 
@@ -193,14 +206,27 @@ impl StringRuntime {
 
         // R0 now has pointer. Store length at [R0]
         // First save R0 to R6 (callee-saved)
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R6 as u8, SbpfReg::R0 as u8));
+        instrs.push(SbpfInstruction::alu64_reg(
+            0xb0,
+            SbpfReg::R6 as u8,
+            SbpfReg::R0 as u8,
+        ));
 
         // Store length: R1 = length, then stxdw [R0], R1
-        instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R1 as u8, length as i32));
-        instrs.push(SbpfInstruction::stx(0x18, SbpfReg::R0 as u8, SbpfReg::R1 as u8, 0));
+        instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R1 as u8, length));
+        instrs.push(SbpfInstruction::stx(
+            0x18,
+            SbpfReg::R0 as u8,
+            SbpfReg::R1 as u8,
+            0,
+        ));
 
         // Move result back to R0
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R0 as u8, SbpfReg::R6 as u8));
+        instrs.push(SbpfInstruction::alu64_reg(
+            0xb0,
+            SbpfReg::R0 as u8,
+            SbpfReg::R6 as u8,
+        ));
 
         instrs
     }
@@ -218,14 +244,20 @@ impl StringRuntime {
     /// Generate memcpy call
     /// R1 = dst, R2 = src, R3 = len
     pub fn gen_memcpy(&self) -> Vec<SbpfInstruction> {
-        vec![SbpfInstruction::call_syscall(self.memcpy_hash, SbpfVersion::V1)]
+        vec![SbpfInstruction::call_syscall(
+            self.memcpy_hash,
+            SbpfVersion::V1,
+        )]
     }
 
     /// Generate memcmp call
     /// R1 = s1, R2 = s2, R3 = len
     /// Returns comparison result in R0
     pub fn gen_memcmp(&self) -> Vec<SbpfInstruction> {
-        vec![SbpfInstruction::call_syscall(self.memcmp_hash, SbpfVersion::V1)]
+        vec![SbpfInstruction::call_syscall(
+            self.memcmp_hash,
+            SbpfVersion::V1,
+        )]
     }
 }
 
@@ -261,77 +293,96 @@ impl ArrayRuntime {
 
         // R0 = pointer to array
         // Save to R6
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R6 as u8, SbpfReg::R0 as u8));
+        instrs.push(SbpfInstruction::alu64_reg(
+            0xb0,
+            SbpfReg::R6 as u8,
+            SbpfReg::R0 as u8,
+        ));
 
         // Store length = 0 at [R0]
         instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R1 as u8, 0));
-        instrs.push(SbpfInstruction::stx(0x18, SbpfReg::R0 as u8, SbpfReg::R1 as u8, 0));
+        instrs.push(SbpfInstruction::stx(
+            0x18,
+            SbpfReg::R0 as u8,
+            SbpfReg::R1 as u8,
+            0,
+        ));
 
         // Store capacity at [R0 + 8]
-        instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R1 as u8, capacity));
-        instrs.push(SbpfInstruction::stx(0x18, SbpfReg::R0 as u8, SbpfReg::R1 as u8, 8));
+        instrs.push(SbpfInstruction::alu64_imm(
+            0xb0,
+            SbpfReg::R1 as u8,
+            capacity,
+        ));
+        instrs.push(SbpfInstruction::stx(
+            0x18,
+            SbpfReg::R0 as u8,
+            SbpfReg::R1 as u8,
+            8,
+        ));
 
         // Store elem_size at [R0 + 16]
-        instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R1 as u8, elem_size));
-        instrs.push(SbpfInstruction::stx(0x18, SbpfReg::R0 as u8, SbpfReg::R1 as u8, 16));
+        instrs.push(SbpfInstruction::alu64_imm(
+            0xb0,
+            SbpfReg::R1 as u8,
+            elem_size,
+        ));
+        instrs.push(SbpfInstruction::stx(
+            0x18,
+            SbpfReg::R0 as u8,
+            SbpfReg::R1 as u8,
+            16,
+        ));
 
         // Restore pointer to R0
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R0 as u8, SbpfReg::R6 as u8));
+        instrs.push(SbpfInstruction::alu64_reg(
+            0xb0,
+            SbpfReg::R0 as u8,
+            SbpfReg::R6 as u8,
+        ));
 
         instrs
     }
 
     /// Generate code to get array length
     pub fn gen_array_length(&self, dst_reg: u8, arr_reg: u8) -> Vec<SbpfInstruction> {
-        vec![
-            SbpfInstruction::ldx(0x18, dst_reg, arr_reg, 0),
-        ]
+        vec![SbpfInstruction::ldx(0x18, dst_reg, arr_reg, 0)]
     }
 
     /// Generate code to get array element
     /// arr_reg = array pointer, idx_reg = index
     /// Result in dst_reg
     pub fn gen_array_get(&self, dst_reg: u8, arr_reg: u8, idx_reg: u8) -> Vec<SbpfInstruction> {
-        let mut instrs = Vec::new();
-
-        // Load elem_size from [arr + 16]
-        instrs.push(SbpfInstruction::ldx(0x18, SbpfReg::R1 as u8, arr_reg, 16));
-
-        // offset = idx * elem_size
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R2 as u8, idx_reg));
-        instrs.push(SbpfInstruction::alu64_reg(0x20, SbpfReg::R2 as u8, SbpfReg::R1 as u8)); // mul
-
-        // addr = arr + HEADER_SIZE + offset
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R3 as u8, arr_reg));
-        instrs.push(SbpfInstruction::alu64_imm(0x00, SbpfReg::R3 as u8, Self::HEADER_SIZE)); // add
-        instrs.push(SbpfInstruction::alu64_reg(0x00, SbpfReg::R3 as u8, SbpfReg::R2 as u8)); // add
-
-        // Load value from [R3]
-        instrs.push(SbpfInstruction::ldx(0x18, dst_reg, SbpfReg::R3 as u8, 0));
-
-        instrs
+        vec![
+            // Load elem_size from [arr + 16]
+            SbpfInstruction::ldx(0x18, SbpfReg::R1 as u8, arr_reg, 16),
+            // offset = idx * elem_size
+            SbpfInstruction::alu64_reg(0xb0, SbpfReg::R2 as u8, idx_reg),
+            SbpfInstruction::alu64_reg(0x20, SbpfReg::R2 as u8, SbpfReg::R1 as u8), // mul
+            // addr = arr + HEADER_SIZE + offset
+            SbpfInstruction::alu64_reg(0xb0, SbpfReg::R3 as u8, arr_reg),
+            SbpfInstruction::alu64_imm(0x00, SbpfReg::R3 as u8, Self::HEADER_SIZE), // add
+            SbpfInstruction::alu64_reg(0x00, SbpfReg::R3 as u8, SbpfReg::R2 as u8), // add
+            // Load value from [R3]
+            SbpfInstruction::ldx(0x18, dst_reg, SbpfReg::R3 as u8, 0),
+        ]
     }
 
     /// Generate code to set array element
     pub fn gen_array_set(&self, arr_reg: u8, idx_reg: u8, val_reg: u8) -> Vec<SbpfInstruction> {
-        let mut instrs = Vec::new();
-
-        // Load elem_size
-        instrs.push(SbpfInstruction::ldx(0x18, SbpfReg::R1 as u8, arr_reg, 16));
-
-        // offset = idx * elem_size
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R2 as u8, idx_reg));
-        instrs.push(SbpfInstruction::alu64_reg(0x20, SbpfReg::R2 as u8, SbpfReg::R1 as u8));
-
-        // addr = arr + HEADER_SIZE + offset
-        instrs.push(SbpfInstruction::alu64_reg(0xb0, SbpfReg::R3 as u8, arr_reg));
-        instrs.push(SbpfInstruction::alu64_imm(0x00, SbpfReg::R3 as u8, Self::HEADER_SIZE));
-        instrs.push(SbpfInstruction::alu64_reg(0x00, SbpfReg::R3 as u8, SbpfReg::R2 as u8));
-
-        // Store value at [R3]
-        instrs.push(SbpfInstruction::stx(0x18, SbpfReg::R3 as u8, val_reg, 0));
-
-        instrs
+        vec![
+            // Load elem_size
+            SbpfInstruction::ldx(0x18, SbpfReg::R1 as u8, arr_reg, 16),
+            // offset = idx * elem_size
+            SbpfInstruction::alu64_reg(0xb0, SbpfReg::R2 as u8, idx_reg),
+            SbpfInstruction::alu64_reg(0x20, SbpfReg::R2 as u8, SbpfReg::R1 as u8),
+            // addr = arr + HEADER_SIZE + offset
+            SbpfInstruction::alu64_reg(0xb0, SbpfReg::R3 as u8, arr_reg),
+            SbpfInstruction::alu64_imm(0x00, SbpfReg::R3 as u8, Self::HEADER_SIZE),
+            SbpfInstruction::alu64_reg(0x00, SbpfReg::R3 as u8, SbpfReg::R2 as u8),
+            // Store value at [R3]
+            SbpfInstruction::stx(0x18, SbpfReg::R3 as u8, val_reg, 0),
+        ]
     }
 }
 

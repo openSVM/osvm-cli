@@ -10,7 +10,10 @@ use ratatui::{
 };
 use std::sync::{Arc, Mutex};
 
-use crate::utils::bbs::{db, models::{Board, Post, User}};
+use crate::utils::bbs::{
+    db,
+    models::{Board, Post, User},
+};
 use diesel::sqlite::SqliteConnection;
 
 /// A mesh message received over LoRa radio
@@ -33,12 +36,12 @@ pub struct BBSTuiState {
     pub input_buffer: String,
     pub scroll_offset: usize,
     pub status_message: String,
-    pub connected: bool,  // Track if we've initialized the connection
-    pub input_active: bool,  // Track if input mode is active
-    pub selected_board_index: Option<usize>,  // Track selected board for visual feedback
+    pub connected: bool,    // Track if we've initialized the connection
+    pub input_active: bool, // Track if input mode is active
+    pub selected_board_index: Option<usize>, // Track selected board for visual feedback
     // Agent integration
-    pub agents: Vec<User>,  // Known AI agents
-    pub agent_status: AgentStatus,  // Current agent listening status
+    pub agents: Vec<User>,         // Known AI agents
+    pub agent_status: AgentStatus, // Current agent listening status
     /// Cache of user_id -> User for displaying post authors
     pub user_cache: std::collections::HashMap<i32, User>,
     /// Recent mesh messages (ring buffer, max 50)
@@ -80,7 +83,12 @@ impl BBSTuiState {
     }
 
     /// Add a mesh message (keeps max 50 in memory, also saves to database)
-    pub fn add_mesh_message(&mut self, from: u32, message: String, is_command: bool) -> Option<i32> {
+    pub fn add_mesh_message(
+        &mut self,
+        from: u32,
+        message: String,
+        is_command: bool,
+    ) -> Option<i32> {
         let from_name = self.mesh_nodes.get(&from).cloned();
         let now = chrono::Local::now();
         let msg = MeshMessage {
@@ -131,7 +139,9 @@ impl BBSTuiState {
         if let Ok(mut guard) = self.conn.lock() {
             if let Some(ref mut conn) = *guard {
                 let responded_at_us = chrono::Local::now().timestamp_micros();
-                if let Err(e) = db::mesh_messages::add_response(conn, message_id, response, responded_at_us) {
+                if let Err(e) =
+                    db::mesh_messages::add_response(conn, message_id, response, responded_at_us)
+                {
                     log::error!("Failed to save mesh response to database: {}", e);
                 }
             }
@@ -169,26 +179,29 @@ impl BBSTuiState {
         if let Some(ref mut conn) = *self.conn.lock().unwrap() {
             // Get all users and filter for agents
             let all_users = db::users::list_all(conn)?;
-            self.agents = all_users.iter()
+            self.agents = all_users
+                .iter()
                 .filter(|u| Self::is_agent(u))
                 .cloned()
                 .collect();
 
             // Update agent status
             self.agent_status.agents_listening = self.agents.len();
-            self.agent_status.osvm_agent_online = self.agents.iter()
+            self.agent_status.osvm_agent_online = self
+                .agents
+                .iter()
                 .any(|a| a.short_name.to_uppercase() == "OSVM");
 
             // Find most recent agent activity
-            if let Some(most_recent) = self.agents.iter()
-                .filter_map(|a| a.last_acted_at_us)
-                .max()
-            {
-                self.agent_status.last_agent_activity = Some(
-                    crate::utils::bbs::models::User::last_acted_at(
-                        &self.agents.iter().find(|a| a.last_acted_at_us == Some(most_recent)).unwrap()
-                    )
-                );
+            if let Some(most_recent) = self.agents.iter().filter_map(|a| a.last_acted_at_us).max() {
+                self.agent_status.last_agent_activity =
+                    Some(crate::utils::bbs::models::User::last_acted_at(
+                        &self
+                            .agents
+                            .iter()
+                            .find(|a| a.last_acted_at_us == Some(most_recent))
+                            .unwrap(),
+                    ));
             }
 
             // Cache all users for post author lookup
@@ -207,7 +220,7 @@ impl BBSTuiState {
     /// Try to connect to Meshtastic radio (optional)
     /// This doesn't fail if Meshtastic is unavailable - just sets status
     pub fn try_connect_meshtastic(&mut self, address: Option<&str>) {
-        use crate::utils::bbs::meshtastic::{MeshtasticRadio, ConnectionState};
+        use crate::utils::bbs::meshtastic::{ConnectionState, MeshtasticRadio};
 
         let addr = address.unwrap_or("localhost:4403");
 
@@ -215,7 +228,8 @@ impl BBSTuiState {
             match radio.connect() {
                 Ok(()) => {
                     self.agent_status.meshtastic_connected = true;
-                    self.agent_status.meshtastic_node_id = Some(format!("!{:08x}", radio.our_node_id()));
+                    self.agent_status.meshtastic_node_id =
+                        Some(format!("!{:08x}", radio.our_node_id()));
                     self.status_message = format!("📻 Meshtastic connected @ {}", addr);
                 }
                 Err(e) => {
@@ -230,7 +244,7 @@ impl BBSTuiState {
     /// Initialize BBS connection
     pub fn connect(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.connected {
-            return Ok(());  // Already connected
+            return Ok(()); // Already connected
         }
 
         let mut conn = db::establish_connection()?;
@@ -239,11 +253,14 @@ impl BBSTuiState {
         *self.conn.lock().unwrap() = Some(conn);
         self.connected = true;
         self.refresh_boards()?;
-        self.refresh_agents()?;  // Load agent info
+        self.refresh_agents()?; // Load agent info
 
         // Update status with agent info
         let agent_hint = if self.agent_status.agents_listening > 0 {
-            format!(" | 🤖 {} agents listening", self.agent_status.agents_listening)
+            format!(
+                " | 🤖 {} agents listening",
+                self.agent_status.agents_listening
+            )
         } else {
             String::new()
         };
@@ -262,10 +279,9 @@ impl BBSTuiState {
 
     /// Load posts for current board
     pub fn load_posts(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let (Some(ref mut conn), Some(board_id)) = (
-            self.conn.lock().unwrap().as_mut(),
-            self.current_board,
-        ) {
+        if let (Some(ref mut conn), Some(board_id)) =
+            (self.conn.lock().unwrap().as_mut(), self.current_board)
+        {
             self.posts = db::posts::list_for_board(conn, board_id, 50)?;
         }
         Ok(())
@@ -274,20 +290,20 @@ impl BBSTuiState {
     /// Post a message to the current board
     /// Returns the post ID on success
     pub fn post_message(&mut self, message: &str) -> Result<i32, Box<dyn std::error::Error>> {
-        let board_id = self.current_board
-            .ok_or_else(|| "No board selected")?;
+        let board_id = self.current_board.ok_or_else(|| "No board selected")?;
 
         let mut conn_guard = self.conn.lock().unwrap();
-        let conn = conn_guard.as_mut()
+        let conn = conn_guard
+            .as_mut()
             .ok_or_else(|| "Not connected to database")?;
 
         // Get or create a TUI user (similar to CLI user pattern)
         let timestamp = db::now_as_useconds();
         let (user, _created) = db::users::observe(
             conn,
-            "!tuiuser1",       // node_id
-            Some("TUI"),       // short_name
-            Some("TUI User"),  // long_name
+            "!tuiuser1",      // node_id
+            Some("TUI"),      // short_name
+            Some("TUI User"), // long_name
             timestamp,
         )?;
 
@@ -320,32 +336,53 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(0),     // Main content
-            Constraint::Length(4),  // Input box (bigger!)
-            Constraint::Length(2),  // Status bar (smaller)
+            Constraint::Length(3), // Header
+            Constraint::Min(0),    // Main content
+            Constraint::Length(4), // Input box (bigger!)
+            Constraint::Length(2), // Status bar (smaller)
         ])
         .split(area);
 
     // Header with agent status
-    let board_name = state.current_board.and_then(|id| {
-        state.boards.iter().find(|b| b.id == id).map(|b| b.name.as_str())
-    }).unwrap_or("No board selected");
+    let board_name = state
+        .current_board
+        .and_then(|id| {
+            state
+                .boards
+                .iter()
+                .find(|b| b.id == id)
+                .map(|b| b.name.as_str())
+        })
+        .unwrap_or("No board selected");
 
     // Agent status indicator
     let agent_indicator = if state.agent_status.agents_listening > 0 {
-        format!(" | 🤖 {} agent{} listening",
+        format!(
+            " | 🤖 {} agent{} listening",
             state.agent_status.agents_listening,
-            if state.agent_status.agents_listening == 1 { "" } else { "s" })
+            if state.agent_status.agents_listening == 1 {
+                ""
+            } else {
+                "s"
+            }
+        )
     } else {
         " | 🔇 No agents".to_string()
     };
 
-    let header_text = format!("📡 OSVM BBS | Board: {} | {} posts{}",
-        board_name, state.posts.len(), agent_indicator);
+    let header_text = format!(
+        "📡 OSVM BBS | Board: {} | {} posts{}",
+        board_name,
+        state.posts.len(),
+        agent_indicator
+    );
 
     let header = Paragraph::new(header_text)
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(header, chunks[0]);
@@ -354,8 +391,8 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),  // Sidebar (boards + agents)
-            Constraint::Percentage(75),  // Posts
+            Constraint::Percentage(25), // Sidebar (boards + agents)
+            Constraint::Percentage(75), // Posts
         ])
         .split(chunks[1]);
 
@@ -363,8 +400,8 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
     let sidebar_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(50),  // Boards
-            Constraint::Percentage(50),  // Agent activity
+            Constraint::Percentage(50), // Boards
+            Constraint::Percentage(50), // Agent activity
         ])
         .split(main_chunks[0]);
 
@@ -377,7 +414,9 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
             let is_selected = state.selected_board_index == Some(idx);
             let prefix = if is_selected { "▶ " } else { "  " };
             let style = if is_selected {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::DarkGray)
             };
@@ -389,11 +428,12 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
         })
         .collect();
 
-    let board_list = List::new(boards)
-        .block(Block::default()
+    let board_list = List::new(boards).block(
+        Block::default()
             .borders(Borders::ALL)
             .title(" Boards (1-9) ")
-            .border_style(Style::default().fg(Color::Cyan)));
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
     f.render_widget(board_list, sidebar_chunks[0]);
 
     // Agent Activity Panel
@@ -405,8 +445,14 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
             Span::styled("  📻 ", Style::default().fg(Color::Green)),
             Span::styled("Mesh: ", Style::default().fg(Color::Green)),
             Span::styled(
-                state.agent_status.meshtastic_node_id.as_deref().unwrap_or("Connected"),
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                state
+                    .agent_status
+                    .meshtastic_node_id
+                    .as_deref()
+                    .unwrap_or("Connected"),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
             ),
         ])
     } else {
@@ -420,108 +466,166 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
 
     // Agent list
     if state.agents.is_empty() {
-        agent_lines.push(Line::from(Span::styled("  No agents", Style::default().fg(Color::DarkGray))));
+        agent_lines.push(Line::from(Span::styled(
+            "  No agents",
+            Style::default().fg(Color::DarkGray),
+        )));
         agent_lines.push(Line::from(""));
-        agent_lines.push(Line::from(Span::styled("  osvm bbs agent", Style::default().fg(Color::Yellow))));
-        agent_lines.push(Line::from(Span::styled("    register <name>", Style::default().fg(Color::Yellow))));
+        agent_lines.push(Line::from(Span::styled(
+            "  osvm bbs agent",
+            Style::default().fg(Color::Yellow),
+        )));
+        agent_lines.push(Line::from(Span::styled(
+            "    register <name>",
+            Style::default().fg(Color::Yellow),
+        )));
     } else {
         agent_lines.push(Line::from(Span::styled(
-            format!("  {} agent{}", state.agents.len(), if state.agents.len() == 1 { "" } else { "s" }),
-            Style::default().fg(Color::Green)
+            format!(
+                "  {} agent{}",
+                state.agents.len(),
+                if state.agents.len() == 1 { "" } else { "s" }
+            ),
+            Style::default().fg(Color::Green),
         )));
 
         // Show each agent (compact)
         for agent in state.agents.iter().take(4) {
-            let status_icon = if agent.last_acted_at_us.is_some() { "●" } else { "○" };
-            let status_color = if agent.last_acted_at_us.is_some() { Color::Green } else { Color::DarkGray };
+            let status_icon = if agent.last_acted_at_us.is_some() {
+                "●"
+            } else {
+                "○"
+            };
+            let status_color = if agent.last_acted_at_us.is_some() {
+                Color::Green
+            } else {
+                Color::DarkGray
+            };
 
             agent_lines.push(Line::from(vec![
-                Span::styled(format!("  {} ", status_icon), Style::default().fg(status_color)),
+                Span::styled(
+                    format!("  {} ", status_icon),
+                    Style::default().fg(status_color),
+                ),
                 Span::styled("🤖 ", Style::default().fg(Color::Magenta)),
-                Span::styled(&agent.short_name, Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    &agent.short_name,
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]));
         }
 
         if state.agents.len() > 4 {
             agent_lines.push(Line::from(Span::styled(
                 format!("  +{} more", state.agents.len() - 4),
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::DarkGray),
             )));
         }
     };
 
-    let agent_panel = Paragraph::new(agent_lines)
-        .block(Block::default()
+    let agent_panel = Paragraph::new(agent_lines).block(
+        Block::default()
             .borders(Borders::ALL)
             .title(" 🤖 Agents ")
             .border_style(if state.agent_status.agents_listening > 0 {
                 Style::default().fg(Color::Magenta)
             } else {
                 Style::default().fg(Color::DarkGray)
-            }));
+            }),
+    );
     f.render_widget(agent_panel, sidebar_chunks[1]);
 
     // Posts area with agent badges
     let post_lines: Vec<Line> = if state.posts.is_empty() {
         vec![
             Line::from(""),
-            Line::from(Span::styled("  No posts yet in this board.", Style::default().fg(Color::DarkGray))),
+            Line::from(Span::styled(
+                "  No posts yet in this board.",
+                Style::default().fg(Color::DarkGray),
+            )),
             Line::from(""),
-            Line::from(Span::styled("  Press 'i' to write a new post!", Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                "  Press 'i' to write a new post!",
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from(""),
             if state.agent_status.agents_listening > 0 {
-                Line::from(Span::styled("  💡 Tip: Use @agent to get AI assistance!", Style::default().fg(Color::Magenta)))
+                Line::from(Span::styled(
+                    "  💡 Tip: Use @agent to get AI assistance!",
+                    Style::default().fg(Color::Magenta),
+                ))
             } else {
-                Line::from(Span::styled("  📝 Register an agent with: osvm bbs agent register <name>", Style::default().fg(Color::DarkGray)))
+                Line::from(Span::styled(
+                    "  📝 Register an agent with: osvm bbs agent register <name>",
+                    Style::default().fg(Color::DarkGray),
+                ))
             },
         ]
     } else {
-        state.posts.iter().enumerate().flat_map(|(i, p)| {
-            // Check if this post is from an agent
-            let (author_name, is_agent) = if let Some(user) = state.get_user(p.user_id) {
-                (user.short_name.clone(), BBSTuiState::is_agent(user))
-            } else {
-                (format!("#{}", p.user_id), false)
-            };
+        state
+            .posts
+            .iter()
+            .enumerate()
+            .flat_map(|(i, p)| {
+                // Check if this post is from an agent
+                let (author_name, is_agent) = if let Some(user) = state.get_user(p.user_id) {
+                    (user.short_name.clone(), BBSTuiState::is_agent(user))
+                } else {
+                    (format!("#{}", p.user_id), false)
+                };
 
-            // Build author display with agent badge
-            let author_spans = if is_agent {
+                // Build author display with agent badge
+                let author_spans = if is_agent {
+                    vec![
+                        Span::styled("🤖 ", Style::default().fg(Color::Magenta)),
+                        Span::styled(
+                            author_name,
+                            Style::default()
+                                .fg(Color::Magenta)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ]
+                } else {
+                    vec![Span::styled(author_name, Style::default().fg(Color::Green))]
+                };
+
+                let mut header_spans = vec![Span::styled(
+                    format!("#{} ", i + 1),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )];
+                header_spans.extend(author_spans);
+                header_spans.push(Span::styled(
+                    format!(" • {}", p.created_at()),
+                    Style::default().fg(Color::DarkGray),
+                ));
+
+                // Highlight agent posts with different body style
+                let body_style = if is_agent {
+                    Style::default().fg(Color::White)
+                } else {
+                    Style::default()
+                };
+
                 vec![
-                    Span::styled("🤖 ", Style::default().fg(Color::Magenta)),
-                    Span::styled(author_name, Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                    Line::from(header_spans),
+                    Line::from(Span::styled(format!("  {}", p.body), body_style)),
+                    Line::from(""), // Spacing
                 ]
-            } else {
-                vec![
-                    Span::styled(author_name, Style::default().fg(Color::Green)),
-                ]
-            };
-
-            let mut header_spans = vec![
-                Span::styled(format!("#{} ", i + 1), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            ];
-            header_spans.extend(author_spans);
-            header_spans.push(Span::styled(format!(" • {}", p.created_at()), Style::default().fg(Color::DarkGray)));
-
-            // Highlight agent posts with different body style
-            let body_style = if is_agent {
-                Style::default().fg(Color::White)
-            } else {
-                Style::default()
-            };
-
-            vec![
-                Line::from(header_spans),
-                Line::from(Span::styled(format!("  {}", p.body), body_style)),
-                Line::from(""),  // Spacing
-            ]
-        }).collect()
+            })
+            .collect()
     };
 
     let posts_widget = Paragraph::new(post_lines)
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title(format!(" Posts (j/k to scroll) "))
-            .border_style(Style::default().fg(Color::Cyan)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" Posts (j/k to scroll) "))
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
         .wrap(Wrap { trim: false })
         .scroll((state.scroll_offset as u16, 0));
     f.render_widget(posts_widget, main_chunks[1]);
@@ -534,7 +638,7 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
     };
 
     let input_text = if state.input_active {
-        format!("{}█", state.input_buffer)  // Show cursor
+        format!("{}█", state.input_buffer) // Show cursor
     } else {
         if state.input_buffer.is_empty() {
             input_placeholder.to_string()
@@ -544,7 +648,9 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
     };
 
     let input_style = if state.input_active {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::DarkGray)
     };
@@ -562,12 +668,12 @@ pub fn render_bbs_tab(f: &mut Frame, area: Rect, state: &mut BBSTuiState) {
         " 📝 Message Input "
     };
 
-    let input_widget = Paragraph::new(input_text)
-        .style(input_style)
-        .block(Block::default()
+    let input_widget = Paragraph::new(input_text).style(input_style).block(
+        Block::default()
             .borders(Borders::ALL)
             .title(input_title)
-            .border_style(border_style));
+            .border_style(border_style),
+    );
     f.render_widget(input_widget, chunks[2]);
 
     // Status bar - show agent-aware help
@@ -611,8 +717,8 @@ mod tests {
         let db_url = db_file.to_str().unwrap();
 
         // Create connection and initialize DB
-        let mut conn = SqliteConnection::establish(db_url)
-            .expect("Failed to connect to test database");
+        let mut conn =
+            SqliteConnection::establish(db_url).expect("Failed to connect to test database");
         db::initialize_database(&mut conn).expect("Failed to initialize database");
 
         // Create a test board and get its ID
@@ -658,24 +764,38 @@ mod tests {
 
         // Try to post - should fail
         let result = state.post_message("This should fail");
-        assert!(result.is_err(), "post_message should fail when no board selected");
+        assert!(
+            result.is_err(),
+            "post_message should fail when no board selected"
+        );
 
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("No board selected"), "Error should mention no board: {}", err);
+        assert!(
+            err.contains("No board selected"),
+            "Error should mention no board: {}",
+            err
+        );
     }
 
     #[test]
     fn test_post_message_not_connected() {
         // Create state without a database connection
         let mut state = BBSTuiState::new();
-        state.current_board = Some(1);  // Fake board ID
+        state.current_board = Some(1); // Fake board ID
 
         // Try to post - should fail
         let result = state.post_message("This should fail");
-        assert!(result.is_err(), "post_message should fail when not connected");
+        assert!(
+            result.is_err(),
+            "post_message should fail when not connected"
+        );
 
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("Not connected"), "Error should mention not connected: {}", err);
+        assert!(
+            err.contains("Not connected"),
+            "Error should mention not connected: {}",
+            err
+        );
     }
 
     #[test]
@@ -683,10 +803,14 @@ mod tests {
         let (mut state, _tmp_dir) = create_test_state();
 
         // Post a message
-        state.post_message("First message").expect("Failed to post first message");
+        state
+            .post_message("First message")
+            .expect("Failed to post first message");
 
         // Post another message
-        state.post_message("Second message").expect("Failed to post second message");
+        state
+            .post_message("Second message")
+            .expect("Failed to post second message");
 
         // Both should use the same TUI user
         state.load_posts().expect("Failed to load posts");
@@ -695,7 +819,10 @@ mod tests {
         // Both posts should have the same user_id (the TUI user)
         let user_id_1 = state.posts[0].user_id;
         let user_id_2 = state.posts[1].user_id;
-        assert_eq!(user_id_1, user_id_2, "Both posts should be from the same TUI user");
+        assert_eq!(
+            user_id_1, user_id_2,
+            "Both posts should be from the same TUI user"
+        );
     }
 
     #[test]
@@ -703,12 +830,19 @@ mod tests {
         let (mut state, _tmp_dir) = create_test_state();
 
         // Post with special characters including 'i' (the bug we fixed)
-        let message = "Testing special chars: i, I, 你好, émoji 🎉, quotes \"test\" and 'apostrophe'";
+        let message =
+            "Testing special chars: i, I, 你好, émoji 🎉, quotes \"test\" and 'apostrophe'";
         let result = state.post_message(message);
-        assert!(result.is_ok(), "post_message should handle special characters");
+        assert!(
+            result.is_ok(),
+            "post_message should handle special characters"
+        );
 
         state.load_posts().expect("Failed to load posts");
-        assert_eq!(state.posts[0].body, message, "Message should be stored exactly");
+        assert_eq!(
+            state.posts[0].body, message,
+            "Message should be stored exactly"
+        );
     }
 
     #[test]
@@ -777,7 +911,10 @@ mod tests {
         let mut state = BBSTuiState::new();
 
         state.update_mesh_node(0x12345678, "NODE1".to_string());
-        assert_eq!(state.mesh_nodes.get(&0x12345678), Some(&"NODE1".to_string()));
+        assert_eq!(
+            state.mesh_nodes.get(&0x12345678),
+            Some(&"NODE1".to_string())
+        );
 
         // Add message after node is known
         state.add_mesh_message(0x12345678, "Hello".to_string(), false);
@@ -799,7 +936,10 @@ mod tests {
             last_acted_at_us: None,
             bio: None,
         };
-        assert!(BBSTuiState::is_agent(&osvm_agent), "OSVM should be detected as agent");
+        assert!(
+            BBSTuiState::is_agent(&osvm_agent),
+            "OSVM should be detected as agent"
+        );
 
         let bot_user = User {
             id: 2,
@@ -813,7 +953,10 @@ mod tests {
             last_acted_at_us: None,
             bio: None,
         };
-        assert!(BBSTuiState::is_agent(&bot_user), "BOT should be detected as agent");
+        assert!(
+            BBSTuiState::is_agent(&bot_user),
+            "BOT should be detected as agent"
+        );
 
         let regular_user = User {
             id: 3,
@@ -827,7 +970,10 @@ mod tests {
             last_acted_at_us: None,
             bio: None,
         };
-        assert!(!BBSTuiState::is_agent(&regular_user), "Regular user should NOT be detected as agent");
+        assert!(
+            !BBSTuiState::is_agent(&regular_user),
+            "Regular user should NOT be detected as agent"
+        );
     }
 
     // =========================================================================
@@ -861,7 +1007,10 @@ mod tests {
         simulate_i_key_not_in_input(&mut state);
 
         assert!(state.input_active, "'i' should activate input mode");
-        assert!(state.input_buffer.is_empty(), "Buffer should remain empty on activation");
+        assert!(
+            state.input_buffer.is_empty(),
+            "Buffer should remain empty on activation"
+        );
     }
 
     #[test]
@@ -884,7 +1033,10 @@ mod tests {
         simulate_char_key_in_input(&mut state, 'k');
         simulate_char_key_in_input(&mut state, 'e');
 
-        assert_eq!(state.input_buffer, "i like", "All chars including 'i' should be in buffer");
+        assert_eq!(
+            state.input_buffer, "i like",
+            "All chars including 'i' should be in buffer"
+        );
     }
 
     #[test]
@@ -897,8 +1049,10 @@ mod tests {
             simulate_char_key_in_input(&mut state, c);
         }
 
-        assert_eq!(state.input_buffer, "this is a test",
-            "Should be able to type words with 'i' without losing characters");
+        assert_eq!(
+            state.input_buffer, "this is a test",
+            "Should be able to type words with 'i' without losing characters"
+        );
     }
 
     #[test]

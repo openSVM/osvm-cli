@@ -26,8 +26,8 @@ pub mod realtime_graph_stream; // Real-time streaming graph visualization
 pub mod research_agent; // Self-evaluating research agent
 pub mod rocksdb_parser;
 pub mod snapshot_service;
-pub mod stream_service; // Real-time event streaming
 pub mod stream_server; // WebSocket/HTTP/SSE server for streaming
+pub mod stream_service; // Real-time event streaming
 pub mod transaction_decoders;
 pub mod tui_test_agent;
 pub mod unikernel_runtime;

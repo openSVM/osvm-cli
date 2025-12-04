@@ -1,7 +1,7 @@
 // Agent communication bridge
 // Allows AI agents to interact with BBS
 
-use crate::utils::bbs::{db, commands, models::User};
+use crate::utils::bbs::{commands, db, models::User};
 use diesel::sqlite::SqliteConnection;
 use std::sync::Arc;
 use tokio::sync::Mutex;

@@ -58,26 +58,60 @@ impl WebTuiBackend {
                     let _ = write!(self.buffer, "\x1b[49m");
                 }
             }
-            Color::Black => { let _ = write!(self.buffer, "\x1b[{};5;0m", code); }
-            Color::Red => { let _ = write!(self.buffer, "\x1b[{};5;1m", code); }
-            Color::Green => { let _ = write!(self.buffer, "\x1b[{};5;2m", code); }
-            Color::Yellow => { let _ = write!(self.buffer, "\x1b[{};5;3m", code); }
-            Color::Blue => { let _ = write!(self.buffer, "\x1b[{};5;4m", code); }
-            Color::Magenta => { let _ = write!(self.buffer, "\x1b[{};5;5m", code); }
-            Color::Cyan => { let _ = write!(self.buffer, "\x1b[{};5;6m", code); }
-            Color::Gray => { let _ = write!(self.buffer, "\x1b[{};5;7m", code); }
-            Color::DarkGray => { let _ = write!(self.buffer, "\x1b[{};5;8m", code); }
-            Color::LightRed => { let _ = write!(self.buffer, "\x1b[{};5;9m", code); }
-            Color::LightGreen => { let _ = write!(self.buffer, "\x1b[{};5;10m", code); }
-            Color::LightYellow => { let _ = write!(self.buffer, "\x1b[{};5;11m", code); }
-            Color::LightBlue => { let _ = write!(self.buffer, "\x1b[{};5;12m", code); }
-            Color::LightMagenta => { let _ = write!(self.buffer, "\x1b[{};5;13m", code); }
-            Color::LightCyan => { let _ = write!(self.buffer, "\x1b[{};5;14m", code); }
-            Color::White => { let _ = write!(self.buffer, "\x1b[{};5;15m", code); }
+            Color::Black => {
+                let _ = write!(self.buffer, "\x1b[{};5;0m", code);
+            }
+            Color::Red => {
+                let _ = write!(self.buffer, "\x1b[{};5;1m", code);
+            }
+            Color::Green => {
+                let _ = write!(self.buffer, "\x1b[{};5;2m", code);
+            }
+            Color::Yellow => {
+                let _ = write!(self.buffer, "\x1b[{};5;3m", code);
+            }
+            Color::Blue => {
+                let _ = write!(self.buffer, "\x1b[{};5;4m", code);
+            }
+            Color::Magenta => {
+                let _ = write!(self.buffer, "\x1b[{};5;5m", code);
+            }
+            Color::Cyan => {
+                let _ = write!(self.buffer, "\x1b[{};5;6m", code);
+            }
+            Color::Gray => {
+                let _ = write!(self.buffer, "\x1b[{};5;7m", code);
+            }
+            Color::DarkGray => {
+                let _ = write!(self.buffer, "\x1b[{};5;8m", code);
+            }
+            Color::LightRed => {
+                let _ = write!(self.buffer, "\x1b[{};5;9m", code);
+            }
+            Color::LightGreen => {
+                let _ = write!(self.buffer, "\x1b[{};5;10m", code);
+            }
+            Color::LightYellow => {
+                let _ = write!(self.buffer, "\x1b[{};5;11m", code);
+            }
+            Color::LightBlue => {
+                let _ = write!(self.buffer, "\x1b[{};5;12m", code);
+            }
+            Color::LightMagenta => {
+                let _ = write!(self.buffer, "\x1b[{};5;13m", code);
+            }
+            Color::LightCyan => {
+                let _ = write!(self.buffer, "\x1b[{};5;14m", code);
+            }
+            Color::White => {
+                let _ = write!(self.buffer, "\x1b[{};5;15m", code);
+            }
             Color::Rgb(r, g, b) => {
                 let _ = write!(self.buffer, "\x1b[{};2;{};{};{}m", code, r, g, b);
             }
-            Color::Indexed(i) => { let _ = write!(self.buffer, "\x1b[{};5;{}m", code, i); }
+            Color::Indexed(i) => {
+                let _ = write!(self.buffer, "\x1b[{};5;{}m", code, i);
+            }
         };
     }
 
@@ -264,7 +298,8 @@ impl<W: Write> Backend for DualBackend<W> {
         let cells: Vec<_> = content.collect();
 
         // Draw to crossterm
-        self.crossterm.draw(cells.iter().map(|(x, y, c)| (*x, *y, *c)))?;
+        self.crossterm
+            .draw(cells.iter().map(|(x, y, c)| (*x, *y, *c)))?;
 
         // Draw to web if enabled
         if let Some(ref mut web) = self.web {

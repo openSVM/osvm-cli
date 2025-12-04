@@ -3,7 +3,7 @@
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
-use crate::utils::bbs::models::{MeshMessageDb, NewMeshMessage, MeshMessageUpdate};
+use crate::utils::bbs::models::{MeshMessageDb, MeshMessageUpdate, NewMeshMessage};
 use crate::utils::bbs::schema::mesh_messages;
 
 use super::Result;
@@ -73,7 +73,11 @@ pub fn get_recent(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<MeshMes
 }
 
 /// Get mesh messages from a specific node
-pub fn get_from_node(conn: &mut SqliteConnection, node_id: u32, limit: i64) -> Result<Vec<MeshMessageDb>> {
+pub fn get_from_node(
+    conn: &mut SqliteConnection,
+    node_id: u32,
+    limit: i64,
+) -> Result<Vec<MeshMessageDb>> {
     let messages = mesh_messages::table
         .filter(mesh_messages::from_node_id.eq(node_id as i64))
         .order(mesh_messages::received_at_us.desc())
@@ -106,9 +110,7 @@ pub fn get_since(conn: &mut SqliteConnection, since_us: i64) -> Result<Vec<MeshM
 
 /// Count total mesh messages
 pub fn count(conn: &mut SqliteConnection) -> Result<i64> {
-    let count = mesh_messages::table
-        .count()
-        .get_result::<i64>(conn)?;
+    let count = mesh_messages::table.count().get_result::<i64>(conn)?;
 
     Ok(count)
 }
@@ -135,9 +137,9 @@ pub fn prune_old(conn: &mut SqliteConnection, keep_count: i64) -> Result<usize> 
 
     match threshold_result {
         Ok(threshold_id) => {
-            let deleted = diesel::delete(
-                mesh_messages::table.filter(mesh_messages::id.lt(threshold_id))
-            ).execute(conn)?;
+            let deleted =
+                diesel::delete(mesh_messages::table.filter(mesh_messages::id.lt(threshold_id)))
+                    .execute(conn)?;
             Ok(deleted)
         }
         Err(diesel::NotFound) => Ok(0), // Not enough messages to prune
@@ -159,8 +161,8 @@ pub struct MeshStats {
     pub messages_last_hour: i64,
     pub messages_last_24h: i64,
     pub top_nodes: Vec<NodeStats>,
-    pub oldest_message: Option<i64>,  // timestamp_us
-    pub newest_message: Option<i64>,  // timestamp_us
+    pub oldest_message: Option<i64>, // timestamp_us
+    pub newest_message: Option<i64>, // timestamp_us
 }
 
 /// Statistics for a single node
@@ -177,9 +179,7 @@ pub fn get_stats(conn: &mut SqliteConnection) -> Result<MeshStats> {
     use diesel::dsl::*;
 
     // Total messages
-    let total_messages = mesh_messages::table
-        .count()
-        .get_result::<i64>(conn)?;
+    let total_messages = mesh_messages::table.count().get_result::<i64>(conn)?;
 
     // Total commands
     let total_commands = mesh_messages::table
@@ -194,12 +194,11 @@ pub fn get_stats(conn: &mut SqliteConnection) -> Result<MeshStats> {
         .get_result::<i64>(conn)?;
 
     // Unique nodes (using raw SQL for COUNT DISTINCT)
-    let unique_nodes: i64 = diesel::sql_query(
-        "SELECT COUNT(DISTINCT from_node_id) as count FROM mesh_messages"
-    )
-    .get_result::<CountResult>(conn)
-    .map(|r| r.count)
-    .unwrap_or(0);
+    let unique_nodes: i64 =
+        diesel::sql_query("SELECT COUNT(DISTINCT from_node_id) as count FROM mesh_messages")
+            .get_result::<CountResult>(conn)
+            .map(|r| r.count)
+            .unwrap_or(0);
 
     // Messages in last hour
     let one_hour_ago = chrono::Utc::now().timestamp_micros() - (3600 * 1_000_000);
@@ -274,12 +273,15 @@ pub fn get_top_nodes(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<Node
     ))
     .load(conn)?;
 
-    Ok(rows.into_iter().map(|r| NodeStats {
-        node_id: r.from_node_id as u32,
-        node_name: r.from_name,
-        message_count: r.msg_count,
-        command_count: r.cmd_count,
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| NodeStats {
+            node_id: r.from_node_id as u32,
+            node_name: r.from_name,
+            message_count: r.msg_count,
+            command_count: r.cmd_count,
+        })
+        .collect())
 }
 
 /// Get message activity by hour (last 24 hours)
@@ -334,7 +336,8 @@ mod tests {
             "Hello mesh!",
             false,
             1704096000000000, // Early 2024
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(msg.from_node_id, 0x12345678);
         assert_eq!(msg.from_name, Some("TestNode".to_string()));
@@ -361,7 +364,8 @@ mod tests {
             "/agent what is bitcoin",
             true,
             1704096000000000,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(msg.response.is_none());
 
@@ -371,11 +375,15 @@ mod tests {
             msg.id,
             "Bitcoin is a cryptocurrency",
             1704096001000000,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Verify response was added
         let updated = get_recent(&mut conn, 1).unwrap();
-        assert_eq!(updated[0].response, Some("Bitcoin is a cryptocurrency".to_string()));
+        assert_eq!(
+            updated[0].response,
+            Some("Bitcoin is a cryptocurrency".to_string())
+        );
         assert!(updated[0].responded_at_us.is_some());
     }
 
@@ -384,10 +392,50 @@ mod tests {
         let mut conn = setup_test_db();
 
         // Create some messages
-        create(&mut conn, 0x11111111, None, None, 0, "Hello", false, 1704096000000000).unwrap();
-        create(&mut conn, 0x22222222, None, None, 0, "/boards", true, 1704096001000000).unwrap();
-        create(&mut conn, 0x33333333, None, None, 0, "World", false, 1704096002000000).unwrap();
-        create(&mut conn, 0x44444444, None, None, 0, "/agent test", true, 1704096003000000).unwrap();
+        create(
+            &mut conn,
+            0x11111111,
+            None,
+            None,
+            0,
+            "Hello",
+            false,
+            1704096000000000,
+        )
+        .unwrap();
+        create(
+            &mut conn,
+            0x22222222,
+            None,
+            None,
+            0,
+            "/boards",
+            true,
+            1704096001000000,
+        )
+        .unwrap();
+        create(
+            &mut conn,
+            0x33333333,
+            None,
+            None,
+            0,
+            "World",
+            false,
+            1704096002000000,
+        )
+        .unwrap();
+        create(
+            &mut conn,
+            0x44444444,
+            None,
+            None,
+            0,
+            "/agent test",
+            true,
+            1704096003000000,
+        )
+        .unwrap();
 
         // Get only commands
         let commands = get_commands(&mut conn, 10).unwrap();
@@ -402,9 +450,39 @@ mod tests {
 
         assert_eq!(count(&mut conn).unwrap(), 0);
 
-        create(&mut conn, 0x11111111, None, None, 0, "Msg1", false, 1704096000000000).unwrap();
-        create(&mut conn, 0x11111111, None, None, 0, "Msg2", false, 1704096001000000).unwrap();
-        create(&mut conn, 0x22222222, None, None, 0, "Msg3", false, 1704096002000000).unwrap();
+        create(
+            &mut conn,
+            0x11111111,
+            None,
+            None,
+            0,
+            "Msg1",
+            false,
+            1704096000000000,
+        )
+        .unwrap();
+        create(
+            &mut conn,
+            0x11111111,
+            None,
+            None,
+            0,
+            "Msg2",
+            false,
+            1704096001000000,
+        )
+        .unwrap();
+        create(
+            &mut conn,
+            0x22222222,
+            None,
+            None,
+            0,
+            "Msg3",
+            false,
+            1704096002000000,
+        )
+        .unwrap();
 
         assert_eq!(count(&mut conn).unwrap(), 3);
         assert_eq!(count_from_node(&mut conn, 0x11111111).unwrap(), 2);

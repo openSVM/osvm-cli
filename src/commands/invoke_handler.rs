@@ -131,15 +131,25 @@ pub async fn handle_invoke_command(
 
     println!("🔗 View on Solana Explorer:");
     if cluster == "custom" {
-        println!("https://explorer.solana.com/tx/{}?cluster=custom&customUrl={}", signature, urlencoding::encode(rpc_url));
+        println!(
+            "https://explorer.solana.com/tx/{}?cluster=custom&customUrl={}",
+            signature,
+            urlencoding::encode(rpc_url)
+        );
     } else {
-        println!("https://explorer.solana.com/tx/{}?cluster={}", signature, cluster);
+        println!(
+            "https://explorer.solana.com/tx/{}?cluster={}",
+            signature, cluster
+        );
     }
 
     // Fetch transaction logs if requested
     if matches.get_flag("show-logs") || skip_preflight {
         println!("\n📋 Fetching transaction logs...");
-        match client.get_transaction(&signature, solana_transaction_status::UiTransactionEncoding::Json) {
+        match client.get_transaction(
+            &signature,
+            solana_transaction_status::UiTransactionEncoding::Json,
+        ) {
             Ok(confirmed_tx) => {
                 if let Some(meta) = confirmed_tx.transaction.meta {
                     // In Solana SDK 3.0, log_messages uses OptionSerializer enum

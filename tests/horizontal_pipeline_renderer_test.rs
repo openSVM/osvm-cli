@@ -5,7 +5,7 @@ use anyhow::Result;
 #[cfg(test)]
 mod horizontal_pipeline_tests {
     use super::*;
-    use osvm::services::research_agent::{TransferGraph, Transfer};
+    use osvm::services::research_agent::{Transfer, TransferGraph};
 
     #[test]
     fn test_simple_pipeline_rendering() -> Result<()> {

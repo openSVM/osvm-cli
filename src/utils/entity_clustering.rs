@@ -1,16 +1,16 @@
 //! Entity clustering for identifying wallets controlled by the same entity
 
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// Entity cluster representing wallets controlled by the same actor
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityCluster {
     pub cluster_id: usize,
     pub wallet_addresses: Vec<String>,
-    pub confidence: f64,           // 0.0-1.0
+    pub confidence: f64, // 0.0-1.0
     pub signals: Vec<ClusterSignal>,
-    pub risk_amplification: f64,   // How much this cluster increases risk
+    pub risk_amplification: f64, // How much this cluster increases risk
 }
 
 /// Signal indicating wallets belong to same entity
@@ -23,7 +23,7 @@ pub enum ClusterSignal {
     },
     TimingCorrelation {
         wallets: Vec<String>,
-        correlation_score: f64,  // 0.0-1.0
+        correlation_score: f64, // 0.0-1.0
         time_window_secs: u64,
     },
     SharedPrograms {
@@ -33,7 +33,7 @@ pub enum ClusterSignal {
     },
     GasPricePattern {
         wallets: Vec<String>,
-        gas_price_variance: f64,  // Low variance = same bot config
+        gas_price_variance: f64, // Low variance = same bot config
         confidence: f64,
     },
     IdenticalBehavior {
@@ -47,10 +47,14 @@ impl ClusterSignal {
     pub fn confidence(&self) -> f64 {
         match self {
             ClusterSignal::CommonFundingSource { confidence, .. } => *confidence,
-            ClusterSignal::TimingCorrelation { correlation_score, .. } => *correlation_score,
+            ClusterSignal::TimingCorrelation {
+                correlation_score, ..
+            } => *correlation_score,
             ClusterSignal::SharedPrograms { confidence, .. } => *confidence,
             ClusterSignal::GasPricePattern { confidence, .. } => *confidence,
-            ClusterSignal::IdenticalBehavior { similarity_score, .. } => *similarity_score,
+            ClusterSignal::IdenticalBehavior {
+                similarity_score, ..
+            } => *similarity_score,
         }
     }
 
@@ -74,8 +78,8 @@ pub struct EntityClusterer {
 impl Default for EntityClusterer {
     fn default() -> Self {
         Self {
-            min_confidence: 0.6,  // 60% confidence threshold
-            min_cluster_size: 2,   // At least 2 wallets
+            min_confidence: 0.6, // 60% confidence threshold
+            min_cluster_size: 2, // At least 2 wallets
         }
     }
 }
@@ -215,10 +219,7 @@ impl EntityClusterer {
 
                     clusters.push(EntityCluster {
                         cluster_id: clusters.len(),
-                        wallet_addresses: vec![
-                            wallets[w1].0.clone(),
-                            wallets[w2].0.clone(),
-                        ],
+                        wallet_addresses: vec![wallets[w1].0.clone(), wallets[w2].0.clone()],
                         confidence: correlation_score,
                         signals: vec![ClusterSignal::TimingCorrelation {
                             wallets: vec![wallets[w1].0.clone(), wallets[w2].0.clone()],
@@ -288,9 +289,10 @@ impl EntityClusterer {
                 {
                     current_wallets.extend(other_wallets);
                     current.signals.extend(clusters[j].signals.clone());
-                    current.confidence =
-                        (current.confidence + clusters[j].confidence) / 2.0;
-                    current.risk_amplification = current.risk_amplification.max(clusters[j].risk_amplification);
+                    current.confidence = (current.confidence + clusters[j].confidence) / 2.0;
+                    current.risk_amplification = current
+                        .risk_amplification
+                        .max(clusters[j].risk_amplification);
                     used.insert(j);
                 }
             }
@@ -344,7 +346,7 @@ pub struct TransferMetadata {
     pub amount: f64,
     pub token: String,
     pub timestamp: Option<u64>,
-    pub is_initial_funding: bool,  // Heuristic: first tx or large amount
+    pub is_initial_funding: bool, // Heuristic: first tx or large amount
     pub gas_price: Option<f64>,
 }
 
@@ -355,41 +357,58 @@ mod tests {
     #[test]
     fn test_common_funding_detection() {
         let wallets = vec![
-            ("source".to_string(), WalletMetadata {
-                address: "source".to_string(),
-                first_seen: Some(1000),
-                transaction_count: 10,
-                behavior_type: None,
-            }),
-            ("wallet1".to_string(), WalletMetadata {
-                address: "wallet1".to_string(),
-                first_seen: Some(1100),
-                transaction_count: 5,
-                behavior_type: None,
-            }),
-            ("wallet2".to_string(), WalletMetadata {
-                address: "wallet2".to_string(),
-                first_seen: Some(1200),
-                transaction_count: 5,
-                behavior_type: None,
-            }),
+            (
+                "source".to_string(),
+                WalletMetadata {
+                    address: "source".to_string(),
+                    first_seen: Some(1000),
+                    transaction_count: 10,
+                    behavior_type: None,
+                },
+            ),
+            (
+                "wallet1".to_string(),
+                WalletMetadata {
+                    address: "wallet1".to_string(),
+                    first_seen: Some(1100),
+                    transaction_count: 5,
+                    behavior_type: None,
+                },
+            ),
+            (
+                "wallet2".to_string(),
+                WalletMetadata {
+                    address: "wallet2".to_string(),
+                    first_seen: Some(1200),
+                    transaction_count: 5,
+                    behavior_type: None,
+                },
+            ),
         ];
 
         let connections = vec![
-            (0, 1, TransferMetadata {
-                amount: 10.0,
-                token: "SOL".to_string(),
-                timestamp: Some(1100),
-                is_initial_funding: true,
-                gas_price: None,
-            }),
-            (0, 2, TransferMetadata {
-                amount: 10.0,
-                token: "SOL".to_string(),
-                timestamp: Some(1200),
-                is_initial_funding: true,
-                gas_price: None,
-            }),
+            (
+                0,
+                1,
+                TransferMetadata {
+                    amount: 10.0,
+                    token: "SOL".to_string(),
+                    timestamp: Some(1100),
+                    is_initial_funding: true,
+                    gas_price: None,
+                },
+            ),
+            (
+                0,
+                2,
+                TransferMetadata {
+                    amount: 10.0,
+                    token: "SOL".to_string(),
+                    timestamp: Some(1200),
+                    is_initial_funding: true,
+                    gas_price: None,
+                },
+            ),
         ];
 
         // Use lower min_confidence threshold since test has only 2 wallets

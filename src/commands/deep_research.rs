@@ -1,12 +1,10 @@
+use crate::services::{
+    agentic_researcher::AgenticResearcher, ai_service::AiService, ovsm_service::OvsmService,
+};
 use anyhow::{Context, Result};
 use clap::ArgMatches;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::services::{
-    ai_service::AiService,
-    ovsm_service::OvsmService,
-    agentic_researcher::AgenticResearcher,
-};
 
 /// Handle the deep research command with fully autonomous investigation
 pub async fn handle_deep_research_command(matches: &ArgMatches) -> Result<()> {
@@ -66,9 +64,11 @@ pub async fn handle_deep_research_command(matches: &ArgMatches) -> Result<()> {
 
             // Save report if requested
             if matches.get_flag("save") {
-                let filename = format!("deep_research_{}_{}.md",
+                let filename = format!(
+                    "deep_research_{}_{}.md",
                     target.chars().take(8).collect::<String>(),
-                    chrono::Local::now().format("%Y%m%d_%H%M%S"));
+                    chrono::Local::now().format("%Y%m%d_%H%M%S")
+                );
                 std::fs::write(&filename, &report)?;
                 println!("📄 Report saved to: {}", filename);
             }
@@ -136,7 +136,7 @@ pub async fn handle_interactive_research(matches: &ArgMatches) -> Result<()> {
 
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-        let parts: Vec<&str> = input.trim().split_whitespace().collect();
+        let parts: Vec<&str> = input.split_whitespace().collect();
 
         if parts.is_empty() {
             continue;
@@ -241,11 +241,8 @@ pub async fn run_deep_research_demo() -> Result<()> {
 
     let ai_service = Arc::new(Mutex::new(AiService::new()));
     let ovsm_service = Arc::new(Mutex::new(OvsmService::new()));
-    let researcher = AgenticResearcher::new(
-        ai_service,
-        ovsm_service,
-        "Demo_Wallet_123".to_string()
-    );
+    let researcher =
+        AgenticResearcher::new(ai_service, ovsm_service, "Demo_Wallet_123".to_string());
 
     println!("\n📋 Demonstration Phases:");
     println!("1. Self-Questioning: Agent generates its own investigation paths");

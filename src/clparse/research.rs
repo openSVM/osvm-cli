@@ -165,6 +165,23 @@ pub fn build_research_command() -> Command {
                 )
                 .action(clap::ArgAction::SetTrue)
         )
+        .arg(
+            Arg::new("timeline")
+                .long("timeline")
+                .help("Show time-ordered transaction flow (bidirectional tree view)")
+                .long_help(
+                    "Displays transactions in chronological order as a tree, interleaving\n\
+                    both inflows (◀) and outflows (▶) to show actual fund movement patterns.\n\n\
+                    This view is excellent for detecting:\n\
+                    - Wash trading (rapid in-out cycles)\n\
+                    - Arbitrage patterns\n\
+                    - Layered money movement\n\n\
+                    Default view groups by direction (INFLOWS branch, OUTFLOWS branch).\n\
+                    Timeline view shows transactions in the order they occurred.\n\n\
+                    Example: osvm research <WALLET> --auto --timeline"
+                )
+                .action(clap::ArgAction::SetTrue)
+        )
         .subcommand(
             Command::new("demo")
                 .about("Run a demonstration of the research agent")

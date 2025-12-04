@@ -18,14 +18,27 @@ fn main() {
 
     for i in 0..e_phnum {
         let phdr_offset = e_phoff as usize + (i as usize * 56);
-        let p_type = u32::from_le_bytes(elf_bytes[phdr_offset..phdr_offset+4].try_into().unwrap());
+        let p_type =
+            u32::from_le_bytes(elf_bytes[phdr_offset..phdr_offset + 4].try_into().unwrap());
 
-        if p_type == 2 { // PT_DYNAMIC
-            let p_offset = u64::from_le_bytes(elf_bytes[phdr_offset+8..phdr_offset+16].try_into().unwrap());
-            let p_filesz = u64::from_le_bytes(elf_bytes[phdr_offset+32..phdr_offset+40].try_into().unwrap());
+        if p_type == 2 {
+            // PT_DYNAMIC
+            let p_offset = u64::from_le_bytes(
+                elf_bytes[phdr_offset + 8..phdr_offset + 16]
+                    .try_into()
+                    .unwrap(),
+            );
+            let p_filesz = u64::from_le_bytes(
+                elf_bytes[phdr_offset + 32..phdr_offset + 40]
+                    .try_into()
+                    .unwrap(),
+            );
             dynamic_offset = Some(p_offset as usize);
             dynamic_size = p_filesz as usize;
-            println!("✅ Found PT_DYNAMIC at offset 0x{:x}, size 0x{:x}", p_offset, p_filesz);
+            println!(
+                "✅ Found PT_DYNAMIC at offset 0x{:x}, size 0x{:x}",
+                p_offset, p_filesz
+            );
             break;
         }
     }
@@ -38,11 +51,14 @@ fn main() {
 
     println!("\n📊 Parsing dynamic entries:");
     while offset < dynamic_offset + dynamic_size {
-        let d_tag = u64::from_le_bytes(elf_bytes[offset..offset+8].try_into().unwrap());
-        let d_val = u64::from_le_bytes(elf_bytes[offset+8..offset+16].try_into().unwrap());
+        let d_tag = u64::from_le_bytes(elf_bytes[offset..offset + 8].try_into().unwrap());
+        let d_val = u64::from_le_bytes(elf_bytes[offset + 8..offset + 16].try_into().unwrap());
 
         match d_tag {
-            0 => { println!("  DT_NULL"); break; }
+            0 => {
+                println!("  DT_NULL");
+                break;
+            }
             6 => {
                 dt_symtab = Some(d_val);
                 println!("  DT_SYMTAB = 0x{:x}", d_val);
@@ -56,7 +72,10 @@ fn main() {
     let dt_symtab = dt_symtab.expect("No DT_SYMTAB found");
 
     // Now the critical part: RBPF searches for a section header with sh_addr == dt_symtab
-    println!("\n🔍 Critical check: Finding section with sh_addr = 0x{:x}", dt_symtab);
+    println!(
+        "\n🔍 Critical check: Finding section with sh_addr = 0x{:x}",
+        dt_symtab
+    );
 
     let mut found = false;
     for i in 0..e_shnum {
@@ -67,13 +86,31 @@ fn main() {
             continue;
         }
 
-        let sh_type = u32::from_le_bytes(elf_bytes[shdr_offset+4..shdr_offset+8].try_into().unwrap());
-        let sh_addr = u64::from_le_bytes(elf_bytes[shdr_offset+16..shdr_offset+24].try_into().unwrap());
-        let sh_offset = u64::from_le_bytes(elf_bytes[shdr_offset+24..shdr_offset+32].try_into().unwrap());
-        let sh_size = u64::from_le_bytes(elf_bytes[shdr_offset+32..shdr_offset+40].try_into().unwrap());
+        let sh_type = u32::from_le_bytes(
+            elf_bytes[shdr_offset + 4..shdr_offset + 8]
+                .try_into()
+                .unwrap(),
+        );
+        let sh_addr = u64::from_le_bytes(
+            elf_bytes[shdr_offset + 16..shdr_offset + 24]
+                .try_into()
+                .unwrap(),
+        );
+        let sh_offset = u64::from_le_bytes(
+            elf_bytes[shdr_offset + 24..shdr_offset + 32]
+                .try_into()
+                .unwrap(),
+        );
+        let sh_size = u64::from_le_bytes(
+            elf_bytes[shdr_offset + 32..shdr_offset + 40]
+                .try_into()
+                .unwrap(),
+        );
 
-        println!("  Section [{}]: sh_type=0x{:x}, sh_addr=0x{:x}, sh_offset=0x{:x}, sh_size=0x{:x}",
-                 i, sh_type, sh_addr, sh_offset, sh_size);
+        println!(
+            "  Section [{}]: sh_type=0x{:x}, sh_addr=0x{:x}, sh_offset=0x{:x}, sh_size=0x{:x}",
+            i, sh_type, sh_addr, sh_offset, sh_size
+        );
 
         if sh_addr == dt_symtab {
             println!("    ✅ MATCH! This is what RBPF needs");
@@ -91,14 +128,28 @@ fn main() {
                 println!("\n🔍 Checking if sh_offset range is in a PT_LOAD:");
                 for j in 0..e_phnum {
                     let phdr_offset = e_phoff as usize + (j as usize * 56);
-                    let p_type = u32::from_le_bytes(elf_bytes[phdr_offset..phdr_offset+4].try_into().unwrap());
+                    let p_type = u32::from_le_bytes(
+                        elf_bytes[phdr_offset..phdr_offset + 4].try_into().unwrap(),
+                    );
 
-                    if p_type == 1 { // PT_LOAD
-                        let p_offset = u64::from_le_bytes(elf_bytes[phdr_offset+8..phdr_offset+16].try_into().unwrap());
-                        let p_filesz = u64::from_le_bytes(elf_bytes[phdr_offset+32..phdr_offset+40].try_into().unwrap());
+                    if p_type == 1 {
+                        // PT_LOAD
+                        let p_offset = u64::from_le_bytes(
+                            elf_bytes[phdr_offset + 8..phdr_offset + 16]
+                                .try_into()
+                                .unwrap(),
+                        );
+                        let p_filesz = u64::from_le_bytes(
+                            elf_bytes[phdr_offset + 32..phdr_offset + 40]
+                                .try_into()
+                                .unwrap(),
+                        );
                         let p_end = p_offset + p_filesz;
 
-                        println!("      PT_LOAD[{}]: file range 0x{:x}-0x{:x}", j, p_offset, p_end);
+                        println!(
+                            "      PT_LOAD[{}]: file range 0x{:x}-0x{:x}",
+                            j, p_offset, p_end
+                        );
 
                         if sh_offset >= p_offset && sh_offset + sh_size <= p_end {
                             println!("        ✅ Contains section data!");
@@ -113,7 +164,10 @@ fn main() {
     }
 
     if !found {
-        println!("\n❌ CRITICAL FAILURE: No section header with sh_addr = 0x{:x}!", dt_symtab);
+        println!(
+            "\n❌ CRITICAL FAILURE: No section header with sh_addr = 0x{:x}!",
+            dt_symtab
+        );
         println!("This is why RBPF fails with 'invalid dynamic section table'");
     }
 }

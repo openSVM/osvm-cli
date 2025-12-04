@@ -255,9 +255,9 @@ impl LispEvaluator {
                     // Common Lisp list operations
                     "member" => self.eval_member(args),
                     "assoc" => self.eval_assoc(args),
-                    "assoc-in" => self.eval_assoc_in(args),  // Set key in object (dynamic key)
-                    "set-key" => self.eval_assoc_in(args),   // Alias for assoc-in
-                    "set" => self.eval_object_set(args),     // set(obj, key, value) - like JS/Python
+                    "assoc-in" => self.eval_assoc_in(args), // Set key in object (dynamic key)
+                    "set-key" => self.eval_assoc_in(args),  // Alias for assoc-in
+                    "set" => self.eval_object_set(args),    // set(obj, key, value) - like JS/Python
                     "elt" => self.eval_elt(args),
                     "subseq" => self.eval_subseq(args),
                     // Common Lisp string comparisons
@@ -341,7 +341,7 @@ impl LispEvaluator {
                     "entries" => self.eval_object_entries(args),      // JS: Object.entries()
                     "items" => self.eval_object_entries(args),        // Python: dict.items()
                     "merge" => self.eval_merge(args),
-                    "put" => self.eval_put(args),           // Set object property: (put obj "key" val)
+                    "put" => self.eval_put(args), // Set object property: (put obj "key" val)
                     "get" => self.eval_get(args),
                     "get-path" => self.eval_get_path(args),
                     "discover" => self.eval_discover(args),
@@ -356,7 +356,7 @@ impl LispEvaluator {
                     "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
                     "append" => self.eval_append(args),
-                    "concat" => self.eval_concatenate(args),      // Alias for concatenate
+                    "concat" => self.eval_concatenate(args), // Alias for concatenate
                     "concatenate" => self.eval_concatenate(args), // Polymorphic concat
                     // JSON operations (built-ins, not MCP tools!)
                     "parse-json" => self.eval_parse_json(args),
@@ -666,7 +666,9 @@ impl LispEvaluator {
         self.env.define(var_name.clone(), value.clone());
 
         // Record in execution trace for debugging
-        self.execution_trace.borrow_mut().push((var_name, value.clone()));
+        self.execution_trace
+            .borrow_mut()
+            .push((var_name, value.clone()));
 
         Ok(value)
     }
@@ -4424,8 +4426,8 @@ impl LispEvaluator {
         };
 
         // Decode hex to bytes
-        let bytes = hex::decode(&hex_str)
-            .map_err(|e| Error::ParseError(format!("Invalid hex: {}", e)))?;
+        let bytes =
+            hex::decode(&hex_str).map_err(|e| Error::ParseError(format!("Invalid hex: {}", e)))?;
 
         // Check bounds (offset + 8 bytes)
         if offset + 8 > bytes.len() {
@@ -5373,10 +5375,12 @@ impl LispEvaluator {
             Value::String(s) => s,
             Value::Int(i) => i.to_string(),
             Value::Float(f) => f.to_string(),
-            _ => return Err(Error::TypeError {
-                expected: "string or number for key".to_string(),
-                got: key_val.type_name(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string or number for key".to_string(),
+                    got: key_val.type_name(),
+                })
+            }
         };
 
         // Get the value
@@ -5453,7 +5457,10 @@ impl LispEvaluator {
                 if strict {
                     return Err(Error::InvalidArguments {
                         tool: "get".to_string(),
-                        reason: format!("Field '{}' not found in object (strict mode enabled)", key),
+                        reason: format!(
+                            "Field '{}' not found in object (strict mode enabled)",
+                            key
+                        ),
                     });
                 }
 

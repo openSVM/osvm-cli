@@ -1,5 +1,5 @@
 // Compile syscall test and regenerate ELF
-use ovsm::compiler::{Compiler, CompileOptions};
+use ovsm::compiler::{CompileOptions, Compiler};
 
 fn main() {
     let source = r#";; Test syscall
@@ -17,7 +17,10 @@ fn main() {
     match compiler.compile(source) {
         Ok(result) => {
             std::fs::write("/tmp/hello_final.so", &result.elf_bytes).expect("Failed to write ELF");
-            println!("✅ Generated /tmp/hello_final.so ({} bytes)", result.elf_bytes.len());
+            println!(
+                "✅ Generated /tmp/hello_final.so ({} bytes)",
+                result.elf_bytes.len()
+            );
         }
         Err(e) => {
             eprintln!("❌ Compilation failed: {:?}", e);

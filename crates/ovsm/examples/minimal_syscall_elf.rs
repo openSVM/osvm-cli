@@ -46,8 +46,8 @@ fn main() {
     elf.extend_from_slice(&0x120u64.to_le_bytes()); // p_offset
     elf.extend_from_slice(&0x120u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x120u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0x30u64.to_le_bytes());  // p_filesz
-    elf.extend_from_slice(&0x30u64.to_le_bytes());  // p_memsz
+    elf.extend_from_slice(&0x30u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0x30u64.to_le_bytes()); // p_memsz
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_align
 
     // PT_LOAD #2: .rodata (small, like Solana's)
@@ -58,8 +58,8 @@ fn main() {
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_offset - after .text in next page
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0x4u64.to_le_bytes());   // p_filesz
-    elf.extend_from_slice(&0x4u64.to_le_bytes());   // p_memsz
+    elf.extend_from_slice(&0x4u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0x4u64.to_le_bytes()); // p_memsz
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_align
 
     // PT_LOAD #3: .dynsym, .dynstr, .rel.dyn
@@ -70,8 +70,8 @@ fn main() {
     elf.extend_from_slice(&0x208u64.to_le_bytes()); // p_offset
     elf.extend_from_slice(&0x208u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x208u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0x78u64.to_le_bytes());  // p_filesz
-    elf.extend_from_slice(&0x78u64.to_le_bytes());  // p_memsz
+    elf.extend_from_slice(&0x78u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0x78u64.to_le_bytes()); // p_memsz
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_align
 
     // PT_DYNAMIC
@@ -82,9 +82,9 @@ fn main() {
     elf.extend_from_slice(&0x158u64.to_le_bytes()); // p_offset
     elf.extend_from_slice(&0x158u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x158u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0xb0u64.to_le_bytes());  // p_filesz
-    elf.extend_from_slice(&0xb0u64.to_le_bytes());  // p_memsz
-    elf.extend_from_slice(&0x8u64.to_le_bytes());   // p_align = 8!
+    elf.extend_from_slice(&0xb0u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0xb0u64.to_le_bytes()); // p_memsz
+    elf.extend_from_slice(&0x8u64.to_le_bytes()); // p_align = 8!
 
     // Pad to 0x120 (start of .text)
     while elf.len() < 0x120 {
@@ -99,8 +99,7 @@ fn main() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         // Load address of string into r1
         0x18, 0x01, 0x00, 0x00, 0x50, 0x01, 0x00, 0x00, // lddw r1, 0x150
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        // Load length into r2
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Load length into r2
         0xb7, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, // mov r2, 4
         // Syscall
         0x85, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // call 0
@@ -140,7 +139,7 @@ fn main() {
     // DT_RELCOUNT
     elf.extend_from_slice(&0x6ffffffau64.to_le_bytes());
     elf.extend_from_slice(&1u64.to_le_bytes()); // Set to 1 like Solana
-    // DT_SYMTAB
+                                                // DT_SYMTAB
     elf.extend_from_slice(&6u64.to_le_bytes());
     elf.extend_from_slice(&0x208u64.to_le_bytes());
     // DT_SYMENT
@@ -170,7 +169,7 @@ fn main() {
     // Symbol 1: sol_log_
     elf.extend_from_slice(&1u32.to_le_bytes()); // st_name
     elf.push(0x12); // st_info (STB_GLOBAL | STT_FUNC)
-    elf.push(0);    // st_other
+    elf.push(0); // st_other
     elf.extend_from_slice(&0u16.to_le_bytes()); // st_shndx
     elf.extend_from_slice(&0u64.to_le_bytes()); // st_value
     elf.extend_from_slice(&0u64.to_le_bytes()); // st_size
@@ -223,16 +222,28 @@ fn main() {
 
     // Section 6: .shstrtab (section name string table)
     let shstrtab_offset = elf.len() + 64;
-    write_section_header(&mut elf, 40, 3, 0, shstrtab_offset as u64, 50, 0, 0, 0, 0, 1);
+    write_section_header(
+        &mut elf,
+        40,
+        3,
+        0,
+        shstrtab_offset as u64,
+        50,
+        0,
+        0,
+        0,
+        0,
+        1,
+    );
 
     // .shstrtab contents
     elf.push(0); // null
-    elf.extend_from_slice(b".text\0");      // 1
-    elf.extend_from_slice(b".rodata\0");    // 7
-    elf.extend_from_slice(b".dynamic\0");   // 15
-    elf.extend_from_slice(b".dynsym\0");    // 24
-    elf.extend_from_slice(b".dynstr\0");    // 32
-    elf.extend_from_slice(b".shstrtab\0");  // 40
+    elf.extend_from_slice(b".text\0"); // 1
+    elf.extend_from_slice(b".rodata\0"); // 7
+    elf.extend_from_slice(b".dynamic\0"); // 15
+    elf.extend_from_slice(b".dynsym\0"); // 24
+    elf.extend_from_slice(b".dynstr\0"); // 32
+    elf.extend_from_slice(b".shstrtab\0"); // 40
 
     // Write the file
     fs::write("/tmp/minimal_syscall.so", &elf).expect("Failed to write ELF");

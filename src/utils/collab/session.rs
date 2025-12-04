@@ -2,14 +2,14 @@
 //!
 //! Manages shared tmux sessions for real-time collaborative investigation.
 
-use super::{CollabError, PresenceManager, AnnotationStore};
+use super::{AnnotationStore, CollabError, PresenceManager};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 
 /// Configuration for creating a collaborative session
 #[derive(Debug, Clone)]
@@ -119,18 +119,11 @@ impl ParticipantColor {
 #[serde(tag = "type")]
 pub enum SessionEvent {
     /// Participant joined
-    ParticipantJoined {
-        participant: Participant,
-    },
+    ParticipantJoined { participant: Participant },
     /// Participant left
-    ParticipantLeft {
-        participant_id: String,
-    },
+    ParticipantLeft { participant_id: String },
     /// Screen content update (for browser clients)
-    ScreenUpdate {
-        content: String,
-        pane: usize,
-    },
+    ScreenUpdate { content: String, pane: usize },
     /// Cursor moved
     CursorMoved {
         participant_id: String,
@@ -156,10 +149,7 @@ pub enum SessionEvent {
         target_wallet: Option<String>,
     },
     /// Pane focused
-    PaneFocused {
-        participant_id: String,
-        pane: usize,
-    },
+    PaneFocused { participant_id: String, pane: usize },
 }
 
 /// A collaborative investigation session
@@ -200,16 +190,19 @@ impl CollaborativeSession {
             .args([
                 "new-session",
                 "-d",
-                "-s", &tmux_session,
-                "-x", &config.width.to_string(),
-                "-y", &config.height.to_string(),
+                "-s",
+                &tmux_session,
+                "-x",
+                &config.width.to_string(),
+                "-y",
+                &config.height.to_string(),
             ])
             .output()
             .map_err(|e| CollabError::IoError(e))?;
 
         if !output.status.success() {
             return Err(CollabError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -218,7 +211,8 @@ impl CollaborativeSession {
             let _ = Command::new("tmux")
                 .args([
                     "send-keys",
-                    "-t", &tmux_session,
+                    "-t",
+                    &tmux_session,
                     &format!("osvm research {} --tui", wallet),
                     "Enter",
                 ])
@@ -350,7 +344,7 @@ impl CollaborativeSession {
 
         if !output.status.success() {
             return Err(CollabError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -371,7 +365,7 @@ impl CollaborativeSession {
 
         if !output.status.success() {
             return Err(CollabError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -392,7 +386,7 @@ impl CollaborativeSession {
 
         if !output.status.success() {
             return Err(CollabError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -407,17 +401,13 @@ impl CollaborativeSession {
             let direction = if i % 2 == 1 { "-h" } else { "-v" };
 
             let output = Command::new("tmux")
-                .args([
-                    "split-window",
-                    direction,
-                    "-t", &self.tmux_session,
-                ])
+                .args(["split-window", direction, "-t", &self.tmux_session])
                 .output()
                 .map_err(|e| CollabError::IoError(e))?;
 
             if !output.status.success() {
                 return Err(CollabError::TmuxError(
-                    String::from_utf8_lossy(&output.stderr).to_string()
+                    String::from_utf8_lossy(&output.stderr).to_string(),
                 ));
             }
         }

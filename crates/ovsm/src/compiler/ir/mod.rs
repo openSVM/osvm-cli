@@ -52,20 +52,20 @@
 //! This enables catching bugs like misaligned loads, out-of-bounds access,
 //! and type confusion at compile time rather than runtime.
 
-mod types;
-mod instruction;
-mod program;
 mod generator;
+mod instruction;
 pub mod memory_model;
+mod program;
+mod types;
 
 // Re-export all public types
-pub use types::{PrimitiveType, FieldType, StructField, StructDef};
-pub use instruction::{IrReg, IrInstruction};
-pub use program::{BasicBlock, IrProgram};
 pub use generator::IrGenerator;
+pub use instruction::{IrInstruction, IrReg};
+pub use program::{BasicBlock, IrProgram};
+pub use types::{FieldType, PrimitiveType, StructDef, StructField};
 
 // Re-export memory model types
 pub use memory_model::{
-    TypedReg, RegType, PointerType, MemoryRegion, Alignment, MemoryError, TypeEnv,
-    account_layout, heap_layout,
+    account_layout, heap_layout, Alignment, MemoryError, MemoryRegion, PointerType, RegType,
+    TypeEnv, TypedReg,
 };

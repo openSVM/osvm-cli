@@ -19,18 +19,10 @@ use url::Url;
 /// Any other input is returned unchanged.
 pub fn normalize_to_url_if_moniker(url_or_moniker: &str) -> String {
     match url_or_moniker.to_lowercase().as_str() {
-        "m" | "mainnet-beta" | "mainnet" => {
-            "https://api.mainnet-beta.solana.com".to_string()
-        }
-        "t" | "testnet" => {
-            "https://api.testnet.solana.com".to_string()
-        }
-        "d" | "devnet" => {
-            "https://api.devnet.solana.com".to_string()
-        }
-        "l" | "localhost" | "localnet" => {
-            "http://localhost:8899".to_string()
-        }
+        "m" | "mainnet-beta" | "mainnet" => "https://api.mainnet-beta.solana.com".to_string(),
+        "t" | "testnet" => "https://api.testnet.solana.com".to_string(),
+        "d" | "devnet" => "https://api.devnet.solana.com".to_string(),
+        "l" | "localhost" | "localnet" => "http://localhost:8899".to_string(),
         _ => url_or_moniker.to_string(),
     }
 }
@@ -41,8 +33,7 @@ pub fn normalize_to_url_if_moniker(url_or_moniker: &str) -> String {
 pub fn is_url_or_moniker(s: &str) -> Result<(), String> {
     let normalized = normalize_to_url_if_moniker(s);
 
-    let url = Url::parse(&normalized)
-        .map_err(|e| format!("Invalid URL '{}': {}", s, e))?;
+    let url = Url::parse(&normalized).map_err(|e| format!("Invalid URL '{}': {}", s, e))?;
 
     // Ensure the URL has a host
     url.host()
@@ -150,10 +141,7 @@ mod tests {
 
     #[test]
     fn test_normalize_localhost() {
-        assert_eq!(
-            normalize_to_url_if_moniker("l"),
-            "http://localhost:8899"
-        );
+        assert_eq!(normalize_to_url_if_moniker("l"), "http://localhost:8899");
         assert_eq!(
             normalize_to_url_if_moniker("localhost"),
             "http://localhost:8899"
@@ -187,7 +175,9 @@ mod tests {
     fn test_is_valid_pubkey_format() {
         // Valid pubkey format (not checking actual crypto validity)
         assert!(is_valid_pubkey_format("11111111111111111111111111111111"));
-        assert!(is_valid_pubkey_format("So11111111111111111111111111111111111111112"));
+        assert!(is_valid_pubkey_format(
+            "So11111111111111111111111111111111111111112"
+        ));
 
         // Invalid: too short
         assert!(!is_valid_pubkey_format("short"));

@@ -77,21 +77,30 @@ pub struct NodeRegistration {
 impl NodeRegistration {
     /// Get address as string (trimmed)
     pub fn get_address(&self) -> String {
-        let end = self.address.iter().position(|&b| b == 0).unwrap_or(MAX_ADDRESS_LEN);
+        let end = self
+            .address
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(MAX_ADDRESS_LEN);
         String::from_utf8_lossy(&self.address[..end]).to_string()
     }
 
     /// Get name as string (trimmed)
     pub fn get_name(&self) -> String {
-        let end = self.name.iter().position(|&b| b == 0).unwrap_or(MAX_NAME_LEN);
+        let end = self
+            .name
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(MAX_NAME_LEN);
         String::from_utf8_lossy(&self.name[..end]).to_string()
     }
 
     /// Get node_id as hex string with ! prefix
     pub fn get_node_id_string(&self) -> String {
-        format!("!{:02x}{:02x}{:02x}{:02x}",
-            self.node_id[0], self.node_id[1],
-            self.node_id[2], self.node_id[3])
+        format!(
+            "!{:02x}{:02x}{:02x}{:02x}",
+            self.node_id[0], self.node_id[1], self.node_id[2], self.node_id[3]
+        )
     }
 }
 
@@ -108,14 +117,15 @@ impl RegistryClient {
     /// Create a new registry client
     pub fn new(rpc_url: Option<&str>) -> Result<Self> {
         let url = rpc_url.unwrap_or(DEVNET_RPC);
-        let rpc_client = RpcClient::new_with_commitment(
-            url.to_string(),
-            CommitmentConfig::confirmed(),
-        );
-        let program_id = Pubkey::from_str(PROGRAM_ID)
-            .map_err(|e| anyhow!("Invalid program ID: {}", e))?;
+        let rpc_client =
+            RpcClient::new_with_commitment(url.to_string(), CommitmentConfig::confirmed());
+        let program_id =
+            Pubkey::from_str(PROGRAM_ID).map_err(|e| anyhow!("Invalid program ID: {}", e))?;
 
-        Ok(Self { rpc_client, program_id })
+        Ok(Self {
+            rpc_client,
+            program_id,
+        })
     }
 
     /// Get the PDA for a node registration
@@ -224,11 +234,7 @@ impl RegistryClient {
     }
 
     /// Deregister node and close account (returns rent)
-    pub fn deregister(
-        &self,
-        owner: &Keypair,
-        rent_destination: Option<&Pubkey>,
-    ) -> Result<String> {
+    pub fn deregister(&self, owner: &Keypair, rent_destination: Option<&Pubkey>) -> Result<String> {
         let (node_pda, _) = self.get_node_pda(&owner.pubkey());
         let owner_pubkey = owner.pubkey();
         let destination = rent_destination.unwrap_or(&owner_pubkey);
@@ -317,8 +323,7 @@ pub fn generate_node_id(address: &str) -> [u8; 8] {
 
 /// Load keypair from file
 pub fn load_keypair(path: &str) -> Result<Keypair> {
-    read_keypair_file(path)
-        .map_err(|e| anyhow!("Failed to read keypair file '{}': {}", path, e))
+    read_keypair_file(path).map_err(|e| anyhow!("Failed to read keypair file '{}': {}", path, e))
 }
 
 /// Format timestamp for display

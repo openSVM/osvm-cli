@@ -24,17 +24,11 @@
 //! assert!(diff.is_match(), "Visual regression detected: {}", diff.summary());
 //! ```
 
-use ratatui::{
-    backend::TestBackend,
-    buffer::Buffer,
-    layout::Rect,
-    style::Color,
-    Terminal,
-};
+use ratatui::{backend::TestBackend, buffer::Buffer, layout::Rect, style::Color, Terminal};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -60,7 +54,10 @@ pub type ScreenshotResult<T> = Result<T, ScreenshotError>;
 pub enum ScreenshotError {
     Io(io::Error),
     GoldenNotFound(PathBuf),
-    DimensionMismatch { expected: (u16, u16), actual: (u16, u16) },
+    DimensionMismatch {
+        expected: (u16, u16),
+        actual: (u16, u16),
+    },
     TmuxError(String),
     RenderError(String),
     ColorAssertion(ColorAssertionError),
@@ -71,7 +68,7 @@ pub enum ScreenshotError {
 pub struct ColorAssertionError {
     pub description: String,
     pub expected_color: Option<Color>,
-    pub actual_colors: Vec<(u16, u16, Color)>,  // (x, y, color) tuples
+    pub actual_colors: Vec<(u16, u16, Color)>, // (x, y, color) tuples
     pub region: Option<ColorRegion>,
 }
 
@@ -81,8 +78,11 @@ impl std::fmt::Display for ScreenshotError {
             Self::Io(e) => write!(f, "IO error: {}", e),
             Self::GoldenNotFound(p) => write!(f, "Golden image not found: {}", p.display()),
             Self::DimensionMismatch { expected, actual } => {
-                write!(f, "Dimension mismatch: expected {}x{}, got {}x{}",
-                    expected.0, expected.1, actual.0, actual.1)
+                write!(
+                    f,
+                    "Dimension mismatch: expected {}x{}, got {}x{}",
+                    expected.0, expected.1, actual.0, actual.1
+                )
             }
             Self::TmuxError(e) => write!(f, "tmux error: {}", e),
             Self::RenderError(e) => write!(f, "Render error: {}", e),
@@ -100,7 +100,9 @@ impl std::fmt::Display for ColorAssertionError {
         if !self.actual_colors.is_empty() {
             write!(f, " (found: ")?;
             for (i, (x, y, color)) in self.actual_colors.iter().take(5).enumerate() {
-                if i > 0 { write!(f, ", ")?; }
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
                 write!(f, "{:?}@({},{})", color, x, y)?;
             }
             if self.actual_colors.len() > 5 {
@@ -142,10 +144,12 @@ impl TuiScreenshot {
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).expect("Failed to create test terminal");
 
-        terminal.draw(|f| {
-            let area = f.area();
-            render_fn(f, area);
-        }).expect("Failed to draw");
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_fn(f, area);
+            })
+            .expect("Failed to draw");
 
         let buffer = terminal.backend().buffer().clone();
 
@@ -198,12 +202,12 @@ impl TuiScreenshot {
 
                 // Add color markers for non-default colors
                 let marker = match fg {
-                    Color::Red | Color::LightRed => '!',      // Alerts
-                    Color::Green | Color::LightGreen => '+',  // Success
-                    Color::Yellow | Color::LightYellow => '~', // Warning
-                    Color::Blue | Color::LightBlue => '>',    // Info
+                    Color::Red | Color::LightRed => '!',         // Alerts
+                    Color::Green | Color::LightGreen => '+',     // Success
+                    Color::Yellow | Color::LightYellow => '~',   // Warning
+                    Color::Blue | Color::LightBlue => '>',       // Info
                     Color::Magenta | Color::LightMagenta => '*', // Highlight
-                    Color::Cyan | Color::LightCyan => '@',    // Links/special
+                    Color::Cyan | Color::LightCyan => '@',       // Links/special
                     _ => ' ',
                 };
 
@@ -235,7 +239,10 @@ impl TuiScreenshot {
     }
 
     /// Compare this screenshot against a golden image file
-    pub fn compare_to_golden(&self, golden_path: impl AsRef<Path>) -> ScreenshotResult<ScreenshotDiff> {
+    pub fn compare_to_golden(
+        &self,
+        golden_path: impl AsRef<Path>,
+    ) -> ScreenshotResult<ScreenshotDiff> {
         let golden = Self::load_golden(&golden_path)?;
         Ok(self.compare_to_text(&golden))
     }
@@ -353,7 +360,11 @@ impl TuiScreenshot {
     }
 
     /// Assert that text containing a pattern has a specific color
-    pub fn assert_text_has_color(&self, pattern: &str, expected_color: Color) -> ScreenshotResult<()> {
+    pub fn assert_text_has_color(
+        &self,
+        pattern: &str,
+        expected_color: Color,
+    ) -> ScreenshotResult<()> {
         // Find all occurrences of the pattern
         let text = self.to_text();
         let lines: Vec<&str> = text.lines().collect();
@@ -387,10 +398,7 @@ impl TuiScreenshot {
 
         if !wrong_colors.is_empty() {
             return Err(ScreenshotError::ColorAssertion(ColorAssertionError {
-                description: format!(
-                    "Pattern '{}' found but has wrong color(s)",
-                    pattern
-                ),
+                description: format!("Pattern '{}' found but has wrong color(s)", pattern),
                 expected_color: Some(expected_color),
                 actual_colors: wrong_colors,
                 region: None,
@@ -401,7 +409,11 @@ impl TuiScreenshot {
     }
 
     /// Assert colors in a rectangular region
-    pub fn assert_region_has_color(&self, region: ColorRegion, expected_color: Color) -> ScreenshotResult<()> {
+    pub fn assert_region_has_color(
+        &self,
+        region: ColorRegion,
+        expected_color: Color,
+    ) -> ScreenshotResult<()> {
         let mut wrong_colors = Vec::new();
         let mut found_any = false;
 
@@ -431,10 +443,7 @@ impl TuiScreenshot {
 
         if !wrong_colors.is_empty() {
             return Err(ScreenshotError::ColorAssertion(ColorAssertionError {
-                description: format!(
-                    "Region has {} cells with wrong color",
-                    wrong_colors.len()
-                ),
+                description: format!("Region has {} cells with wrong color", wrong_colors.len()),
                 expected_color: Some(expected_color),
                 actual_colors: wrong_colors,
                 region: Some(region),
@@ -449,10 +458,13 @@ impl TuiScreenshot {
         let colors = self.get_all_fg_colors();
 
         let has_red = colors.contains_key(&Color::Red) || colors.contains_key(&Color::LightRed);
-        let has_green = colors.contains_key(&Color::Green) || colors.contains_key(&Color::LightGreen);
-        let has_yellow = colors.contains_key(&Color::Yellow) || colors.contains_key(&Color::LightYellow);
+        let has_green =
+            colors.contains_key(&Color::Green) || colors.contains_key(&Color::LightGreen);
+        let has_yellow =
+            colors.contains_key(&Color::Yellow) || colors.contains_key(&Color::LightYellow);
         let has_blue = colors.contains_key(&Color::Blue) || colors.contains_key(&Color::LightBlue);
-        let has_magenta = colors.contains_key(&Color::Magenta) || colors.contains_key(&Color::LightMagenta);
+        let has_magenta =
+            colors.contains_key(&Color::Magenta) || colors.contains_key(&Color::LightMagenta);
         let has_cyan = colors.contains_key(&Color::Cyan) || colors.contains_key(&Color::LightCyan);
 
         ColorSummary {
@@ -484,17 +496,32 @@ pub struct ColorRegion {
 
 impl ColorRegion {
     pub fn new(x: u16, y: u16, width: u16, height: u16) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     /// Create a region for the first N lines
     pub fn top_lines(height: u16, screen_width: u16) -> Self {
-        Self { x: 0, y: 0, width: screen_width, height }
+        Self {
+            x: 0,
+            y: 0,
+            width: screen_width,
+            height,
+        }
     }
 
     /// Create a region for a specific line
     pub fn line(y: u16, screen_width: u16) -> Self {
-        Self { x: 0, y, width: screen_width, height: 1 }
+        Self {
+            x: 0,
+            y,
+            width: screen_width,
+            height: 1,
+        }
     }
 }
 
@@ -556,20 +583,26 @@ impl<'a> ColorAssertions<'a> {
 
     /// Convenience: assert critical risk colors (red)
     pub fn is_critical_risk(self) -> ScreenshotResult<Self> {
-        self.screenshot.assert_text_has_color("CRITICAL", Color::Red)
-            .or_else(|_| self.screenshot.assert_text_has_color("Critical", Color::Red))?;
+        self.screenshot
+            .assert_text_has_color("CRITICAL", Color::Red)
+            .or_else(|_| {
+                self.screenshot
+                    .assert_text_has_color("Critical", Color::Red)
+            })?;
         Ok(self)
     }
 
     /// Convenience: assert high risk colors (light red/orange)
     pub fn is_high_risk(self) -> ScreenshotResult<Self> {
-        self.screenshot.assert_text_has_color("High", Color::LightRed)?;
+        self.screenshot
+            .assert_text_has_color("High", Color::LightRed)?;
         Ok(self)
     }
 
     /// Convenience: assert medium risk colors (yellow)
     pub fn is_medium_risk(self) -> ScreenshotResult<Self> {
-        self.screenshot.assert_text_has_color("Medium", Color::Yellow)?;
+        self.screenshot
+            .assert_text_has_color("Medium", Color::Yellow)?;
         Ok(self)
     }
 
@@ -584,14 +617,22 @@ impl<'a> ColorAssertions<'a> {
 fn is_similar_color(a: Color, b: Color) -> bool {
     matches!(
         (a, b),
-        (Color::Red, Color::LightRed) | (Color::LightRed, Color::Red) |
-        (Color::Green, Color::LightGreen) | (Color::LightGreen, Color::Green) |
-        (Color::Yellow, Color::LightYellow) | (Color::LightYellow, Color::Yellow) |
-        (Color::Blue, Color::LightBlue) | (Color::LightBlue, Color::Blue) |
-        (Color::Magenta, Color::LightMagenta) | (Color::LightMagenta, Color::Magenta) |
-        (Color::Cyan, Color::LightCyan) | (Color::LightCyan, Color::Cyan) |
-        (Color::Gray, Color::DarkGray) | (Color::DarkGray, Color::Gray) |
-        (Color::White, Color::Gray) | (Color::Gray, Color::White)
+        (Color::Red, Color::LightRed)
+            | (Color::LightRed, Color::Red)
+            | (Color::Green, Color::LightGreen)
+            | (Color::LightGreen, Color::Green)
+            | (Color::Yellow, Color::LightYellow)
+            | (Color::LightYellow, Color::Yellow)
+            | (Color::Blue, Color::LightBlue)
+            | (Color::LightBlue, Color::Blue)
+            | (Color::Magenta, Color::LightMagenta)
+            | (Color::LightMagenta, Color::Magenta)
+            | (Color::Cyan, Color::LightCyan)
+            | (Color::LightCyan, Color::Cyan)
+            | (Color::Gray, Color::DarkGray)
+            | (Color::DarkGray, Color::Gray)
+            | (Color::White, Color::Gray)
+            | (Color::Gray, Color::White)
     )
 }
 
@@ -681,15 +722,18 @@ impl TmuxCapture {
             .args([
                 "new-session",
                 "-d",
-                "-s", &session_name,
-                "-x", &width.to_string(),
-                "-y", &height.to_string(),
+                "-s",
+                &session_name,
+                "-x",
+                &width.to_string(),
+                "-y",
+                &height.to_string(),
             ])
             .output()?;
 
         if !output.status.success() {
             return Err(ScreenshotError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -703,17 +747,12 @@ impl TmuxCapture {
     /// Run a command in the tmux session
     pub fn run_command(&self, cmd: &str) -> ScreenshotResult<()> {
         let output = Command::new("tmux")
-            .args([
-                "send-keys",
-                "-t", &self.session_name,
-                cmd,
-                "Enter",
-            ])
+            .args(["send-keys", "-t", &self.session_name, cmd, "Enter"])
             .output()?;
 
         if !output.status.success() {
             return Err(ScreenshotError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -723,16 +762,12 @@ impl TmuxCapture {
     /// Send keys to the tmux session
     pub fn send_keys(&self, keys: &str) -> ScreenshotResult<()> {
         let output = Command::new("tmux")
-            .args([
-                "send-keys",
-                "-t", &self.session_name,
-                keys,
-            ])
+            .args(["send-keys", "-t", &self.session_name, keys])
             .output()?;
 
         if !output.status.success() {
             return Err(ScreenshotError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -744,14 +779,15 @@ impl TmuxCapture {
         let output = Command::new("tmux")
             .args([
                 "capture-pane",
-                "-t", &self.session_name,
-                "-p",  // Print to stdout
+                "-t",
+                &self.session_name,
+                "-p", // Print to stdout
             ])
             .output()?;
 
         if !output.status.success() {
             return Err(ScreenshotError::TmuxError(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 
@@ -759,7 +795,11 @@ impl TmuxCapture {
     }
 
     /// Wait for output to stabilize (no changes for duration)
-    pub fn wait_for_stable(&self, check_interval_ms: u64, stability_ms: u64) -> ScreenshotResult<String> {
+    pub fn wait_for_stable(
+        &self,
+        check_interval_ms: u64,
+        stability_ms: u64,
+    ) -> ScreenshotResult<String> {
         let mut last_capture = self.capture()?;
         let mut stable_since = std::time::Instant::now();
         let stability_duration = std::time::Duration::from_millis(stability_ms);
@@ -880,14 +920,16 @@ pub struct TiledCaptureResult {
 impl TiledCaptureResult {
     /// Get capture for a specific pane by index
     pub fn get_pane(&self, index: usize) -> Option<&str> {
-        self.panes.iter()
+        self.panes
+            .iter()
             .find(|(i, _)| *i == index)
             .map(|(_, content)| content.as_str())
     }
 
     /// Get all pane contents as a combined view
     pub fn combined_view(&self, separator: &str) -> String {
-        self.panes.iter()
+        self.panes
+            .iter()
             .map(|(i, content)| format!("=== Pane {} ===\n{}", i, content))
             .collect::<Vec<_>>()
             .join(separator)
@@ -895,37 +937,40 @@ impl TiledCaptureResult {
 
     /// Compare each pane against golden files
     pub fn compare_to_goldens(&self, golden_dir: &Path, prefix: &str) -> Vec<ScreenshotDiff> {
-        self.panes.iter().map(|(i, content)| {
-            let golden_path = golden_dir.join(format!("{}_{}.txt", prefix, i));
-            let expected = fs::read_to_string(&golden_path).unwrap_or_default();
+        self.panes
+            .iter()
+            .map(|(i, content)| {
+                let golden_path = golden_dir.join(format!("{}_{}.txt", prefix, i));
+                let expected = fs::read_to_string(&golden_path).unwrap_or_default();
 
-            let actual_lines: Vec<&str> = content.lines().collect();
-            let expected_lines: Vec<&str> = expected.lines().collect();
+                let actual_lines: Vec<&str> = content.lines().collect();
+                let expected_lines: Vec<&str> = expected.lines().collect();
 
-            let mut differences = Vec::new();
-            let max_lines = actual_lines.len().max(expected_lines.len());
+                let mut differences = Vec::new();
+                let max_lines = actual_lines.len().max(expected_lines.len());
 
-            for line_num in 0..max_lines {
-                let actual_line = actual_lines.get(line_num).copied().unwrap_or("");
-                let expected_line = expected_lines.get(line_num).copied().unwrap_or("");
+                for line_num in 0..max_lines {
+                    let actual_line = actual_lines.get(line_num).copied().unwrap_or("");
+                    let expected_line = expected_lines.get(line_num).copied().unwrap_or("");
 
-                if actual_line != expected_line {
-                    differences.push(LineDiff {
-                        line_number: line_num + 1,
-                        expected: expected_line.to_string(),
-                        actual: actual_line.to_string(),
-                    });
+                    if actual_line != expected_line {
+                        differences.push(LineDiff {
+                            line_number: line_num + 1,
+                            expected: expected_line.to_string(),
+                            actual: actual_line.to_string(),
+                        });
+                    }
                 }
-            }
 
-            ScreenshotDiff {
-                screenshot_name: Some(format!("pane_{}", i)),
-                total_lines: max_lines,
-                differences,
-                actual_text: content.clone(),
-                expected_text: expected,
-            }
-        }).collect()
+                ScreenshotDiff {
+                    screenshot_name: Some(format!("pane_{}", i)),
+                    total_lines: max_lines,
+                    differences,
+                    actual_text: content.clone(),
+                    expected_text: expected,
+                }
+            })
+            .collect()
     }
 }
 
@@ -975,17 +1020,21 @@ impl TmuxTiledSession {
             .args([
                 "new-session",
                 "-d",
-                "-s", &session_name,
-                "-x", &width.to_string(),
-                "-y", &height.to_string(),
+                "-s",
+                &session_name,
+                "-x",
+                &width.to_string(),
+                "-y",
+                &height.to_string(),
             ])
             .output()?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to create tmux session: {}", stderr)
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to create tmux session: {}",
+                stderr
+            )));
         }
 
         Ok(Self {
@@ -1027,7 +1076,7 @@ impl TmuxTiledSession {
     pub fn split_panes(&mut self, count: usize) -> ScreenshotResult<()> {
         if count == 0 || count > 16 {
             return Err(ScreenshotError::TmuxError(
-                "Pane count must be between 1 and 16".to_string()
+                "Pane count must be between 1 and 16".to_string(),
             ));
         }
 
@@ -1037,7 +1086,13 @@ impl TmuxTiledSession {
             let split_flag = match self.layout {
                 TileLayout::EvenHorizontal | TileLayout::MainVertical => "-h", // horizontal split
                 TileLayout::EvenVertical | TileLayout::MainHorizontal => "-v", // vertical split
-                TileLayout::Tiled => if i % 2 == 1 { "-h" } else { "-v" },
+                TileLayout::Tiled => {
+                    if i % 2 == 1 {
+                        "-h"
+                    } else {
+                        "-v"
+                    }
+                }
                 _ => "-h",
             };
 
@@ -1045,14 +1100,17 @@ impl TmuxTiledSession {
                 .args([
                     "split-window",
                     split_flag,
-                    "-t", &format!("{}:{}", self.session_name, 0),
+                    "-t",
+                    &format!("{}:{}", self.session_name, 0),
                 ])
                 .output()?;
 
             if !output.status.success() {
-                return Err(ScreenshotError::TmuxError(
-                    format!("Failed to split pane {}: {}", i, String::from_utf8_lossy(&output.stderr))
-                ));
+                return Err(ScreenshotError::TmuxError(format!(
+                    "Failed to split pane {}: {}",
+                    i,
+                    String::from_utf8_lossy(&output.stderr)
+                )));
             }
 
             self.panes.push(TmuxPane::new(i));
@@ -1069,17 +1127,14 @@ impl TmuxTiledSession {
         let layout_name = self.layout.to_tmux_layout();
 
         let output = Command::new("tmux")
-            .args([
-                "select-layout",
-                "-t", &self.session_name,
-                layout_name,
-            ])
+            .args(["select-layout", "-t", &self.session_name, layout_name])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to apply layout: {}", String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to apply layout: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         // Handle custom ratio layouts
@@ -1109,15 +1164,18 @@ impl TmuxTiledSession {
         let output = Command::new("tmux")
             .args([
                 "resize-pane",
-                "-t", &format!("{}:0.0", self.session_name),
-                resize_flag, &size.to_string(),
+                "-t",
+                &format!("{}:0.0", self.session_name),
+                resize_flag,
+                &size.to_string(),
             ])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to resize main pane: {}", String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to resize main pane: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         Ok(())
@@ -1126,24 +1184,29 @@ impl TmuxTiledSession {
     /// Run a command in a specific pane
     pub fn run_in_pane(&mut self, pane_index: usize, cmd: &str) -> ScreenshotResult<()> {
         if pane_index >= self.panes.len() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Pane {} does not exist (have {} panes)", pane_index, self.panes.len())
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Pane {} does not exist (have {} panes)",
+                pane_index,
+                self.panes.len()
+            )));
         }
 
         let output = Command::new("tmux")
             .args([
                 "send-keys",
-                "-t", &format!("{}:0.{}", self.session_name, pane_index),
+                "-t",
+                &format!("{}:0.{}", self.session_name, pane_index),
                 cmd,
                 "Enter",
             ])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to run command in pane {}: {}", pane_index, String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to run command in pane {}: {}",
+                pane_index,
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         self.panes[pane_index].command = Some(cmd.to_string());
@@ -1153,23 +1216,27 @@ impl TmuxTiledSession {
     /// Send keys to a specific pane (without Enter)
     pub fn send_keys_to_pane(&self, pane_index: usize, keys: &str) -> ScreenshotResult<()> {
         if pane_index >= self.panes.len() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Pane {} does not exist", pane_index)
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Pane {} does not exist",
+                pane_index
+            )));
         }
 
         let output = Command::new("tmux")
             .args([
                 "send-keys",
-                "-t", &format!("{}:0.{}", self.session_name, pane_index),
+                "-t",
+                &format!("{}:0.{}", self.session_name, pane_index),
                 keys,
             ])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to send keys to pane {}: {}", pane_index, String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to send keys to pane {}: {}",
+                pane_index,
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         Ok(())
@@ -1190,15 +1257,18 @@ impl TmuxTiledSession {
         let output = Command::new("tmux")
             .args([
                 "set-window-option",
-                "-t", &self.session_name,
-                "synchronize-panes", flag,
+                "-t",
+                &self.session_name,
+                "synchronize-panes",
+                flag,
             ])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to set synchronize-panes: {}", String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to set synchronize-panes: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         self.sync_input = enable;
@@ -1208,23 +1278,27 @@ impl TmuxTiledSession {
     /// Capture a specific pane's content
     pub fn capture_pane(&self, pane_index: usize) -> ScreenshotResult<String> {
         if pane_index >= self.panes.len() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Pane {} does not exist", pane_index)
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Pane {} does not exist",
+                pane_index
+            )));
         }
 
         let output = Command::new("tmux")
             .args([
                 "capture-pane",
-                "-t", &format!("{}:0.{}", self.session_name, pane_index),
-                "-p",  // Print to stdout
+                "-t",
+                &format!("{}:0.{}", self.session_name, pane_index),
+                "-p", // Print to stdout
             ])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to capture pane {}: {}", pane_index, String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to capture pane {}: {}",
+                pane_index,
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -1248,8 +1322,14 @@ impl TmuxTiledSession {
     }
 
     /// Wait for all panes to stabilize
-    pub fn wait_for_stable_all(&self, check_interval_ms: u64, stability_ms: u64) -> ScreenshotResult<TiledCaptureResult> {
-        let mut last_captures: Vec<(usize, String)> = self.panes.iter()
+    pub fn wait_for_stable_all(
+        &self,
+        check_interval_ms: u64,
+        stability_ms: u64,
+    ) -> ScreenshotResult<TiledCaptureResult> {
+        let mut last_captures: Vec<(usize, String)> = self
+            .panes
+            .iter()
             .map(|p| (p.index, String::new()))
             .collect();
         let mut stable_since = std::time::Instant::now();
@@ -1290,22 +1370,26 @@ impl TmuxTiledSession {
     /// Focus a specific pane
     pub fn focus_pane(&self, pane_index: usize) -> ScreenshotResult<()> {
         if pane_index >= self.panes.len() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Pane {} does not exist", pane_index)
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Pane {} does not exist",
+                pane_index
+            )));
         }
 
         let output = Command::new("tmux")
             .args([
                 "select-pane",
-                "-t", &format!("{}:0.{}", self.session_name, pane_index),
+                "-t",
+                &format!("{}:0.{}", self.session_name, pane_index),
             ])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to focus pane {}: {}", pane_index, String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to focus pane {}: {}",
+                pane_index,
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         Ok(())
@@ -1314,29 +1398,33 @@ impl TmuxTiledSession {
     /// Kill a specific pane (useful for cleanup)
     pub fn kill_pane(&mut self, pane_index: usize) -> ScreenshotResult<()> {
         if pane_index >= self.panes.len() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Pane {} does not exist", pane_index)
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Pane {} does not exist",
+                pane_index
+            )));
         }
 
         // Don't kill the last pane - would destroy the session
         if self.panes.len() == 1 {
             return Err(ScreenshotError::TmuxError(
-                "Cannot kill the last pane".to_string()
+                "Cannot kill the last pane".to_string(),
             ));
         }
 
         let output = Command::new("tmux")
             .args([
                 "kill-pane",
-                "-t", &format!("{}:0.{}", self.session_name, pane_index),
+                "-t",
+                &format!("{}:0.{}", self.session_name, pane_index),
             ])
             .output()?;
 
         if !output.status.success() {
-            return Err(ScreenshotError::TmuxError(
-                format!("Failed to kill pane {}: {}", pane_index, String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(ScreenshotError::TmuxError(format!(
+                "Failed to kill pane {}: {}",
+                pane_index,
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         self.panes.remove(pane_index);
@@ -1356,7 +1444,7 @@ impl TmuxTiledSession {
 
         if !status.success() {
             return Err(ScreenshotError::TmuxError(
-                "Failed to attach to session".to_string()
+                "Failed to attach to session".to_string(),
             ));
         }
 
@@ -1364,7 +1452,11 @@ impl TmuxTiledSession {
     }
 
     /// Create a predefined layout configuration for testing
-    pub fn create_test_layout(layout_name: &str, width: u16, height: u16) -> ScreenshotResult<Self> {
+    pub fn create_test_layout(
+        layout_name: &str,
+        width: u16,
+        height: u16,
+    ) -> ScreenshotResult<Self> {
         let mut session = Self::new(width, height)?;
 
         match layout_name {
@@ -1394,9 +1486,10 @@ impl TmuxTiledSession {
                 session.split_panes(3)?;
             }
             _ => {
-                return Err(ScreenshotError::TmuxError(
-                    format!("Unknown layout: {}", layout_name)
-                ));
+                return Err(ScreenshotError::TmuxError(format!(
+                    "Unknown layout: {}",
+                    layout_name
+                )));
             }
         }
 
@@ -1468,8 +1561,7 @@ impl TiledTestBuilder {
 
     /// Build and run the tiled test
     pub fn run(self) -> ScreenshotResult<TiledTestResult> {
-        let mut session = TmuxTiledSession::new(self.width, self.height)?
-            .with_layout(self.layout);
+        let mut session = TmuxTiledSession::new(self.width, self.height)?.with_layout(self.layout);
 
         let pane_count = self.scenarios.len().max(1);
         session.split_panes(pane_count)?;
@@ -1554,7 +1646,10 @@ impl TiledTestResult {
 
         for v in &self.validations {
             let status = if v.passed { "✓" } else { "✗" };
-            output.push_str(&format!("  {} Pane {}: {}\n", status, v.pane_index, v.scenario_name));
+            output.push_str(&format!(
+                "  {} Pane {}: {}\n",
+                status, v.pane_index, v.scenario_name
+            ));
 
             if !v.missing_patterns.is_empty() {
                 output.push_str("    Missing patterns:\n");
@@ -1601,8 +1696,7 @@ impl ScreenshotTestRunner {
     where
         F: FnOnce(&mut ratatui::Frame, Rect),
     {
-        let screenshot = TuiScreenshot::capture_widget(render_fn, width, height)
-            .with_name(name);
+        let screenshot = TuiScreenshot::capture_widget(render_fn, width, height).with_name(name);
 
         let golden_path = self.golden_dir.join(format!("{}.txt", name));
 
@@ -1637,10 +1731,13 @@ macro_rules! screenshot_test {
     ($name:ident, $width:expr, $height:expr, $body:expr) => {
         #[test]
         fn $name() {
-            let runner = $crate::utils::tui::screenshot_test::ScreenshotTestRunner::new(
-                concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/tui")
-            );
-            runner.test(stringify!($name), $width, $height, $body).unwrap();
+            let runner = $crate::utils::tui::screenshot_test::ScreenshotTestRunner::new(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/golden/tui"
+            ));
+            runner
+                .test(stringify!($name), $width, $height, $body)
+                .unwrap();
         }
     };
 }
@@ -1648,17 +1745,19 @@ macro_rules! screenshot_test {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::widgets::{Block, Borders, Paragraph};
     use ratatui::style::{Color, Style};
+    use ratatui::widgets::{Block, Borders, Paragraph};
 
     #[test]
     fn test_basic_screenshot_capture() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let block = Block::default()
-                .title(" Test Block ")
-                .borders(Borders::ALL);
-            f.render_widget(block, area);
-        }, 40, 10);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let block = Block::default().title(" Test Block ").borders(Borders::ALL);
+                f.render_widget(block, area);
+            },
+            40,
+            10,
+        );
 
         let text = screenshot.to_text();
         assert!(text.contains("Test Block"), "Should contain title");
@@ -1667,10 +1766,14 @@ mod tests {
 
     #[test]
     fn test_screenshot_comparison_match() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Hello, World!");
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Hello, World!");
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         let expected = screenshot.to_text();
         let diff = screenshot.compare_to_text(&expected);
@@ -1681,10 +1784,14 @@ mod tests {
 
     #[test]
     fn test_screenshot_comparison_mismatch() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Hello");
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Hello");
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         let diff = screenshot.compare_to_text("Goodbye");
 
@@ -1694,11 +1801,14 @@ mod tests {
 
     #[test]
     fn test_styled_text_output() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Warning!")
-                .style(Style::default().fg(Color::Yellow));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Warning!").style(Style::default().fg(Color::Yellow));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         let styled = screenshot.to_styled_text();
         assert!(styled.contains('~'), "Should contain yellow marker");
@@ -1706,11 +1816,15 @@ mod tests {
 
     #[test]
     fn test_multiline_capture() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let text = "Line 1\nLine 2\nLine 3";
-            let para = Paragraph::new(text);
-            f.render_widget(para, area);
-        }, 20, 5);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let text = "Line 1\nLine 2\nLine 3";
+                let para = Paragraph::new(text);
+                f.render_widget(para, area);
+            },
+            20,
+            5,
+        );
 
         let text = screenshot.to_text();
         assert!(text.contains("Line 1"));
@@ -1724,11 +1838,14 @@ mod tests {
 
     #[test]
     fn test_get_fg_color() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Red Text")
-                .style(Style::default().fg(Color::Red));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Red Text").style(Style::default().fg(Color::Red));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         // First character should be red
         let color = screenshot.get_fg_color(0, 0);
@@ -1737,11 +1854,14 @@ mod tests {
 
     #[test]
     fn test_get_all_fg_colors() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Text")
-                .style(Style::default().fg(Color::Green));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Text").style(Style::default().fg(Color::Green));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         let colors = screenshot.get_all_fg_colors();
         assert!(colors.contains_key(&Color::Green), "Should contain green");
@@ -1749,33 +1869,42 @@ mod tests {
 
     #[test]
     fn test_assert_has_color_success() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Alert!")
-                .style(Style::default().fg(Color::Red));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Alert!").style(Style::default().fg(Color::Red));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         assert!(screenshot.assert_has_color(Color::Red).is_ok());
     }
 
     #[test]
     fn test_assert_has_color_failure() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Normal")
-                .style(Style::default().fg(Color::White));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Normal").style(Style::default().fg(Color::White));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         assert!(screenshot.assert_has_color(Color::Red).is_err());
     }
 
     #[test]
     fn test_assert_no_color_success() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Safe")
-                .style(Style::default().fg(Color::Green));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Safe").style(Style::default().fg(Color::Green));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         // Should not have red
         assert!(screenshot.assert_no_color(Color::Red).is_ok());
@@ -1783,11 +1912,14 @@ mod tests {
 
     #[test]
     fn test_assert_no_color_failure() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Danger!")
-                .style(Style::default().fg(Color::Red));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Danger!").style(Style::default().fg(Color::Red));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         // Should fail because red exists
         assert!(screenshot.assert_no_color(Color::Red).is_err());
@@ -1795,33 +1927,48 @@ mod tests {
 
     #[test]
     fn test_assert_text_has_color_success() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("CRITICAL")
-                .style(Style::default().fg(Color::Red));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("CRITICAL").style(Style::default().fg(Color::Red));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
-        assert!(screenshot.assert_text_has_color("CRITICAL", Color::Red).is_ok());
+        assert!(screenshot
+            .assert_text_has_color("CRITICAL", Color::Red)
+            .is_ok());
     }
 
     #[test]
     fn test_assert_text_has_color_wrong_color() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("CRITICAL")
-                .style(Style::default().fg(Color::Green)); // Wrong color!
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("CRITICAL").style(Style::default().fg(Color::Green)); // Wrong color!
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         let result = screenshot.assert_text_has_color("CRITICAL", Color::Red);
-        assert!(result.is_err(), "Should fail because CRITICAL is green, not red");
+        assert!(
+            result.is_err(),
+            "Should fail because CRITICAL is green, not red"
+        );
     }
 
     #[test]
     fn test_assert_text_has_color_pattern_not_found() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Hello");
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Hello");
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
         let result = screenshot.assert_text_has_color("CRITICAL", Color::Red);
         assert!(result.is_err(), "Should fail because pattern not found");
@@ -1829,16 +1976,20 @@ mod tests {
 
     #[test]
     fn test_color_summary() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            use ratatui::text::{Line, Span};
-            let lines = vec![
-                Line::from(Span::styled("Red", Style::default().fg(Color::Red))),
-                Line::from(Span::styled("Green", Style::default().fg(Color::Green))),
-                Line::from(Span::styled("Yellow", Style::default().fg(Color::Yellow))),
-            ];
-            let para = Paragraph::new(lines);
-            f.render_widget(para, area);
-        }, 20, 5);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                use ratatui::text::{Line, Span};
+                let lines = vec![
+                    Line::from(Span::styled("Red", Style::default().fg(Color::Red))),
+                    Line::from(Span::styled("Green", Style::default().fg(Color::Green))),
+                    Line::from(Span::styled("Yellow", Style::default().fg(Color::Yellow))),
+                ];
+                let para = Paragraph::new(lines);
+                f.render_widget(para, area);
+            },
+            20,
+            5,
+        );
 
         let summary = screenshot.color_summary();
         assert!(summary.has_red);
@@ -1849,13 +2000,17 @@ mod tests {
 
     #[test]
     fn test_fluent_color_assertions() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            let para = Paragraph::new("Warning")
-                .style(Style::default().fg(Color::Yellow));
-            f.render_widget(para, area);
-        }, 20, 3);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                let para = Paragraph::new("Warning").style(Style::default().fg(Color::Yellow));
+                f.render_widget(para, area);
+            },
+            20,
+            3,
+        );
 
-        let result = screenshot.assert_colors()
+        let result = screenshot
+            .assert_colors()
             .has_color(Color::Yellow)
             .and_then(|a| a.no_color(Color::Red));
 
@@ -1874,24 +2029,32 @@ mod tests {
 
     #[test]
     fn test_region_assertion() {
-        let screenshot = TuiScreenshot::capture_widget(|f, area| {
-            use ratatui::text::{Line, Span};
-            // First line red, second line green
-            let lines = vec![
-                Line::from(Span::styled("LINE1", Style::default().fg(Color::Red))),
-                Line::from(Span::styled("LINE2", Style::default().fg(Color::Green))),
-            ];
-            let para = Paragraph::new(lines);
-            f.render_widget(para, area);
-        }, 20, 4);
+        let screenshot = TuiScreenshot::capture_widget(
+            |f, area| {
+                use ratatui::text::{Line, Span};
+                // First line red, second line green
+                let lines = vec![
+                    Line::from(Span::styled("LINE1", Style::default().fg(Color::Red))),
+                    Line::from(Span::styled("LINE2", Style::default().fg(Color::Green))),
+                ];
+                let para = Paragraph::new(lines);
+                f.render_widget(para, area);
+            },
+            20,
+            4,
+        );
 
         // First line should be red
         let region = ColorRegion::line(0, 20);
-        assert!(screenshot.assert_region_has_color(region, Color::Red).is_ok());
+        assert!(screenshot
+            .assert_region_has_color(region, Color::Red)
+            .is_ok());
 
         // Second line should be green
         let region = ColorRegion::line(1, 20);
-        assert!(screenshot.assert_region_has_color(region, Color::Green).is_ok());
+        assert!(screenshot
+            .assert_region_has_color(region, Color::Green)
+            .is_ok());
     }
 
     // ========================================================================
@@ -1902,12 +2065,24 @@ mod tests {
     fn test_tile_layout_names() {
         assert_eq!(TileLayout::Single.to_tmux_layout(), "main-vertical");
         assert_eq!(TileLayout::MainVertical.to_tmux_layout(), "main-vertical");
-        assert_eq!(TileLayout::MainHorizontal.to_tmux_layout(), "main-horizontal");
-        assert_eq!(TileLayout::EvenHorizontal.to_tmux_layout(), "even-horizontal");
+        assert_eq!(
+            TileLayout::MainHorizontal.to_tmux_layout(),
+            "main-horizontal"
+        );
+        assert_eq!(
+            TileLayout::EvenHorizontal.to_tmux_layout(),
+            "even-horizontal"
+        );
         assert_eq!(TileLayout::EvenVertical.to_tmux_layout(), "even-vertical");
         assert_eq!(TileLayout::Tiled.to_tmux_layout(), "tiled");
-        assert_eq!(TileLayout::MainVerticalRatio(70).to_tmux_layout(), "main-vertical");
-        assert_eq!(TileLayout::MainHorizontalRatio(60).to_tmux_layout(), "main-horizontal");
+        assert_eq!(
+            TileLayout::MainVerticalRatio(70).to_tmux_layout(),
+            "main-vertical"
+        );
+        assert_eq!(
+            TileLayout::MainHorizontalRatio(60).to_tmux_layout(),
+            "main-horizontal"
+        );
     }
 
     #[test]
@@ -1944,10 +2119,7 @@ mod tests {
     #[test]
     fn test_tiled_capture_result_combined_view() {
         let result = TiledCaptureResult {
-            panes: vec![
-                (0, "Content A".to_string()),
-                (1, "Content B".to_string()),
-            ],
+            panes: vec![(0, "Content A".to_string()), (1, "Content B".to_string())],
             session_name: "test".to_string(),
             layout: TileLayout::EvenHorizontal,
             timestamp: std::time::Instant::now(),
@@ -2016,8 +2188,14 @@ mod tests {
     fn test_tile_layout_equality() {
         assert_eq!(TileLayout::Tiled, TileLayout::Tiled);
         assert_ne!(TileLayout::Tiled, TileLayout::Single);
-        assert_eq!(TileLayout::MainVerticalRatio(70), TileLayout::MainVerticalRatio(70));
-        assert_ne!(TileLayout::MainVerticalRatio(70), TileLayout::MainVerticalRatio(80));
+        assert_eq!(
+            TileLayout::MainVerticalRatio(70),
+            TileLayout::MainVerticalRatio(70)
+        );
+        assert_ne!(
+            TileLayout::MainVerticalRatio(70),
+            TileLayout::MainVerticalRatio(80)
+        );
     }
 
     #[test]
@@ -2100,8 +2278,12 @@ mod tmux_integration_tests {
         session.split_panes(2).expect("Failed to split panes");
 
         // Run different commands in each pane
-        session.run_in_pane(0, "echo 'PANE_ZERO'").expect("Failed to run in pane 0");
-        session.run_in_pane(1, "echo 'PANE_ONE'").expect("Failed to run in pane 1");
+        session
+            .run_in_pane(0, "echo 'PANE_ZERO'")
+            .expect("Failed to run in pane 0");
+        session
+            .run_in_pane(1, "echo 'PANE_ONE'")
+            .expect("Failed to run in pane 1");
 
         std::thread::sleep(std::time::Duration::from_millis(500));
 
@@ -2157,13 +2339,14 @@ mod tmux_integration_tests {
             return;
         }
 
-        let mut session = TmuxTiledSession::new(80, 24)
-            .expect("Failed to create session");
+        let mut session = TmuxTiledSession::new(80, 24).expect("Failed to create session");
 
         session.split_panes(2).expect("Failed to split");
 
         // Send keys without Enter
-        session.send_keys_to_pane(0, "test input").expect("Failed to send keys");
+        session
+            .send_keys_to_pane(0, "test input")
+            .expect("Failed to send keys");
 
         // Verify error for invalid pane
         let result = session.send_keys_to_pane(99, "invalid");

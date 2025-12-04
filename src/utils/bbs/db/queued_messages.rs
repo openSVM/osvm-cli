@@ -1,8 +1,8 @@
 // Queued message operations
 
-use diesel::prelude::*;
+use super::{now_as_useconds, Result};
 use crate::utils::bbs::{models::*, schema::queued_messages};
-use super::{Result, now_as_useconds};
+use diesel::prelude::*;
 
 /// Get unsent messages for a user
 pub fn get_unsent(conn: &mut SqliteConnection, user_id: i32) -> Result<Vec<QueuedMessage>> {
@@ -14,7 +14,12 @@ pub fn get_unsent(conn: &mut SqliteConnection, user_id: i32) -> Result<Vec<Queue
 }
 
 /// Queue a new message
-pub fn queue(conn: &mut SqliteConnection, sender_id: i32, recipient_id: i32, body: &str) -> Result<()> {
+pub fn queue(
+    conn: &mut SqliteConnection,
+    sender_id: i32,
+    recipient_id: i32,
+    body: &str,
+) -> Result<()> {
     let timestamp = now_as_useconds();
     let new_message = QueuedMessageNew {
         sender_id,

@@ -441,10 +441,7 @@ mod tests {
         assert_eq!(to_ovsm_value(&json!(42)), "42");
         assert_eq!(to_ovsm_value(&json!("hello")), "\"hello\"");
         assert_eq!(to_ovsm_value(&json!([1, 2, 3])), "[1 2 3]");
-        assert_eq!(
-            to_ovsm_value(&json!({"name": "test"})),
-            "{:name \"test\"}"
-        );
+        assert_eq!(to_ovsm_value(&json!({"name": "test"})), "{:name \"test\"}");
     }
 
     #[tokio::test]

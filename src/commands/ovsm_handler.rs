@@ -170,14 +170,16 @@ pub async fn handle_ovsm_command(
             }
         }
         Some(("compile", compile_matches)) => {
-            let script = compile_matches.get_one::<String>("script").expect("required");
+            let script = compile_matches
+                .get_one::<String>("script")
+                .expect("required");
             let output = compile_matches.get_one::<String>("output");
             let opt_level = *compile_matches.get_one::<u8>("opt-level").unwrap_or(&2);
             let verify = compile_matches.get_flag("verify");
             let emit_ir = compile_matches.get_flag("emit-ir");
             let analyze = compile_matches.get_flag("analyze");
 
-            use ovsm::compiler::{Compiler, CompileOptions};
+            use ovsm::compiler::{CompileOptions, Compiler};
 
             println!("🔧 Compiling OVSM to sBPF: {}", script);
 
@@ -186,8 +188,8 @@ pub async fn handle_ovsm_command(
 
             // Run register analysis if requested
             if analyze {
-                use ovsm::{SExprScanner, SExprParser};
-                use ovsm::compiler::{TypeChecker, IrGenerator, RegAllocAnalyzer};
+                use ovsm::compiler::{IrGenerator, RegAllocAnalyzer, TypeChecker};
+                use ovsm::{SExprParser, SExprScanner};
 
                 println!("\n📊 Running Register Pressure Analysis...\n");
 
@@ -212,12 +214,17 @@ pub async fn handle_ovsm_command(
                 println!("{}", report.format());
 
                 // Exit if critical issues found
-                let critical_count = report.issues.iter()
+                let critical_count = report
+                    .issues
+                    .iter()
                     .filter(|i| i.severity == "critical")
                     .count();
 
                 if critical_count > 0 {
-                    eprintln!("\n🚨 {} critical register allocation issue(s) detected!", critical_count);
+                    eprintln!(
+                        "\n🚨 {} critical register allocation issue(s) detected!",
+                        critical_count
+                    );
                     eprintln!("   These may cause runtime failures. Review before deploying.\n");
                 }
             }
@@ -228,9 +235,9 @@ pub async fn handle_ovsm_command(
                 compute_budget: 200_000,
                 debug_info: emit_ir,
                 source_map: false,
-                sbpf_version: ovsm::compiler::SbpfVersion::V1,  // V1 with relocations for comparison
-                enable_solana_abi: false,  // Disabled until opcode issues are fixed
-                type_check_mode: ovsm::compiler::TypeCheckMode::Legacy,  // Use existing IR-level checker
+                sbpf_version: ovsm::compiler::SbpfVersion::V1, // V1 with relocations for comparison
+                enable_solana_abi: false, // Disabled until opcode issues are fixed
+                type_check_mode: ovsm::compiler::TypeCheckMode::Legacy, // Use existing IR-level checker
             };
 
             let compiler = Compiler::new(options);
@@ -365,7 +372,10 @@ pub async fn handle_ovsm_command(
             if !report.issues.is_empty() {
                 println!("\n🚨 Issues Found:");
                 for issue in &report.issues {
-                    println!("  {} Line {}: {}", issue.severity, issue.line, issue.message);
+                    println!(
+                        "  {} Line {}: {}",
+                        issue.severity, issue.line, issue.message
+                    );
                     if let Some(suggestion) = &issue.suggestion {
                         println!("     💡 Suggestion: {}", suggestion);
                     }
@@ -513,11 +523,23 @@ pub async fn handle_ovsm_command(
                             if !idl.instructions.is_empty() {
                                 println!("\n📝 Instructions:");
                                 for instr in &idl.instructions {
-                                    let disc = instr.discriminator.as_ref()
-                                        .map(|d| d.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(","))
+                                    let disc = instr
+                                        .discriminator
+                                        .as_ref()
+                                        .map(|d| {
+                                            d.iter()
+                                                .map(|b| b.to_string())
+                                                .collect::<Vec<_>>()
+                                                .join(",")
+                                        })
                                         .unwrap_or_default();
-                                    println!("   [{}] {} ({} accounts, {} args)",
-                                        disc, instr.name, instr.accounts.len(), instr.args.len());
+                                    println!(
+                                        "   [{}] {} ({} accounts, {} args)",
+                                        disc,
+                                        instr.name,
+                                        instr.accounts.len(),
+                                        instr.args.len()
+                                    );
                                 }
                             }
                         }
@@ -535,7 +557,8 @@ pub async fn handle_ovsm_command(
         }
         Some(("validate-instruction", val_matches)) => {
             let idl_path = val_matches.get_one::<String>("idl").expect("required");
-            let data_parts: Vec<&String> = val_matches.get_many::<String>("data")
+            let data_parts: Vec<&String> = val_matches
+                .get_many::<String>("data")
                 .expect("required")
                 .collect();
             let verbose = val_matches.get_flag("verbose");
@@ -546,11 +569,15 @@ pub async fn handle_ovsm_command(
 
             let idl_content = std::fs::read_to_string(idl_path)?;
             let idl: AnchorIdl = serde_json::from_str(&idl_content).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid IDL JSON: {}", e))
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid IDL JSON: {}", e),
+                )
             })?;
 
             // Parse hex instruction data
-            let combined_hex: String = data_parts.iter()
+            let combined_hex: String = data_parts
+                .iter()
                 .map(|s| s.trim_start_matches("0x").trim_start_matches("0X"))
                 .collect::<Vec<_>>()
                 .join("");
@@ -574,14 +601,22 @@ pub async fn handle_ovsm_command(
             if verbose {
                 println!("\n📊 Raw Data:");
                 println!("   Length: {} bytes", instruction_data.len());
-                println!("   Hex: {}", instruction_data.iter()
-                    .map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+                println!(
+                    "   Hex: {}",
+                    instruction_data
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
             }
 
             // Find matching instruction by discriminator
             let discriminator_byte = instruction_data[0];
             let matching = idl.instructions.iter().find(|instr| {
-                instr.discriminator.as_ref()
+                instr
+                    .discriminator
+                    .as_ref()
                     .map(|d| !d.is_empty() && d[0] == discriminator_byte)
                     .unwrap_or(false)
             });
@@ -589,8 +624,15 @@ pub async fn handle_ovsm_command(
             match matching {
                 Some(instr) => {
                     println!("\n✅ Matched Instruction: {}", instr.name);
-                    let disc_str = instr.discriminator.as_ref()
-                        .map(|d| d.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "))
+                    let disc_str = instr
+                        .discriminator
+                        .as_ref()
+                        .map(|d| {
+                            d.iter()
+                                .map(|b| format!("{:02x}", b))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        })
                         .unwrap_or_default();
                     println!("   Discriminator: [{}]", disc_str);
 
@@ -598,10 +640,17 @@ pub async fn handle_ovsm_command(
                         println!("\n📋 Required Accounts:");
                         for (i, acc) in instr.accounts.iter().enumerate() {
                             let mut flags = Vec::new();
-                            if acc.is_signer { flags.push("signer"); }
-                            if acc.is_mut { flags.push("writable"); }
-                            let flag_str = if flags.is_empty() { String::new() }
-                                else { format!(" [{}]", flags.join(", ")) };
+                            if acc.is_signer {
+                                flags.push("signer");
+                            }
+                            if acc.is_mut {
+                                flags.push("writable");
+                            }
+                            let flag_str = if flags.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" [{}]", flags.join(", "))
+                            };
                             println!("   {}. {}{}", i, acc.name, flag_str);
                         }
                     }
@@ -610,35 +659,56 @@ pub async fn handle_ovsm_command(
                         println!("\n🔢 Arguments:");
                         let mut offset = 1; // Skip discriminator
                         for arg in &instr.args {
-                            let (value_str, bytes) = decode_idl_type(&arg.ty, &instruction_data, offset, verbose);
+                            let (value_str, bytes) =
+                                decode_idl_type(&arg.ty, &instruction_data, offset, verbose);
                             let type_name = format_idl_type(&arg.ty);
                             println!("   {} ({}): {}", arg.name, type_name, value_str);
                             if verbose && bytes > 0 {
                                 let end = (offset + bytes).min(instruction_data.len());
-                                let hex: String = instruction_data[offset..end].iter()
-                                    .map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                                let hex: String = instruction_data[offset..end]
+                                    .iter()
+                                    .map(|b| format!("{:02x}", b))
+                                    .collect::<Vec<_>>()
+                                    .join(" ");
                                 println!("      Bytes [{}..{}]: {}", offset, end, hex);
                             }
                             offset += bytes;
                         }
 
                         if offset < instruction_data.len() {
-                            println!("\n⚠️  {} extra bytes after arguments", instruction_data.len() - offset);
+                            println!(
+                                "\n⚠️  {} extra bytes after arguments",
+                                instruction_data.len() - offset
+                            );
                         } else if offset > instruction_data.len() {
-                            println!("\n❌ Insufficient data: expected {} bytes, got {}", offset, instruction_data.len());
+                            println!(
+                                "\n❌ Insufficient data: expected {} bytes, got {}",
+                                offset,
+                                instruction_data.len()
+                            );
                         }
                     } else if instruction_data.len() > 1 {
-                        println!("\n⚠️  No arguments defined but {} extra bytes present", instruction_data.len() - 1);
+                        println!(
+                            "\n⚠️  No arguments defined but {} extra bytes present",
+                            instruction_data.len() - 1
+                        );
                     } else {
                         println!("\n   (no arguments)");
                     }
                 }
                 None => {
-                    eprintln!("\n❌ No instruction found with discriminator: 0x{:02x}", discriminator_byte);
+                    eprintln!(
+                        "\n❌ No instruction found with discriminator: 0x{:02x}",
+                        discriminator_byte
+                    );
                     eprintln!("\n📝 Available discriminators:");
                     for instr in &idl.instructions {
                         if let Some(disc) = &instr.discriminator {
-                            let disc_str = disc.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                            let disc_str = disc
+                                .iter()
+                                .map(|b| format!("{:02x}", b))
+                                .collect::<Vec<_>>()
+                                .join(" ");
                             eprintln!("   [{}] = {}", disc_str, instr.name);
                         }
                     }
@@ -755,9 +825,7 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
     let mut line_depths: Vec<(usize, i32, i32)> = Vec::new(); // (line_num, start_depth, end_depth)
 
     // Pattern to detect instruction boundary: (if (= discriminator N)
-    let discriminator_pattern = regex::Regex::new(
-        r"\(if\s+\(=\s+discriminator\s+(\d+)\)"
-    ).unwrap();
+    let discriminator_pattern = regex::Regex::new(r"\(if\s+\(=\s+discriminator\s+(\d+)\)").unwrap();
 
     // Pattern to detect closing of instruction block: null))
     let null_close_pattern = regex::Regex::new(r"null\)*\s*$").unwrap();
@@ -766,9 +834,11 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
     let define_pattern = regex::Regex::new(r"\(define\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s").unwrap();
     let set_pattern = regex::Regex::new(r"\(set!\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s").unwrap();
     let identifier_pattern = regex::Regex::new(r"\b([a-zA-Z_][a-zA-Z0-9_-]*)\b").unwrap();
+    let numeric_return_pattern = regex::Regex::new(r"^\d+\)*$").unwrap();
 
     // Track variables for unused/shadowing detection
-    let mut variables: std::collections::HashMap<String, VariableInfo> = std::collections::HashMap::new();
+    let mut variables: std::collections::HashMap<String, VariableInfo> =
+        std::collections::HashMap::new();
     let mut scope_stack: Vec<(i32, Vec<String>)> = Vec::new(); // (depth, vars defined at this depth)
 
     // Auto-detect expected base depth from first instruction
@@ -794,11 +864,37 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
 
     // Reserved/built-in identifiers that shouldn't be shadowed
     let builtins: std::collections::HashSet<&str> = [
-        "define", "set!", "if", "do", "let", "for", "while", "break", "continue",
-        "true", "false", "null", "and", "or", "not", "range", "length", "get",
-        "sol_log_", "sol_log_64_", "mem-load", "mem-store", "mem-load1", "mem-store1",
-        "account-data-ptr", "account-is-signer", "instruction-data-ptr",
-    ].iter().cloned().collect();
+        "define",
+        "set!",
+        "if",
+        "do",
+        "let",
+        "for",
+        "while",
+        "break",
+        "continue",
+        "true",
+        "false",
+        "null",
+        "and",
+        "or",
+        "not",
+        "range",
+        "length",
+        "get",
+        "sol_log_",
+        "sol_log_64_",
+        "mem-load",
+        "mem-store",
+        "mem-load1",
+        "mem-store1",
+        "account-data-ptr",
+        "account-is-signer",
+        "instruction-data-ptr",
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     for (line_idx, line) in lines.iter().enumerate() {
         let line_num = line_idx + 1;
@@ -832,9 +928,7 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
                                 issues.push(LintIssue {
                                     line: info.defined_at,
                                     message: format!("Unused variable '{}'", var_name),
-                                    suggestion: Some(format!(
-                                        "Remove or use this variable, or prefix with '_' to suppress warning"
-                                    )),
+                                    suggestion: Some("Remove or use this variable, or prefix with '_' to suppress warning".to_string()),
                                     severity: LintSeverity::Warning,
                                 });
                             }
@@ -855,7 +949,9 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
                 issues.push(LintIssue {
                     line: line_num,
                     message: "Unreachable code after return/abort".to_string(),
-                    suggestion: Some("Remove this code or restructure the control flow".to_string()),
+                    suggestion: Some(
+                        "Remove this code or restructure the control flow".to_string(),
+                    ),
                     severity: LintSeverity::Warning,
                 });
             }
@@ -868,7 +964,7 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
                 return_depth = end_depth;
             }
             // Also check for numeric returns at end of blocks (like "0)" or "1)")
-            if regex::Regex::new(r"^\d+\)*$").unwrap().is_match(trimmed) && end_depth < start_depth {
+            if numeric_return_pattern.is_match(trimmed) && end_depth < start_depth {
                 // This is a return value at end of block - reset unreachable tracking
                 after_return = false;
             }
@@ -901,17 +997,22 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
                     issues.push(LintIssue {
                         line: line_num,
                         message: format!("Variable '{}' shadows a built-in function", var_name),
-                        suggestion: Some("Use a different name - shadowing builtins is confusing".to_string()),
+                        suggestion: Some(
+                            "Use a different name - shadowing builtins is confusing".to_string(),
+                        ),
                         severity: LintSeverity::Warning,
                     });
                 }
 
-                variables.insert(var_name.clone(), VariableInfo {
-                    name: var_name.clone(),
-                    defined_at: line_num,
-                    used_at: Vec::new(),
-                    scope_depth: end_depth,
-                });
+                variables.insert(
+                    var_name.clone(),
+                    VariableInfo {
+                        name: var_name.clone(),
+                        defined_at: line_num,
+                        used_at: Vec::new(),
+                        scope_depth: end_depth,
+                    },
+                );
 
                 // Track in current scope
                 if let Some((_, vars)) = scope_stack.last_mut() {
@@ -921,7 +1022,8 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
 
             // Track variable uses (but not in define/set! positions)
             let line_without_defines = define_pattern.replace_all(line, "(define __PLACEHOLDER__ ");
-            let line_without_sets = set_pattern.replace_all(&line_without_defines, "(set! __PLACEHOLDER__ ");
+            let line_without_sets =
+                set_pattern.replace_all(&line_without_defines, "(set! __PLACEHOLDER__ ");
 
             for caps in identifier_pattern.captures_iter(&line_without_sets) {
                 let ident = caps.get(1).unwrap().as_str();
@@ -992,7 +1094,14 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
         if is_comment && (trimmed.contains("TODO") || trimmed.contains("FIXME")) {
             issues.push(LintIssue {
                 line: line_num,
-                message: format!("Found {} marker", if trimmed.contains("TODO") { "TODO" } else { "FIXME" }),
+                message: format!(
+                    "Found {} marker",
+                    if trimmed.contains("TODO") {
+                        "TODO"
+                    } else {
+                        "FIXME"
+                    }
+                ),
                 suggestion: None,
                 severity: LintSeverity::Info,
             });
@@ -1003,7 +1112,9 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
             issues.push(LintIssue {
                 line: line_num,
                 message: format!("Line exceeds 120 characters ({} chars)", line.len()),
-                suggestion: Some("Consider breaking into multiple lines for readability".to_string()),
+                suggestion: Some(
+                    "Consider breaking into multiple lines for readability".to_string(),
+                ),
                 severity: LintSeverity::Info,
             });
         }
@@ -1025,7 +1136,9 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
             issues.push(LintIssue {
                 line: info.defined_at,
                 message: format!("Unused variable '{}'", name),
-                suggestion: Some("Remove or use this variable, or prefix with '_' to suppress".to_string()),
+                suggestion: Some(
+                    "Remove or use this variable, or prefix with '_' to suppress".to_string(),
+                ),
                 severity: LintSeverity::Warning,
             });
         }
@@ -1048,9 +1161,18 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
     });
 
     // Count issues by severity
-    let error_count = issues.iter().filter(|i| i.severity == LintSeverity::Error).count();
-    let warning_count = issues.iter().filter(|i| i.severity == LintSeverity::Warning).count();
-    let info_count = issues.iter().filter(|i| i.severity == LintSeverity::Info).count();
+    let error_count = issues
+        .iter()
+        .filter(|i| i.severity == LintSeverity::Error)
+        .count();
+    let warning_count = issues
+        .iter()
+        .filter(|i| i.severity == LintSeverity::Warning)
+        .count();
+    let info_count = issues
+        .iter()
+        .filter(|i| i.severity == LintSeverity::Info)
+        .count();
 
     // Generate summary
     let summary = if issues.is_empty() {
@@ -1073,11 +1195,23 @@ fn lint_ovsm_script(source: &str, verbose: bool) -> LintReport {
 
     // Verbose depth trace
     if verbose {
-        println!("\n📈 Depth trace (line: start → end) [base depth: {}]:", base_depth);
+        println!(
+            "\n📈 Depth trace (line: start → end) [base depth: {}]:",
+            base_depth
+        );
         for (line_num, start, end) in &line_depths {
             if *start != *end || *start > 3 {
-                let indicator = if *end > *start { "↗" } else if *end < *start { "↘" } else { "→" };
-                println!("   Line {:4}: {:2} {} {:2}", line_num, start, indicator, end);
+                let indicator = if *end > *start {
+                    "↗"
+                } else if *end < *start {
+                    "↘"
+                } else {
+                    "→"
+                };
+                println!(
+                    "   Line {:4}: {:2} {} {:2}",
+                    line_num, start, indicator, end
+                );
             }
         }
     }
@@ -1103,7 +1237,9 @@ fn count_parens_smart(line: &str) -> (i32, i32) {
         match c {
             ';' if !in_string => break, // Comment - ignore rest of line
             '"' => in_string = !in_string,
-            '\\' if in_string => { chars.next(); } // Escape sequence
+            '\\' if in_string => {
+                chars.next();
+            } // Escape sequence
             '(' if !in_string => opens += 1,
             ')' if !in_string => closes += 1,
             _ => {}
@@ -1219,30 +1355,55 @@ fn decode_idl_type(ty: &IdlType, data: &[u8], offset: usize, _verbose: bool) -> 
                 (format!("{}", val), 2)
             }
             "u32" if offset + 4 <= data.len() => {
-                let val = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+                let val = u32::from_le_bytes([
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
                 (format!("{}", val), 4)
             }
             "u64" if offset + 8 <= data.len() => {
                 let val = u64::from_le_bytes([
-                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
-                    data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
                 ]);
                 (format!("{}", val), 8)
             }
             "i64" if offset + 8 <= data.len() => {
                 let val = i64::from_le_bytes([
-                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
-                    data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
                 ]);
                 (format!("{}", val), 8)
             }
-            "bool" => ((if data[offset] != 0 { "true" } else { "false" }).to_string(), 1),
+            "bool" => (
+                (if data[offset] != 0 { "true" } else { "false" }).to_string(),
+                1,
+            ),
             "publicKey" | "pubkey" if offset + 32 <= data.len() => {
                 let encoded = bs58::encode(&data[offset..offset + 32]).into_string();
                 (encoded, 32)
             }
             "string" if offset + 4 <= data.len() => {
-                let len = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]) as usize;
+                let len = u32::from_le_bytes([
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]) as usize;
                 if offset + 4 + len <= data.len() {
                     match std::str::from_utf8(&data[offset + 4..offset + 4 + len]) {
                         Ok(s) => (format!("\"{}\"", s), 4 + len),
@@ -1256,7 +1417,12 @@ fn decode_idl_type(ty: &IdlType, data: &[u8], offset: usize, _verbose: bool) -> 
         },
         IdlType::Array { array: _ } => ("<array>".to_string(), 0),
         IdlType::Vec { vec: _ } if offset + 4 <= data.len() => {
-            let len = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+            let len = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
             (format!("<vec of {} elements>", len), 4)
         }
         IdlType::Option { option } if offset < data.len() => {

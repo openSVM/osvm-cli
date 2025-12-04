@@ -5,7 +5,10 @@ use axum::{
         Path, Query, State,
     },
     http::StatusCode,
-    response::{sse::{Event, KeepAlive, Sse}, IntoResponse, Json},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Json,
+    },
     routing::{get, post},
     Router,
 };
@@ -79,14 +82,12 @@ pub async fn start_server(
     }
 
     // Apply state and CORS
-    let app = app
-        .with_state(app_state)
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        );
+    let app = app.with_state(app_state).layer(
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any),
+    );
 
     let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
     tracing::info!("Stream server listening on {}", addr);
@@ -148,16 +149,15 @@ async fn sse_handler(
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let rx = state.stream_service.subscribe();
 
-    let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
-        .filter_map(|result| async move {
-            match result {
-                Ok(event) => {
-                    let json = serde_json::to_string(&event).ok()?;
-                    Some(Ok(Event::default().data(json)))
-                }
-                Err(_) => None,
+    let stream = tokio_stream::wrappers::BroadcastStream::new(rx).filter_map(|result| async move {
+        match result {
+            Ok(event) => {
+                let json = serde_json::to_string(&event).ok()?;
+                Some(Ok(Event::default().data(json)))
             }
-        });
+            Err(_) => None,
+        }
+    });
 
     Sse::new(stream).keep_alive(KeepAlive::default())
 }

@@ -1,14 +1,15 @@
 // Board database operations
 
+use super::{now_as_useconds, Result};
+use crate::utils::bbs::{
+    models::*,
+    schema::{boards, moderators},
+};
 use diesel::prelude::*;
-use crate::utils::bbs::{models::*, schema::{boards, moderators}};
-use super::{Result, now_as_useconds};
 
 /// List all boards
 pub fn list(conn: &mut SqliteConnection) -> Result<Vec<Board>> {
-    boards::table
-        .load::<Board>(conn)
-        .map_err(|e| e.into())
+    boards::table.load::<Board>(conn).map_err(|e| e.into())
 }
 
 /// Get board by ID
@@ -59,11 +60,7 @@ pub fn create_with_creator(
 
 /// Delete a board (only if user is creator or moderator)
 /// Returns Ok(true) if deleted, Ok(false) if no permission, Err on DB error
-pub fn delete(
-    conn: &mut SqliteConnection,
-    board_id: i32,
-    requester_user_id: i32,
-) -> Result<bool> {
+pub fn delete(conn: &mut SqliteConnection, board_id: i32, requester_user_id: i32) -> Result<bool> {
     // Get the board
     let board = get(conn, board_id)?;
 
@@ -84,23 +81,22 @@ pub fn delete(
     // Delete all posts in the board first (cascade)
     diesel::delete(
         crate::utils::bbs::schema::posts::table
-            .filter(crate::utils::bbs::schema::posts::board_id.eq(board_id))
-    ).execute(conn)?;
+            .filter(crate::utils::bbs::schema::posts::board_id.eq(board_id)),
+    )
+    .execute(conn)?;
 
     // Delete all moderator assignments for this board
-    diesel::delete(
-        moderators::table.filter(moderators::board_id.eq(board_id))
-    ).execute(conn)?;
+    diesel::delete(moderators::table.filter(moderators::board_id.eq(board_id))).execute(conn)?;
 
     // Delete board states
     diesel::delete(
         crate::utils::bbs::schema::board_states::table
-            .filter(crate::utils::bbs::schema::board_states::board_id.eq(board_id))
-    ).execute(conn)?;
+            .filter(crate::utils::bbs::schema::board_states::board_id.eq(board_id)),
+    )
+    .execute(conn)?;
 
     // Delete the board
-    diesel::delete(boards::table.find(board_id))
-        .execute(conn)?;
+    diesel::delete(boards::table.find(board_id)).execute(conn)?;
 
     Ok(true)
 }

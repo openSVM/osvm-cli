@@ -52,12 +52,22 @@ pub fn format_ir_instr(instr: &IrInstruction) -> String {
 
         IrInstruction::Load(dst, base, off) => format!("r{} = [r{} + {}]", dst.0, base.0, off),
         IrInstruction::Load1(dst, base, off) => format!("r{} = (u8)[r{} + {}]", dst.0, base.0, off),
-        IrInstruction::Load2(dst, base, off) => format!("r{} = (u16)[r{} + {}]", dst.0, base.0, off),
-        IrInstruction::Load4(dst, base, off) => format!("r{} = (u32)[r{} + {}]", dst.0, base.0, off),
+        IrInstruction::Load2(dst, base, off) => {
+            format!("r{} = (u16)[r{} + {}]", dst.0, base.0, off)
+        }
+        IrInstruction::Load4(dst, base, off) => {
+            format!("r{} = (u32)[r{} + {}]", dst.0, base.0, off)
+        }
         IrInstruction::Store(base, src, off) => format!("[r{} + {}] = r{}", base.0, off, src.0),
-        IrInstruction::Store1(base, src, off) => format!("(u8)[r{} + {}] = r{}", base.0, off, src.0),
-        IrInstruction::Store2(base, src, off) => format!("(u16)[r{} + {}] = r{}", base.0, off, src.0),
-        IrInstruction::Store4(base, src, off) => format!("(u32)[r{} + {}] = r{}", base.0, off, src.0),
+        IrInstruction::Store1(base, src, off) => {
+            format!("(u8)[r{} + {}] = r{}", base.0, off, src.0)
+        }
+        IrInstruction::Store2(base, src, off) => {
+            format!("(u16)[r{} + {}] = r{}", base.0, off, src.0)
+        }
+        IrInstruction::Store4(base, src, off) => {
+            format!("(u32)[r{} + {}] = r{}", base.0, off, src.0)
+        }
 
         IrInstruction::Label(name) => format!("{}:", name),
         IrInstruction::Jump(target) => format!("jmp {}", target),
@@ -99,9 +109,11 @@ pub fn disassemble_sbpf(code: &[u8], base_addr: u64) {
 
     let mut pc = 0;
     while pc < code.len() {
-        if pc + 8 > code.len() { break; }
+        if pc + 8 > code.len() {
+            break;
+        }
 
-        let bytes = &code[pc..pc+8];
+        let bytes = &code[pc..pc + 8];
         let opcode = bytes[0];
         let regs = bytes[1];
         let dst = regs & 0xf;
@@ -109,9 +121,10 @@ pub fn disassemble_sbpf(code: &[u8], base_addr: u64) {
         let off = i16::from_le_bytes([bytes[2], bytes[3]]);
         let imm = i32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
 
-        let hex = format!("{:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7]);
+        let hex = format!(
+            "{:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]
+        );
 
         let (mnemonic, extra_bytes) = decode_sbpf(opcode, dst, src, off, imm, &code[pc..]);
 
@@ -279,7 +292,12 @@ impl RegAllocTrace {
 
         println!("\nReloads:");
         for (virt, offset, into) in &self.reloads {
-            println!("  IR r{} <- [r10{:+}] into {}", virt.0, offset, phys_name(*into));
+            println!(
+                "  IR r{} <- [r10{:+}] into {}",
+                virt.0,
+                offset,
+                phys_name(*into)
+            );
         }
 
         println!("═══════════════════════════════════════════════════════════\n");
@@ -311,8 +329,11 @@ pub fn validate_sbpf(code: &[u8]) -> Vec<String> {
         return errors;
     }
 
-    if code.len() % 8 != 0 {
-        errors.push(format!("Bytecode length {} not aligned to 8 bytes", code.len()));
+    if !code.len().is_multiple_of(8) {
+        errors.push(format!(
+            "Bytecode length {} not aligned to 8 bytes",
+            code.len()
+        ));
     }
 
     let mut pc = 0;
@@ -402,10 +423,14 @@ pub fn validate_sbpf(code: &[u8]) -> Vec<String> {
 
 /// Extract .text section from ELF
 pub fn extract_text_section(elf: &[u8]) -> Option<(u64, Vec<u8>)> {
-    if elf.len() < 64 { return None; }
+    if elf.len() < 64 {
+        return None;
+    }
 
     // Check ELF magic
-    if &elf[0..4] != b"\x7fELF" { return None; }
+    if &elf[0..4] != b"\x7fELF" {
+        return None;
+    }
 
     let e_shoff = u64::from_le_bytes(elf[40..48].try_into().ok()?) as usize;
     let e_shentsize = u16::from_le_bytes(elf[58..60].try_into().ok()?) as usize;
@@ -413,19 +438,21 @@ pub fn extract_text_section(elf: &[u8]) -> Option<(u64, Vec<u8>)> {
 
     for i in 0..e_shnum {
         let sh_offset = e_shoff + i * e_shentsize;
-        if sh_offset + e_shentsize > elf.len() { break; }
+        if sh_offset + e_shentsize > elf.len() {
+            break;
+        }
 
-        let sh_type = u32::from_le_bytes(elf[sh_offset+4..sh_offset+8].try_into().ok()?);
-        let sh_flags = u64::from_le_bytes(elf[sh_offset+8..sh_offset+16].try_into().ok()?);
-        let sh_addr = u64::from_le_bytes(elf[sh_offset+16..sh_offset+24].try_into().ok()?);
-        let offset = u64::from_le_bytes(elf[sh_offset+24..sh_offset+32].try_into().ok()?) as usize;
-        let size = u64::from_le_bytes(elf[sh_offset+32..sh_offset+40].try_into().ok()?) as usize;
+        let sh_type = u32::from_le_bytes(elf[sh_offset + 4..sh_offset + 8].try_into().ok()?);
+        let sh_flags = u64::from_le_bytes(elf[sh_offset + 8..sh_offset + 16].try_into().ok()?);
+        let sh_addr = u64::from_le_bytes(elf[sh_offset + 16..sh_offset + 24].try_into().ok()?);
+        let offset =
+            u64::from_le_bytes(elf[sh_offset + 24..sh_offset + 32].try_into().ok()?) as usize;
+        let size =
+            u64::from_le_bytes(elf[sh_offset + 32..sh_offset + 40].try_into().ok()?) as usize;
 
         // SHT_PROGBITS (1) with SHF_EXECINSTR (4)
-        if sh_type == 1 && (sh_flags & 4) != 0 {
-            if offset + size <= elf.len() {
-                return Some((sh_addr, elf[offset..offset+size].to_vec()));
-            }
+        if sh_type == 1 && (sh_flags & 4) != 0 && offset + size <= elf.len() {
+            return Some((sh_addr, elf[offset..offset + size].to_vec()));
         }
     }
 
@@ -434,8 +461,8 @@ pub fn extract_text_section(elf: &[u8]) -> Option<(u64, Vec<u8>)> {
 
 /// Full debug dump of compilation result
 pub fn debug_compile(source: &str) {
-    use crate::compiler::{Compiler, CompileOptions, TypeChecker, IrGenerator};
-    use crate::{SExprScanner, SExprParser};
+    use crate::compiler::{CompileOptions, Compiler, IrGenerator, TypeChecker};
+    use crate::{SExprParser, SExprScanner};
 
     println!("\n");
     println!("╔═════════════════════════════════════════════════════════════╗");
@@ -485,7 +512,14 @@ pub fn debug_compile(source: &str) {
             println!("  ELF size:      {} bytes", result.elf_bytes.len());
 
             if let Some(verify) = &result.verification {
-                println!("  Verification:  {}", if verify.valid { "✅ VALID" } else { "❌ INVALID" });
+                println!(
+                    "  Verification:  {}",
+                    if verify.valid {
+                        "✅ VALID"
+                    } else {
+                        "❌ INVALID"
+                    }
+                );
                 for err in &verify.errors {
                     println!("    Error: {}", err);
                 }
@@ -533,8 +567,10 @@ mod tests {
     #[test]
     fn test_validate_sbpf() {
         // Valid minimal program: mov r0, 0; exit
-        let valid = [0xb7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                     0x95, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let valid = [
+            0xb7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x95, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
         assert!(validate_sbpf(&valid).is_empty());
 
         // No exit

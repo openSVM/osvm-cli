@@ -19,10 +19,13 @@
 //! - WS   /ws                      - WebSocket for real-time updates
 
 use axum::{
-    extract::{Path, State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{
+        ws::{Message, WebSocket},
+        Path, State, WebSocketUpgrade,
+    },
     http::StatusCode,
     response::{IntoResponse, Json},
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -30,9 +33,11 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 
-use diesel::RunQueryDsl;
 use crate::utils::bbs::db;
-use crate::utils::bbs::federation::{FederationManager, Peer, SyncRequest, SyncResponse, FederatedMessage};
+use crate::utils::bbs::federation::{
+    FederatedMessage, FederationManager, Peer, SyncRequest, SyncResponse,
+};
+use diesel::RunQueryDsl;
 
 /// Server state shared across handlers
 pub struct ServerState {
@@ -291,7 +296,12 @@ async fn create_board(
 ) -> impl IntoResponse {
     let mut conn = match db::establish_connection() {
         Ok(c) => c,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("DB error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("DB error: {}", e)),
+            )
+        }
     };
 
     let name = req.name.to_uppercase();
@@ -303,15 +313,21 @@ async fn create_board(
                 description: b.description.clone(),
             });
 
-            (StatusCode::CREATED, ApiResponse::ok(BoardInfo {
-                id: b.id,
-                name: b.name,
-                description: b.description,
-                post_count: 0,
-                creator_id: b.creator_id,
-            }))
+            (
+                StatusCode::CREATED,
+                ApiResponse::ok(BoardInfo {
+                    id: b.id,
+                    name: b.name,
+                    description: b.description,
+                    post_count: 0,
+                    creator_id: b.creator_id,
+                }),
+            )
         }
-        Err(e) => (StatusCode::BAD_REQUEST, api_err(format!("Failed to create board: {}", e))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            api_err(format!("Failed to create board: {}", e)),
+        ),
     }
 }
 
@@ -339,7 +355,9 @@ async fn delete_board(
 
     match db::boards::delete(&mut conn, board.id, system_user_id) {
         Ok(true) => {
-            let _ = state.tx.send(BroadcastEvent::BoardDeleted { name: name.clone() });
+            let _ = state
+                .tx
+                .send(BroadcastEvent::BoardDeleted { name: name.clone() });
             ApiResponse::ok(())
         }
         Ok(false) => api_err("Permission denied"),
@@ -519,9 +537,8 @@ fn build_thread_tree(posts: &[UnifiedPostInfo]) -> Vec<ThreadedPostInfo> {
     use std::collections::HashMap;
 
     // Create a map of id -> post for quick lookup
-    let post_map: HashMap<String, &UnifiedPostInfo> = posts.iter()
-        .map(|p| (p.id.clone(), p))
-        .collect();
+    let post_map: HashMap<String, &UnifiedPostInfo> =
+        posts.iter().map(|p| (p.id.clone(), p)).collect();
 
     // Create a map of parent_id -> children
     let mut children_map: HashMap<String, Vec<&UnifiedPostInfo>> = HashMap::new();
@@ -529,18 +546,19 @@ fn build_thread_tree(posts: &[UnifiedPostInfo]) -> Vec<ThreadedPostInfo> {
 
     for post in posts {
         if let Some(ref parent_id) = post.parent_id {
-            children_map.entry(parent_id.clone()).or_default().push(post);
+            children_map
+                .entry(parent_id.clone())
+                .or_default()
+                .push(post);
         } else {
             roots.push(post);
         }
     }
 
     // Sort roots by score (descending) then by created_at (descending)
-    roots.sort_by(|a, b| {
-        match b.score.cmp(&a.score) {
-            std::cmp::Ordering::Equal => b.created_at.cmp(&a.created_at),
-            other => other,
-        }
+    roots.sort_by(|a, b| match b.score.cmp(&a.score) {
+        std::cmp::Ordering::Equal => b.created_at.cmp(&a.created_at),
+        other => other,
     });
 
     // Recursively build threaded posts
@@ -569,7 +587,8 @@ fn build_thread_tree(posts: &[UnifiedPostInfo]) -> Vec<ThreadedPostInfo> {
         }
     }
 
-    roots.into_iter()
+    roots
+        .into_iter()
         .map(|root| build_thread(root, &children_map, 0))
         .collect()
 }
@@ -582,20 +601,36 @@ async fn create_post(
 ) -> impl IntoResponse {
     let mut conn = match db::establish_connection() {
         Ok(c) => c,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("DB error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("DB error: {}", e)),
+            )
+        }
     };
 
     let board = match db::boards::get_by_name(&mut conn, &name.to_uppercase()) {
         Ok(b) => b,
-        Err(e) => return (StatusCode::NOT_FOUND, api_err(format!("Board not found: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                api_err(format!("Board not found: {}", e)),
+            )
+        }
     };
 
     // Get or create user
     let node_id = req.user_node_id.as_deref().unwrap_or("!apiuser1");
     let ts = db::now_as_useconds();
-    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API User"), ts) {
+    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API User"), ts)
+    {
         Ok(u) => u,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("User error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("User error: {}", e)),
+            )
+        }
     };
 
     match db::posts::create(&mut conn, board.id, user.id, &req.message) {
@@ -637,18 +672,24 @@ async fn create_post(
                 }
             });
 
-            (StatusCode::CREATED, ApiResponse::ok(PostInfo {
-                id: p.id,
-                board_id: p.board_id,
-                user_id: p.user_id,
-                user_name: user.short_name,
-                body: p.body,
-                created_at: p.created_at_us / 1_000_000,
-                parent_id: p.parent_id,
-                reply_count,
-            }))
+            (
+                StatusCode::CREATED,
+                ApiResponse::ok(PostInfo {
+                    id: p.id,
+                    board_id: p.board_id,
+                    user_id: p.user_id,
+                    user_name: user.short_name,
+                    body: p.body,
+                    created_at: p.created_at_us / 1_000_000,
+                    parent_id: p.parent_id,
+                    reply_count,
+                }),
+            )
         }
-        Err(e) => (StatusCode::BAD_REQUEST, api_err(format!("Failed to create post: {}", e))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            api_err(format!("Failed to create post: {}", e)),
+        ),
     }
 }
 
@@ -660,26 +701,47 @@ async fn reply_to_post(
 ) -> impl IntoResponse {
     let mut conn = match db::establish_connection() {
         Ok(c) => c,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("DB error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("DB error: {}", e)),
+            )
+        }
     };
 
     // Get parent post
     let parent = match db::posts::get(&mut conn, post_id) {
         Ok(p) => p,
-        Err(e) => return (StatusCode::NOT_FOUND, api_err(format!("Post not found: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                api_err(format!("Post not found: {}", e)),
+            )
+        }
     };
 
     let board = match db::boards::get(&mut conn, parent.board_id) {
         Ok(b) => b,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("Board error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("Board error: {}", e)),
+            )
+        }
     };
 
     // Get or create user
     let node_id = req.user_node_id.as_deref().unwrap_or("!apiuser1");
     let ts = db::now_as_useconds();
-    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API User"), ts) {
+    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API User"), ts)
+    {
         Ok(u) => u,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("User error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("User error: {}", e)),
+            )
+        }
     };
 
     match db::posts::reply(&mut conn, post_id, user.id, &req.message) {
@@ -721,18 +783,24 @@ async fn reply_to_post(
                 }
             });
 
-            (StatusCode::CREATED, ApiResponse::ok(PostInfo {
-                id: p.id,
-                board_id: p.board_id,
-                user_id: p.user_id,
-                user_name: user.short_name,
-                body: p.body,
-                created_at: p.created_at_us / 1_000_000,
-                parent_id: p.parent_id,
-                reply_count,
-            }))
+            (
+                StatusCode::CREATED,
+                ApiResponse::ok(PostInfo {
+                    id: p.id,
+                    board_id: p.board_id,
+                    user_id: p.user_id,
+                    user_name: user.short_name,
+                    body: p.body,
+                    created_at: p.created_at_us / 1_000_000,
+                    parent_id: p.parent_id,
+                    reply_count,
+                }),
+            )
         }
-        Err(e) => (StatusCode::BAD_REQUEST, api_err(format!("Failed to reply: {}", e))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            api_err(format!("Failed to reply: {}", e)),
+        ),
     }
 }
 
@@ -759,7 +827,13 @@ async fn vote_unified(
     Json(req): Json<UnifiedVoteRequest>,
 ) -> impl IntoResponse {
     // Normalize vote value: any positive = upvote, any negative = downvote
-    let vote_type = if req.vote > 0 { 1 } else if req.vote < 0 { -1 } else { 1 };
+    let vote_type = if req.vote > 0 {
+        1
+    } else if req.vote < 0 {
+        -1
+    } else {
+        1
+    };
     vote_post(state, post_id, vote_type, req.user_node_id).await
 }
 
@@ -798,7 +872,8 @@ async fn vote_post(
     // Get or create user
     let node_id = user_node_id.as_deref().unwrap_or("!apivoter");
     let ts = db::now_as_useconds();
-    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API Voter"), ts) {
+    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API Voter"), ts)
+    {
         Ok(u) => u,
         Err(e) => return api_err(format!("User error: {}", e)),
     };
@@ -809,15 +884,17 @@ async fn vote_post(
             use db::votes::VoteResult;
             let (new_score, action) = match result {
                 VoteResult::Voted { new_score } => (new_score, "voted"),
-                VoteResult::Changed { new_score, old_vote: _ } => (new_score, "changed"),
+                VoteResult::Changed {
+                    new_score,
+                    old_vote: _,
+                } => (new_score, "changed"),
                 VoteResult::Removed { new_score } => (new_score, "removed"),
             };
 
             // Broadcast score update to WebSocket clients
-            let _ = state.tx.send(BroadcastEvent::ScoreUpdate {
-                post_id,
-                new_score,
-            });
+            let _ = state
+                .tx
+                .send(BroadcastEvent::ScoreUpdate { post_id, new_score });
 
             ApiResponse::ok(serde_json::json!({
                 "post_id": post_id,
@@ -842,7 +919,12 @@ async fn reply_unified(
 ) -> impl IntoResponse {
     let mut conn = match db::establish_connection() {
         Ok(c) => c,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("DB error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("DB error: {}", e)),
+            )
+        }
     };
 
     let board_name = req.board.to_uppercase();
@@ -852,7 +934,10 @@ async fn reply_unified(
         Ok(b) => b,
         Err(_) => {
             // Board doesn't exist locally - this is an error
-            return (StatusCode::NOT_FOUND, api_err(format!("Board '{}' not found", board_name)));
+            return (
+                StatusCode::NOT_FOUND,
+                api_err(format!("Board '{}' not found", board_name)),
+            );
         }
     };
 
@@ -870,7 +955,9 @@ async fn reply_unified(
         (exists, author_node)
     } else {
         // Local parent - check posts table
-        let maybe_post = req.parent_id.parse::<i32>()
+        let maybe_post = req
+            .parent_id
+            .parse::<i32>()
             .ok()
             .and_then(|id| db::posts::get(&mut conn, id).ok());
         let exists = maybe_post.is_some();
@@ -883,15 +970,24 @@ async fn reply_unified(
     };
 
     if !parent_exists {
-        return (StatusCode::NOT_FOUND, api_err(format!("Parent post '{}' not found", req.parent_id)));
+        return (
+            StatusCode::NOT_FOUND,
+            api_err(format!("Parent post '{}' not found", req.parent_id)),
+        );
     }
 
     // Get or create user
     let node_id = req.user_node_id.as_deref().unwrap_or("!apiuser1");
     let ts = db::now_as_useconds();
-    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API User"), ts) {
+    let (user, _) = match db::users::observe(&mut conn, node_id, Some("API"), Some("API User"), ts)
+    {
         Ok(u) => u,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, api_err(format!("User error: {}", e))),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                api_err(format!("User error: {}", e)),
+            )
+        }
     };
 
     // Determine the parent_id format for federation
@@ -906,11 +1002,24 @@ async fn reply_unified(
     // If parent is federated (starts with !), use federated_parent_id
     // If parent is local, use parent_id
     let create_result = if req.parent_id.starts_with('!') {
-        db::posts::create_with_federated_parent(&mut conn, board.id, user.id, &req.message, &federated_parent_id)
+        db::posts::create_with_federated_parent(
+            &mut conn,
+            board.id,
+            user.id,
+            &req.message,
+            &federated_parent_id,
+        )
     } else {
         // Local parent - parse to i32
         let local_parent_id = req.parent_id.parse::<i32>().ok();
-        db::posts::create_full(&mut conn, board.id, user.id, &req.message, local_parent_id, Some(&federated_parent_id))
+        db::posts::create_full(
+            &mut conn,
+            board.id,
+            user.id,
+            &req.message,
+            local_parent_id,
+            Some(&federated_parent_id),
+        )
     };
 
     match create_result {
@@ -969,20 +1078,26 @@ async fn reply_unified(
                 }
             });
 
-            (StatusCode::CREATED, ApiResponse::ok(UnifiedPostInfo {
-                id: format!("{}:{}", state.node_id, p.id),
-                board: board.name,
-                author: user.short_name,
-                author_node: node_id.to_string(),
-                body: p.body,
-                created_at: p.created_at_us / 1_000_000,
-                parent_id: Some(federated_parent_id),
-                is_local: true,
-                reply_count: 0,
-                score: 0,
-            }))
+            (
+                StatusCode::CREATED,
+                ApiResponse::ok(UnifiedPostInfo {
+                    id: format!("{}:{}", state.node_id, p.id),
+                    board: board.name,
+                    author: user.short_name,
+                    author_node: node_id.to_string(),
+                    body: p.body,
+                    created_at: p.created_at_us / 1_000_000,
+                    parent_id: Some(federated_parent_id),
+                    is_local: true,
+                    reply_count: 0,
+                    score: 0,
+                }),
+            )
         }
-        Err(e) => (StatusCode::BAD_REQUEST, api_err(format!("Failed to create reply: {}", e))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            api_err(format!("Failed to create reply: {}", e)),
+        ),
     }
 }
 
@@ -1071,9 +1186,7 @@ struct AnnounceRequest {
 }
 
 /// List federation peers
-async fn list_federation_peers(
-    State(state): State<Arc<ServerState>>,
-) -> impl IntoResponse {
+async fn list_federation_peers(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let peers = state.federation.list_peers().await;
     ApiResponse::ok(peers)
 }
@@ -1138,7 +1251,9 @@ async fn federation_sync(
                             author_name,
                             body: post.body,
                             timestamp: (post.created_at_us / 1_000_000) as u64,
-                            parent_id: post.parent_id.map(|pid| format!("{}:{}", state.node_id, pid)),
+                            parent_id: post
+                                .parent_id
+                                .map(|pid| format!("{}:{}", state.node_id, pid)),
                             signature: None,
                         });
                     }
@@ -1147,7 +1262,9 @@ async fn federation_sync(
         }
 
         // Also include received federated messages
-        if let Ok(fed_msgs) = db::federated::get_messages_since(&mut conn, req.since_timestamp as i64, limit) {
+        if let Ok(fed_msgs) =
+            db::federated::get_messages_since(&mut conn, req.since_timestamp as i64, limit)
+        {
             for msg in fed_msgs {
                 all_messages.push(FederatedMessage {
                     origin_node: msg.origin_node,
@@ -1269,19 +1386,24 @@ async fn list_agent_reputation() -> impl IntoResponse {
     // Query all agents
     match diesel::sql_query(
         "SELECT agent_name, bids, wins, deliveries, total_revenue, avg_price, rating, last_active
-         FROM agent_reputation ORDER BY rating DESC, deliveries DESC"
-    ).load::<AgentReputationRow>(&mut conn) {
+         FROM agent_reputation ORDER BY rating DESC, deliveries DESC",
+    )
+    .load::<AgentReputationRow>(&mut conn)
+    {
         Ok(agents) => {
-            let result: Vec<AgentReputation> = agents.into_iter().map(|a| AgentReputation {
-                agent_name: a.agent_name,
-                bids: a.bids,
-                wins: a.wins,
-                deliveries: a.deliveries,
-                total_revenue: a.total_revenue,
-                avg_price: a.avg_price,
-                rating: a.rating,
-                last_active: a.last_active,
-            }).collect();
+            let result: Vec<AgentReputation> = agents
+                .into_iter()
+                .map(|a| AgentReputation {
+                    agent_name: a.agent_name,
+                    bids: a.bids,
+                    wins: a.wins,
+                    deliveries: a.deliveries,
+                    total_revenue: a.total_revenue,
+                    avg_price: a.avg_price,
+                    rating: a.rating,
+                    last_active: a.last_active,
+                })
+                .collect();
             ApiResponse::ok(serde_json::json!({
                 "agents": result,
                 "count": result.len()
@@ -1300,8 +1422,11 @@ async fn get_agent_reputation(Path(agent_name): Path<String>) -> impl IntoRespon
 
     match diesel::sql_query(format!(
         "SELECT agent_name, bids, wins, deliveries, total_revenue, avg_price, rating, last_active
-         FROM agent_reputation WHERE agent_name = '{}'", agent_name.replace("'", "''")
-    )).load::<AgentReputationRow>(&mut conn) {
+         FROM agent_reputation WHERE agent_name = '{}'",
+        agent_name.replace("'", "''")
+    ))
+    .load::<AgentReputationRow>(&mut conn)
+    {
         Ok(agents) if !agents.is_empty() => {
             let a = &agents[0];
             ApiResponse::ok(serde_json::json!({
@@ -1344,7 +1469,8 @@ async fn update_agent_reputation(
         "bid" => diesel::sql_query(format!(
             "UPDATE agent_reputation SET bids = bids + 1, last_active = {} WHERE agent_name = '{}'",
             now, safe_name
-        )).execute(&mut conn),
+        ))
+        .execute(&mut conn),
 
         "win" => {
             let price = req.price.unwrap_or(0.0);
@@ -1356,7 +1482,8 @@ async fn update_agent_reputation(
                     last_active = {}
                  WHERE agent_name = '{}'",
                 price, price, now, safe_name
-            )).execute(&mut conn)
+            ))
+            .execute(&mut conn)
         }
 
         "deliver" => {
@@ -1368,10 +1495,16 @@ async fn update_agent_reputation(
                     last_active = {}
                  WHERE agent_name = '{}'",
                 now, safe_name
-            )).execute(&mut conn)
+            ))
+            .execute(&mut conn)
         }
 
-        _ => return api_err(format!("Unknown action: {}. Use 'bid', 'win', or 'deliver'", req.action)),
+        _ => {
+            return api_err(format!(
+                "Unknown action: {}. Use 'bid', 'win', or 'deliver'",
+                req.action
+            ))
+        }
     };
 
     match result {
@@ -1412,30 +1545,38 @@ pub fn create_router(state: Arc<ServerState>) -> Router {
         .route("/api/boards", get(list_boards).post(create_board))
         .route("/api/boards/:name", get(get_board).delete(delete_board))
         .route("/api/boards/:name/posts", get(list_posts).post(create_post))
-        .route("/api/boards/:name/threads", get(list_threads))  // Hierarchical threaded view
+        .route("/api/boards/:name/threads", get(list_threads)) // Hierarchical threaded view
         // Post routes
         .route("/api/posts/:id/reply", post(reply_to_post))
-        .route("/api/posts/:id/vote", post(vote_unified))  // Unified vote: {"vote": 1} or {"vote": -1}
+        .route("/api/posts/:id/vote", post(vote_unified)) // Unified vote: {"vote": 1} or {"vote": -1}
         .route("/api/posts/:id/upvote", post(upvote_post))
         .route("/api/posts/:id/downvote", post(downvote_post))
-        .route("/api/reply", post(reply_unified))  // Unified reply for both local and federated posts
+        .route("/api/reply", post(reply_unified)) // Unified reply for both local and federated posts
         // Stats
         .route("/api/stats", get(get_stats))
         // Agent reputation routes
         .route("/api/reputation", get(list_agent_reputation))
-        .route("/api/reputation/:agent_name", get(get_agent_reputation).post(update_agent_reputation))
+        .route(
+            "/api/reputation/:agent_name",
+            get(get_agent_reputation).post(update_agent_reputation),
+        )
         // Federation routes
-        .route("/api/federation/peers", get(list_federation_peers).post(add_federation_peer))
+        .route(
+            "/api/federation/peers",
+            get(list_federation_peers).post(add_federation_peer),
+        )
         .route("/api/federation/sync", post(federation_sync))
         .route("/api/federation/receive", post(federation_receive))
         .route("/api/federation/announce", post(federation_announce))
         // WebSocket
         .route("/ws", get(websocket_handler))
         // CORS for browser access
-        .layer(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .with_state(state)
 }
 
@@ -1448,7 +1589,10 @@ pub async fn start_server(host: &str, port: u16) -> Result<(), Box<dyn std::erro
     drop(conn);
 
     // Generate node ID from hostname + port
-    let node_id = format!("!{:08x}", crc32fast::hash(format!("{}:{}", host, port).as_bytes()));
+    let node_id = format!(
+        "!{:08x}",
+        crc32fast::hash(format!("{}:{}", host, port).as_bytes())
+    );
 
     // Create broadcast channel
     let (tx, _) = broadcast::channel::<BroadcastEvent>(100);

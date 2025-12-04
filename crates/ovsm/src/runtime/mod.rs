@@ -2,8 +2,8 @@
 
 mod environment;
 mod lisp_evaluator;
-mod value;
 pub mod streaming;
+mod value;
 
 pub use environment::Environment;
 pub use lisp_evaluator::LispEvaluator;

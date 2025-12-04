@@ -4,28 +4,29 @@
 //! Provides real-time screen streaming, presence updates, and annotation sync.
 
 use super::{
+    annotations::{Annotation, AnnotationSeverity, AnnotationStore, AnnotationType},
+    presence::{ActivityStatus, PresenceManager, UserPresence},
+    session::{
+        ClientType, CollaborativeSession, Participant, ParticipantColor, SessionEvent, SessionRole,
+    },
     CollabError,
-    session::{CollaborativeSession, SessionRole, ClientType, ParticipantColor, SessionEvent, Participant},
-    presence::{PresenceManager, UserPresence, ActivityStatus},
-    annotations::{AnnotationStore, Annotation, AnnotationType, AnnotationSeverity},
 };
 
-use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::{broadcast, RwLock};
 use axum::{
-    Router,
-    routing::{get, post},
     extract::{
-        State, Path, Query, WebSocketUpgrade,
         ws::{Message, WebSocket},
+        Path, Query, State, WebSocketUpgrade,
     },
-    response::{IntoResponse, Html},
-    Json,
     http::StatusCode,
+    response::{Html, IntoResponse},
+    routing::{get, post},
+    Json, Router,
 };
-use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{broadcast, RwLock};
 
 /// Events sent to/from WebSocket clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,16 +40,9 @@ pub enum CollabEvent {
         password: Option<String>,
     },
     /// Client sending input (keystrokes)
-    Input {
-        keys: String,
-        pane: Option<usize>,
-    },
+    Input { keys: String, pane: Option<usize> },
     /// Client cursor moved
-    CursorMove {
-        x: u16,
-        y: u16,
-        pane: usize,
-    },
+    CursorMove { x: u16, y: u16, pane: usize },
     /// Client adding annotation
     AddAnnotation {
         target_type: String,
@@ -57,17 +51,11 @@ pub enum CollabEvent {
         severity: String,
     },
     /// Client sending chat message
-    Chat {
-        message: String,
-    },
+    Chat { message: String },
     /// Client requesting screen refresh
-    RequestScreen {
-        pane: Option<usize>,
-    },
+    RequestScreen { pane: Option<usize> },
     /// Client setting status
-    SetStatus {
-        status: String,
-    },
+    SetStatus { status: String },
     /// Client pinging
     Ping,
 
@@ -88,9 +76,7 @@ pub enum CollabEvent {
         height: u16,
     },
     /// Participant list update
-    Participants {
-        participants: Vec<ParticipantInfo>,
-    },
+    Participants { participants: Vec<ParticipantInfo> },
     /// Someone else's cursor position
     OtherCursor {
         participant_id: String,
@@ -101,9 +87,7 @@ pub enum CollabEvent {
         color: [u8; 3],
     },
     /// Annotation update
-    AnnotationUpdate {
-        annotation: AnnotationInfo,
-    },
+    AnnotationUpdate { annotation: AnnotationInfo },
     /// Chat message received
     ChatReceived {
         from: String,
@@ -111,10 +95,7 @@ pub enum CollabEvent {
         timestamp: DateTime<Utc>,
     },
     /// Error message
-    Error {
-        code: String,
-        message: String,
-    },
+    Error { code: String, message: String },
     /// Pong response
     Pong,
 }
@@ -203,7 +184,10 @@ impl CollabWebSocketServer {
     }
 
     /// Get session by invite code
-    pub async fn get_session_by_invite(&self, invite_code: &str) -> Option<Arc<CollaborativeSession>> {
+    pub async fn get_session_by_invite(
+        &self,
+        invite_code: &str,
+    ) -> Option<Arc<CollaborativeSession>> {
         let by_invite = self.by_invite_code.read().await;
         if let Some(session_id) = by_invite.get(invite_code) {
             let sessions = self.sessions.read().await;
@@ -219,7 +203,10 @@ impl CollabWebSocketServer {
             .route("/collab/join/:invite_code", get(Self::join_page))
             .route("/api/collab/sessions", get(Self::list_sessions))
             .route("/api/collab/sessions/:id", get(Self::get_session_info))
-            .route("/api/collab/sessions/:id/annotations", get(Self::get_annotations))
+            .route(
+                "/api/collab/sessions/:id/annotations",
+                get(Self::get_annotations),
+            )
             .with_state(self)
     }
 
@@ -233,11 +220,7 @@ impl CollabWebSocketServer {
     }
 
     /// Handle a WebSocket connection
-    async fn handle_websocket(
-        socket: WebSocket,
-        state: Arc<Self>,
-        session_id: String,
-    ) {
+    async fn handle_websocket(socket: WebSocket, state: Arc<Self>, session_id: String) {
         use futures::{SinkExt, StreamExt};
         let (mut sender, mut receiver) = socket.split();
 
@@ -249,7 +232,9 @@ impl CollabWebSocketServer {
                     code: "SESSION_NOT_FOUND".to_string(),
                     message: "Session not found".to_string(),
                 };
-                let _ = sender.send(Message::Text(serde_json::to_string(&error).unwrap())).await;
+                let _ = sender
+                    .send(Message::Text(serde_json::to_string(&error).unwrap()))
+                    .await;
                 return;
             }
         };
@@ -435,7 +420,8 @@ impl CollabWebSocketServer {
         let session = state.get_session_by_invite(&invite_code).await;
 
         let html = match session {
-            Some(s) => format!(r#"
+            Some(s) => format!(
+                r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -541,7 +527,12 @@ impl CollabWebSocketServer {
     </script>
 </body>
 </html>
-"#, s.name(), s.name(), s.id(), invite_code),
+"#,
+                s.name(),
+                s.name(),
+                s.id(),
+                invite_code
+            ),
             None => r#"
 <!DOCTYPE html>
 <html>
@@ -551,23 +542,25 @@ impl CollabWebSocketServer {
     <p>The invite code may have expired or be invalid.</p>
 </body>
 </html>
-"#.to_string(),
+"#
+            .to_string(),
         };
 
         Html(html)
     }
 
     /// List active sessions (API endpoint)
-    async fn list_sessions(
-        State(state): State<Arc<Self>>,
-    ) -> impl IntoResponse {
+    async fn list_sessions(State(state): State<Arc<Self>>) -> impl IntoResponse {
         let sessions = state.sessions.read().await;
-        let list: Vec<_> = sessions.values()
-            .map(|s| serde_json::json!({
-                "id": s.id(),
-                "name": s.name(),
-                "invite_code": s.invite_code(),
-            }))
+        let list: Vec<_> = sessions
+            .values()
+            .map(|s| {
+                serde_json::json!({
+                    "id": s.id(),
+                    "name": s.name(),
+                    "invite_code": s.invite_code(),
+                })
+            })
             .collect();
 
         Json(list)
@@ -594,11 +587,13 @@ impl CollabWebSocketServer {
                 });
                 (StatusCode::OK, Json(info)).into_response()
             }
-            None => {
-                (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
                     "error": "Session not found"
-                }))).into_response()
-            }
+                })),
+            )
+                .into_response(),
         }
     }
 
@@ -610,22 +605,29 @@ impl CollabWebSocketServer {
         match state.get_session(&session_id).await {
             Some(session) => {
                 let annotations = session.annotations().get_all().await;
-                let list: Vec<_> = annotations.iter().map(|a| serde_json::json!({
-                    "id": a.id,
-                    "target": format!("{}", a.target),
-                    "text": a.text,
-                    "severity": format!("{:?}", a.severity),
-                    "author": a.author_name,
-                    "created_at": a.created_at,
-                })).collect();
+                let list: Vec<_> = annotations
+                    .iter()
+                    .map(|a| {
+                        serde_json::json!({
+                            "id": a.id,
+                            "target": format!("{}", a.target),
+                            "text": a.text,
+                            "severity": format!("{:?}", a.severity),
+                            "author": a.author_name,
+                            "created_at": a.created_at,
+                        })
+                    })
+                    .collect();
 
                 (StatusCode::OK, Json(list)).into_response()
             }
-            None => {
-                (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
                     "error": "Session not found"
-                }))).into_response()
-            }
+                })),
+            )
+                .into_response(),
         }
     }
 }
@@ -661,7 +663,11 @@ mod tests {
             role: "Editor".to_string(),
             status: "active".to_string(),
             color: [255, 100, 50],
-            cursor: Some(CursorInfo { x: 10, y: 20, pane: 0 }),
+            cursor: Some(CursorInfo {
+                x: 10,
+                y: 20,
+                pane: 0,
+            }),
         };
 
         let json = serde_json::to_string(&info).unwrap();

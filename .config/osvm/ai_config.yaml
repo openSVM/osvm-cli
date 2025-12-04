@@ -1,0 +1,7 @@
+provider: local
+api_url: https://osvm.ai/api/getAnswer
+api_key: null
+model: default
+temperature: 0.7
+max_tokens: 4000
+timeout_secs: 120

@@ -3,7 +3,9 @@
 //! This module defines Solana-specific data structures and their fields
 //! to provide context-aware completions when working with blockchain data.
 
-use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, Documentation, MarkupContent, MarkupKind};
+use tower_lsp::lsp_types::{
+    CompletionItem, CompletionItemKind, Documentation, MarkupContent, MarkupKind,
+};
 
 /// A blockchain type with its fields and documentation
 #[derive(Debug, Clone)]
@@ -63,7 +65,6 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
             },
         ],
     },
-
     // ========================================================================
     // Token Types
     // ========================================================================
@@ -144,7 +145,6 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
             },
         ],
     },
-
     // ========================================================================
     // Transaction Types
     // ========================================================================
@@ -210,7 +210,6 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
             },
         ],
     },
-
     // ========================================================================
     // Transfer Types (from get_account_transfers)
     // ========================================================================
@@ -270,7 +269,6 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
             },
         ],
     },
-
     // ========================================================================
     // DEX Types
     // ========================================================================
@@ -315,7 +313,6 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
             },
         ],
     },
-
     // ========================================================================
     // NFT Types
     // ========================================================================
@@ -365,7 +362,6 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
             },
         ],
     },
-
     // ========================================================================
     // Program Types
     // ========================================================================
@@ -385,7 +381,6 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
             },
         ],
     },
-
     // ========================================================================
     // Signature Types
     // ========================================================================
@@ -429,16 +424,56 @@ pub static BLOCKCHAIN_TYPES: &[BlockchainType] = &[
 
 /// Well-known program IDs
 pub static KNOWN_PROGRAMS: &[(&str, &str, &str)] = &[
-    ("11111111111111111111111111111111", "System Program", "Native Solana system operations"),
-    ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "Token Program", "SPL Token standard operations"),
-    ("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", "Associated Token Program", "Create associated token accounts"),
-    ("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s", "Metaplex Token Metadata", "NFT metadata program"),
-    ("cndy3Z4yapfJBmL3ShUp5exZKqR3z33thTzeNMm2gRZ", "Candy Machine v2", "NFT minting program"),
-    ("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", "Serum DEX v3", "Order book DEX"),
-    ("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc", "Orca Whirlpool", "Concentrated liquidity AMM"),
-    ("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", "Raydium AMM", "Automated market maker"),
-    ("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", "Jupiter v6", "DEX aggregator"),
-    ("ComputeBudget111111111111111111111111111111", "Compute Budget", "Set compute unit limit/price"),
+    (
+        "11111111111111111111111111111111",
+        "System Program",
+        "Native Solana system operations",
+    ),
+    (
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "Token Program",
+        "SPL Token standard operations",
+    ),
+    (
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "Associated Token Program",
+        "Create associated token accounts",
+    ),
+    (
+        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+        "Metaplex Token Metadata",
+        "NFT metadata program",
+    ),
+    (
+        "cndy3Z4yapfJBmL3ShUp5exZKqR3z33thTzeNMm2gRZ",
+        "Candy Machine v2",
+        "NFT minting program",
+    ),
+    (
+        "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+        "Serum DEX v3",
+        "Order book DEX",
+    ),
+    (
+        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+        "Orca Whirlpool",
+        "Concentrated liquidity AMM",
+    ),
+    (
+        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+        "Raydium AMM",
+        "Automated market maker",
+    ),
+    (
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+        "Jupiter v6",
+        "DEX aggregator",
+    ),
+    (
+        "ComputeBudget111111111111111111111111111111",
+        "Compute Budget",
+        "Set compute unit limit/price",
+    ),
 ];
 
 /// Transfer types for filtering
@@ -461,8 +496,7 @@ pub fn get_field_completions(type_name: &str) -> Vec<CompletionItem> {
 
     // Find matching type
     let matching_type = BLOCKCHAIN_TYPES.iter().find(|t| {
-        t.name.to_lowercase() == type_name_lower
-            || t.name.to_lowercase().contains(&type_name_lower)
+        t.name.to_lowercase() == type_name_lower || t.name.to_lowercase().contains(&type_name_lower)
     });
 
     match matching_type {
@@ -475,7 +509,10 @@ pub fn get_field_completions(type_name: &str) -> Vec<CompletionItem> {
                 detail: Some(field.field_type.to_string()),
                 documentation: Some(Documentation::MarkupContent(MarkupContent {
                     kind: MarkupKind::Markdown,
-                    value: format!("**{}**: {}\n\nType: `{}`", field.name, field.description, field.field_type),
+                    value: format!(
+                        "**{}**: {}\n\nType: `{}`",
+                        field.name, field.description, field.field_type
+                    ),
                 })),
                 insert_text: Some(format!("\"{}\"", field.name)),
                 sort_text: Some(format!("0{}", field.name)),
@@ -573,10 +610,12 @@ pub fn get_all_type_completions() -> Vec<CompletionItem> {
             detail: Some("Blockchain type".to_string()),
             documentation: Some(Documentation::MarkupContent(MarkupContent {
                 kind: MarkupKind::Markdown,
-                value: format!("**{}**\n\n{}\n\n**Fields:**\n{}",
+                value: format!(
+                    "**{}**\n\n{}\n\n**Fields:**\n{}",
                     bt.name,
                     bt.description,
-                    bt.fields.iter()
+                    bt.fields
+                        .iter()
                         .map(|f| format!("- `{}`: {} - {}", f.name, f.field_type, f.description))
                         .collect::<Vec<_>>()
                         .join("\n")
@@ -612,7 +651,10 @@ mod tests {
 
     #[test]
     fn test_infer_type_from_context() {
-        assert_eq!(infer_type_from_context("", "(get_account_transfers wallet)"), Some("Transfer"));
+        assert_eq!(
+            infer_type_from_context("", "(get_account_transfers wallet)"),
+            Some("Transfer")
+        );
         assert_eq!(infer_type_from_context("transfer", ""), Some("Transfer"));
         assert_eq!(infer_type_from_context("tx", ""), Some("Transaction"));
     }

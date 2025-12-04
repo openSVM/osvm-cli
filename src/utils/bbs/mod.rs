@@ -4,20 +4,20 @@
 // This module integrates Meshtastic-based bulletin board system (BBS)
 // for communication between humans and AI agents over low-bandwidth radio networks.
 
-pub mod db;
-pub mod models;
-pub mod schema;
-pub mod commands;
-pub mod message_router;
 pub mod agent_bridge;
-pub mod tui_widgets;
-pub mod meshtastic;
-pub mod http_server;
+pub mod commands;
+pub mod db;
 pub mod federation;
+pub mod http_server;
+pub mod meshtastic;
+pub mod message_router;
+pub mod models;
 pub mod registry;
+pub mod schema;
+pub mod tui_widgets;
 
-use std::path::PathBuf;
 use dirs::data_dir;
+use std::path::PathBuf;
 
 pub const BBS_TAG: &str = "osvm-bbs";
 
@@ -81,12 +81,11 @@ mod tests {
         let db_url = db_file.to_str().unwrap();
 
         // Establish connection
-        let mut conn = SqliteConnection::establish(db_url)
-            .expect("Failed to connect to test database");
+        let mut conn =
+            SqliteConnection::establish(db_url).expect("Failed to connect to test database");
 
         // Initialize schema
-        db::initialize_database(&mut conn)
-            .expect("Failed to initialize database");
+        db::initialize_database(&mut conn).expect("Failed to initialize database");
 
         // Verify tables exist by querying them
         let boards = db::boards::list(&mut conn).expect("Failed to list boards");
@@ -102,8 +101,8 @@ mod tests {
         let db_file = tmp_dir.path().join("test-boards.db");
         let db_url = db_file.to_str().unwrap();
 
-        let mut conn = SqliteConnection::establish(db_url)
-            .expect("Failed to connect to test database");
+        let mut conn =
+            SqliteConnection::establish(db_url).expect("Failed to connect to test database");
         db::initialize_database(&mut conn).expect("Failed to initialize database");
 
         // Create a board
@@ -118,8 +117,7 @@ mod tests {
         assert_eq!(boards[0].name, "TEST_BOARD");
 
         // Get board by ID
-        let retrieved = db::boards::get(&mut conn, board.id)
-            .expect("Failed to get board by ID");
+        let retrieved = db::boards::get(&mut conn, board.id).expect("Failed to get board by ID");
         assert_eq!(retrieved.name, "TEST_BOARD");
 
         // Create another board
@@ -137,8 +135,8 @@ mod tests {
         let db_file = tmp_dir.path().join("test-users.db");
         let db_url = db_file.to_str().unwrap();
 
-        let mut conn = SqliteConnection::establish(db_url)
-            .expect("Failed to connect to test database");
+        let mut conn =
+            SqliteConnection::establish(db_url).expect("Failed to connect to test database");
         db::initialize_database(&mut conn).expect("Failed to initialize database");
 
         // Create user via observe
@@ -149,7 +147,8 @@ mod tests {
             Some("TEST"),
             Some("Test User"),
             timestamp,
-        ).expect("Failed to observe user");
+        )
+        .expect("Failed to observe user");
 
         assert!(!existed, "User should be newly created");
         assert_eq!(user.node_id, "!testnode");
@@ -163,15 +162,15 @@ mod tests {
             Some("UPDT"),
             Some("Updated User"),
             timestamp + 1000,
-        ).expect("Failed to update user");
+        )
+        .expect("Failed to update user");
 
         assert!(existed, "User should exist now");
         assert_eq!(updated_user.short_name, "UPDT");
         assert_eq!(updated_user.long_name, "Updated User");
 
         // Get user by node_id
-        let retrieved = db::users::get(&mut conn, "!testnode")
-            .expect("Failed to get user");
+        let retrieved = db::users::get(&mut conn, "!testnode").expect("Failed to get user");
         assert_eq!(retrieved.node_id, "!testnode");
 
         // Count users
@@ -189,8 +188,8 @@ mod tests {
         let db_file = tmp_dir.path().join("test-posts.db");
         let db_url = db_file.to_str().unwrap();
 
-        let mut conn = SqliteConnection::establish(db_url)
-            .expect("Failed to connect to test database");
+        let mut conn =
+            SqliteConnection::establish(db_url).expect("Failed to connect to test database");
         db::initialize_database(&mut conn).expect("Failed to initialize database");
 
         // Create a board first
@@ -205,7 +204,8 @@ mod tests {
             Some("POST"),
             Some("Poster User"),
             timestamp,
-        ).expect("Failed to create user");
+        )
+        .expect("Failed to create user");
 
         // Create a post
         let post = db::posts::create(&mut conn, board.id, user.id, "Hello, World!")
@@ -223,8 +223,8 @@ mod tests {
             .expect("Failed to create third post");
 
         // List posts for board
-        let posts = db::posts::list_for_board(&mut conn, board.id, 10)
-            .expect("Failed to list posts");
+        let posts =
+            db::posts::list_for_board(&mut conn, board.id, 10).expect("Failed to list posts");
         assert_eq!(posts.len(), 3);
 
         // Posts should be ordered by created_at_us descending
@@ -249,8 +249,8 @@ mod tests {
         let db_file = tmp_dir.path().join("test-workflow.db");
         let db_url = db_file.to_str().unwrap();
 
-        let mut conn = SqliteConnection::establish(db_url)
-            .expect("Failed to connect to test database");
+        let mut conn =
+            SqliteConnection::establish(db_url).expect("Failed to connect to test database");
         db::initialize_database(&mut conn).expect("Failed to initialize database");
 
         // Simulate a full BBS workflow
@@ -262,8 +262,9 @@ mod tests {
 
         // 2. Register multiple users
         let ts = db::now_as_useconds();
-        let (alice, _) = db::users::observe(&mut conn, "!alice001", Some("ALIC"), Some("Alice"), ts)
-            .expect("Failed to create Alice");
+        let (alice, _) =
+            db::users::observe(&mut conn, "!alice001", Some("ALIC"), Some("Alice"), ts)
+                .expect("Failed to create Alice");
         let (bob, _) = db::users::observe(&mut conn, "!bob00002", Some("BOB"), Some("Bob"), ts)
             .expect("Failed to create Bob");
 
@@ -274,8 +275,13 @@ mod tests {
         db::posts::create(&mut conn, general.id, bob.id, "Hi Alice! - Bob")
             .expect("Failed to post Bob's message");
         std::thread::sleep(std::time::Duration::from_millis(1));
-        db::posts::create(&mut conn, alerts.id, alice.id, "ALERT: System update at 5PM")
-            .expect("Failed to post alert");
+        db::posts::create(
+            &mut conn,
+            alerts.id,
+            alice.id,
+            "ALERT: System update at 5PM",
+        )
+        .expect("Failed to post alert");
 
         // 4. Verify state
         assert_eq!(db::boards::count(&mut conn), 2);

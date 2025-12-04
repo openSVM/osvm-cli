@@ -21,17 +21,17 @@
 //! println!("{}", ovsm_source);
 //! ```
 
-pub mod disassembler;
 pub mod cfg;
+pub mod disassembler;
 pub mod idl;
 pub mod ovsm_emitter;
 
-pub use disassembler::{Disassembler, DisassembledInstr};
-pub use cfg::{ControlFlowGraph, BasicBlock};
-pub use idl::{AnchorIdl, IdlInstruction, IdlAccount};
+pub use cfg::{BasicBlock, ControlFlowGraph};
+pub use disassembler::{DisassembledInstr, Disassembler};
+pub use idl::{AnchorIdl, IdlAccount, IdlInstruction};
 pub use ovsm_emitter::OvsmEmitter;
 
-use crate::{Result, Error};
+use crate::{Error, Result};
 
 /// Decompiler options
 #[derive(Debug, Clone, Default)]

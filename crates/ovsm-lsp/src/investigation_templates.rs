@@ -119,7 +119,8 @@ impl TemplateGenerator {
         let words: Vec<&str> = query.split_whitespace().collect();
         for word in words {
             let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
-            if clean.len() >= 32 && clean.len() <= 44 && clean.chars().all(|c| c.is_alphanumeric()) {
+            if clean.len() >= 32 && clean.len() <= 44 && clean.chars().all(|c| c.is_alphanumeric())
+            {
                 // Likely a Solana address
                 if params.get("wallet").is_none() {
                     params.insert("wallet".to_string(), clean.to_string());
@@ -167,8 +168,14 @@ impl TemplateGenerator {
 
     /// Wallet activity investigation template
     fn wallet_activity_template(&self, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
-        let limit = params.get("limit").cloned().unwrap_or_else(|| "50".to_string());
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+        let limit = params
+            .get("limit")
+            .cloned()
+            .unwrap_or_else(|| "50".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -229,13 +236,17 @@ impl TemplateGenerator {
                     default: Some(limit),
                 },
             ],
-            explanation: "Fetches recent transactions for a wallet and analyzes transfer patterns.".to_string(),
+            explanation: "Fetches recent transactions for a wallet and analyzes transfer patterns."
+                .to_string(),
         }
     }
 
     /// Token flow tracking template
     fn token_flow_template(&self, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -286,14 +297,21 @@ impl TemplateGenerator {
                 description: "Source wallet to trace flows from".to_string(),
                 default: Some(wallet),
             }],
-            explanation: "Tracks token holdings and recent transfer activity for a wallet.".to_string(),
+            explanation: "Tracks token holdings and recent transfer activity for a wallet."
+                .to_string(),
         }
     }
 
     /// DEX trading analysis template
     fn dex_trading_template(&self, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
-        let limit = params.get("limit").cloned().unwrap_or_else(|| "100".to_string());
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+        let limit = params
+            .get("limit")
+            .cloned()
+            .unwrap_or_else(|| "100".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -340,21 +358,22 @@ impl TemplateGenerator {
             title: "DEX Trading Analysis".to_string(),
             category: TemplateCategory::DexTrading,
             code,
-            parameters: vec![
-                ScriptParameter {
-                    name: "wallet".to_string(),
-                    param_type: "string".to_string(),
-                    description: "Trader wallet address".to_string(),
-                    default: Some(wallet),
-                },
-            ],
+            parameters: vec![ScriptParameter {
+                name: "wallet".to_string(),
+                param_type: "string".to_string(),
+                description: "Trader wallet address".to_string(),
+                default: Some(wallet),
+            }],
             explanation: "Analyzes DEX trading activity across major Solana DEXes.".to_string(),
         }
     }
 
     /// NFT activity template
     fn nft_activity_template(&self, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -411,7 +430,10 @@ impl TemplateGenerator {
 
     /// Wash trading detection template
     fn wash_trading_template(&self, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -474,13 +496,17 @@ impl TemplateGenerator {
                 description: "Suspect wallet address".to_string(),
                 default: Some(wallet),
             }],
-            explanation: "Detects potential wash trading by analyzing counterparty patterns.".to_string(),
+            explanation: "Detects potential wash trading by analyzing counterparty patterns."
+                .to_string(),
         }
     }
 
     /// Arbitrage detection template
     fn arb_detection_template(&self, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -534,13 +560,18 @@ impl TemplateGenerator {
                 description: "Trader wallet address".to_string(),
                 default: Some(wallet),
             }],
-            explanation: "Detects arbitrage activity by analyzing multi-hop trades and profitability.".to_string(),
+            explanation:
+                "Detects arbitrage activity by analyzing multi-hop trades and profitability."
+                    .to_string(),
         }
     }
 
     /// Whale tracking template
     fn whale_tracking_template(&self, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -595,8 +626,15 @@ impl TemplateGenerator {
     }
 
     /// Custom/generic template
-    fn custom_template(&self, query: &str, params: &HashMap<String, String>) -> InvestigationScript {
-        let wallet = params.get("wallet").cloned().unwrap_or_else(|| "WALLET_ADDRESS".to_string());
+    fn custom_template(
+        &self,
+        query: &str,
+        params: &HashMap<String, String>,
+    ) -> InvestigationScript {
+        let wallet = params
+            .get("wallet")
+            .cloned()
+            .unwrap_or_else(|| "WALLET_ADDRESS".to_string());
 
         let code = format!(
             r#"; ============================================
@@ -642,7 +680,8 @@ impl TemplateGenerator {
 
     /// Add a custom template
     pub fn add_custom_template(&mut self, name: &str, template: &str) {
-        self.custom_templates.insert(name.to_string(), template.to_string());
+        self.custom_templates
+            .insert(name.to_string(), template.to_string());
     }
 }
 

@@ -3,12 +3,12 @@
 //! Provides parallel MCP access by maintaining a pool of McpService instances
 //! that scales up under load and scales down after idle timeout.
 
+use anyhow::Result;
+use serde_json::Value;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Semaphore};
-use anyhow::Result;
-use serde_json::Value;
 
 use crate::services::mcp_service::McpService;
 
@@ -56,7 +56,8 @@ impl PooledInstance {
         service.load_config()?;
 
         // Initialize all servers and build tool→server map
-        let servers: Vec<String> = service.list_servers()
+        let servers: Vec<String> = service
+            .list_servers()
             .iter()
             .map(|(id, _)| (*id).clone())
             .collect();
@@ -88,7 +89,9 @@ impl PooledInstance {
     }
 
     fn try_acquire(&self) -> bool {
-        self.busy.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+        self.busy
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
     }
 
     fn release(&self) {
@@ -126,7 +129,10 @@ impl McpGuard {
             return Ok(result);
         }
 
-        Err(anyhow::anyhow!("Tool '{}' not found in any MCP server", tool_name))
+        Err(anyhow::anyhow!(
+            "Tool '{}' not found in any MCP server",
+            tool_name
+        ))
     }
 
     /// Get the underlying service for direct access (use sparingly)
@@ -244,7 +250,10 @@ impl McpPool {
                 if instance.try_acquire() {
                     self.inner.active_count.fetch_add(1, Ordering::SeqCst);
                     if self.inner.config.debug {
-                        eprintln!("[McpPool] Acquired instance #{} (created by another task)", instance.id);
+                        eprintln!(
+                            "[McpPool] Acquired instance #{} (created by another task)",
+                            instance.id
+                        );
                     }
                     return Ok(McpGuard {
                         instance: Arc::clone(instance),
@@ -257,8 +266,11 @@ impl McpPool {
             if instances.len() < self.inner.config.max_instances {
                 let id = self.inner.next_id.fetch_add(1, Ordering::SeqCst);
                 if self.inner.config.debug {
-                    eprintln!("[McpPool] Scaling UP: creating instance #{} (total: {})",
-                        id, instances.len() + 1);
+                    eprintln!(
+                        "[McpPool] Scaling UP: creating instance #{} (total: {})",
+                        id,
+                        instances.len() + 1
+                    );
                 }
 
                 let instance = Arc::new(PooledInstance::new(id, self.inner.config.debug).await?);
@@ -276,8 +288,10 @@ impl McpPool {
 
         // At max capacity - wait for one to become available
         if self.inner.config.debug {
-            eprintln!("[McpPool] At max capacity ({}), waiting for available instance...",
-                self.inner.config.max_instances);
+            eprintln!(
+                "[McpPool] At max capacity ({}), waiting for available instance...",
+                self.inner.config.max_instances
+            );
         }
 
         loop {
@@ -342,7 +356,10 @@ impl McpPool {
                 if instance.idle_duration().await > timeout {
                     to_remove.push(idx);
                     if inner.config.debug {
-                        eprintln!("[McpPool] Scaling DOWN: removing idle instance #{}", instance.id);
+                        eprintln!(
+                            "[McpPool] Scaling DOWN: removing idle instance #{}",
+                            instance.id
+                        );
                     }
                 }
             }
@@ -366,9 +383,11 @@ pub struct PoolStats {
 
 impl std::fmt::Display for PoolStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{} busy, {}/{} max",
-            self.busy_instances, self.total_instances,
-            self.total_instances, self.max_instances)
+        write!(
+            f,
+            "{}/{} busy, {}/{} max",
+            self.busy_instances, self.total_instances, self.total_instances, self.max_instances
+        )
     }
 }
 

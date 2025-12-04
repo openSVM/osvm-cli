@@ -5,14 +5,14 @@ use std::collections::HashMap;
 /// Primitive field types (fixed-size scalars)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveType {
-    U8,   // 1 byte
-    U16,  // 2 bytes
-    U32,  // 4 bytes
-    U64,  // 8 bytes (default for untyped)
-    I8,   // 1 byte signed
-    I16,  // 2 bytes signed
-    I32,  // 4 bytes signed
-    I64,  // 8 bytes signed (default)
+    U8,  // 1 byte
+    U16, // 2 bytes
+    U32, // 4 bytes
+    U64, // 8 bytes (default for untyped)
+    I8,  // 1 byte signed
+    I16, // 2 bytes signed
+    I32, // 4 bytes signed
+    I64, // 8 bytes signed (default)
 }
 
 impl PrimitiveType {
@@ -25,7 +25,7 @@ impl PrimitiveType {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "u8" => Some(PrimitiveType::U8),
             "u16" => Some(PrimitiveType::U16),
@@ -59,7 +59,10 @@ pub enum FieldType {
     /// Primitive integer types (u8-u64, i8-i64)
     Primitive(PrimitiveType),
     /// Fixed-size array: [element_type count], e.g., [u32 10] = 40 bytes
-    Array { element_type: PrimitiveType, count: usize },
+    Array {
+        element_type: PrimitiveType,
+        count: usize,
+    },
     /// Solana public key (32 bytes, special handling)
     Pubkey,
     /// Nested struct reference (resolved at struct definition time)
@@ -71,8 +74,11 @@ impl FieldType {
     pub fn size(&self) -> i64 {
         match self {
             FieldType::Primitive(p) => p.size(),
-            FieldType::Array { element_type, count } => element_type.size() * (*count as i64),
-            FieldType::Pubkey => 32, // Solana pubkey is always 32 bytes
+            FieldType::Array {
+                element_type,
+                count,
+            } => element_type.size() * (*count as i64),
+            FieldType::Pubkey => 32,   // Solana pubkey is always 32 bytes
             FieldType::Struct(_) => 0, // Requires struct_defs lookup - use size_with_structs
         }
     }
@@ -80,27 +86,32 @@ impl FieldType {
     /// Get size with struct definitions for nested struct resolution
     pub fn size_with_structs(&self, struct_defs: &HashMap<String, StructDef>) -> i64 {
         match self {
-            FieldType::Struct(name) => {
-                struct_defs.get(name).map(|s| s.total_size).unwrap_or(0)
-            }
+            FieldType::Struct(name) => struct_defs.get(name).map(|s| s.total_size).unwrap_or(0),
             _ => self.size(),
         }
     }
 
     /// Parse from type string (simple types only - arrays/structs handled separately)
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         if s == "pubkey" {
             return Some(FieldType::Pubkey);
         }
-        PrimitiveType::from_str(s).map(FieldType::Primitive)
+        PrimitiveType::parse(s).map(FieldType::Primitive)
     }
 
     /// Convert to Anchor IDL type string
     pub fn to_idl_type(&self) -> String {
         match self {
             FieldType::Primitive(p) => p.to_idl_type().to_string(),
-            FieldType::Array { element_type, count } => {
-                format!("{{ \"array\": [\"{}\", {}] }}", element_type.to_idl_type(), count)
+            FieldType::Array {
+                element_type,
+                count,
+            } => {
+                format!(
+                    "{{ \"array\": [\"{}\", {}] }}",
+                    element_type.to_idl_type(),
+                    count
+                )
             }
             FieldType::Pubkey => "publicKey".to_string(),
             FieldType::Struct(name) => format!("{{ \"defined\": \"{}\" }}", name),

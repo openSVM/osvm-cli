@@ -4,7 +4,7 @@
 //! that can be deployed to Solana.
 
 use super::sbpf_codegen::SbpfInstruction;
-use crate::{Result, Error};
+use crate::{Error, Result};
 
 /// ELF magic number
 const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
@@ -28,8 +28,8 @@ const ET_DYN: u16 = 3;
 const EM_SBF: u16 = 263; // 0x107
 
 /// ELF flags for SBPF versions
-const EF_SBF_V1: u32 = 0x0;   // V1 with relocations
-const EF_SBF_V2: u32 = 0x20;  // V2 with static syscalls
+const EF_SBF_V1: u32 = 0x0; // V1 with relocations
+const EF_SBF_V2: u32 = 0x20; // V2 with static syscalls
 
 /// Section header types
 const SHT_NULL: u32 = 0;
@@ -67,9 +67,9 @@ const DT_FLAGS: u64 = 30;
 const DT_RELCOUNT: u64 = 0x6ffffffa;
 
 /// Relocation types (Solana BPF standard)
-const R_BPF_64_64: u32 = 1;   // For 64-bit absolute relocations (syscalls)
-const R_BPF_64_RELATIVE: u32 = 8;  // For relative relocations (add MM_PROGRAM_START at load time)
-const R_BPF_64_32: u32 = 10;  // For 32-bit relocations
+const R_BPF_64_64: u32 = 1; // For 64-bit absolute relocations (syscalls)
+const R_BPF_64_RELATIVE: u32 = 8; // For relative relocations (add MM_PROGRAM_START at load time)
+const R_BPF_64_32: u32 = 10; // For 32-bit relocations
 
 /// Program header flags
 const PF_X: u32 = 0x1;
@@ -77,8 +77,8 @@ const PF_W: u32 = 0x2;
 const PF_R: u32 = 0x4;
 
 /// Virtual addresses for Solana memory regions (SBPFv1)
-const TEXT_VADDR: u64 = 0x120;  // .text at 0x120 (matching Solana's working ELFs)
-const RODATA_VADDR: u64 = 0x150;  // .rodata follows .text
+const TEXT_VADDR: u64 = 0x120; // .text at 0x120 (matching Solana's working ELFs)
+const RODATA_VADDR: u64 = 0x150; // .rodata follows .text
 const STACK_VADDR: u64 = 0x200000000;
 const HEAP_VADDR: u64 = 0x300000000;
 /// MM_PROGRAM_START: Base address added to all program memory at runtime
@@ -135,7 +135,12 @@ impl ElfWriter {
     }
 
     /// Write sBPF program to proper Solana ELF format
-    pub fn write(&mut self, program: &[SbpfInstruction], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
+    pub fn write(
+        &mut self,
+        program: &[SbpfInstruction],
+        _debug_info: bool,
+        sbpf_version: super::SbpfVersion,
+    ) -> Result<Vec<u8>> {
         // Encode instructions
         let mut text_section: Vec<u8> = Vec::new();
         for instr in program {
@@ -169,11 +174,11 @@ impl ElfWriter {
         let ehdr_size = 64usize;
         let phdr_size = 56usize;
         let shdr_size = 64usize;
-        let num_phdrs = 1usize;  // Just .text PT_LOAD
-        let num_sections = 5usize;  // NULL, .text, .strtab, .symtab, .shstrtab
+        let num_phdrs = 1usize; // Just .text PT_LOAD
+        let num_sections = 5usize; // NULL, .text, .strtab, .symtab, .shstrtab
 
         let phdr_offset = ehdr_size;
-        let text_offset = 0x120usize;  // Match Solana's working ELFs
+        let text_offset = 0x120usize; // Match Solana's working ELFs
         let text_size = text_section.len();
 
         let strtab_offset = text_offset + text_size;
@@ -223,7 +228,14 @@ impl ElfWriter {
 
         // ==================== Program Headers ====================
         // Single PT_LOAD for .text (page-aligned like reference)
-        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
+        self.write_phdr_aligned(
+            &mut elf,
+            PT_LOAD,
+            PF_R | PF_X,
+            text_offset,
+            TEXT_VADDR,
+            text_size,
+        );
 
         // Padding to 0x120 for .text section
         while elf.len() < text_offset {
@@ -260,28 +272,80 @@ impl ElfWriter {
         elf.extend_from_slice(&[0u8; 64]);
 
         // 1: .text
-        self.write_shdr(&mut elf, text_name, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR,
-                       TEXT_VADDR, text_offset, text_size, 0, 0, 0x1000, 0);
+        self.write_shdr(
+            &mut elf,
+            text_name,
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            TEXT_VADDR,
+            text_offset,
+            text_size,
+            0,
+            0,
+            0x1000,
+            0,
+        );
 
         // 2: .strtab
-        self.write_shdr(&mut elf, strtab_name, SHT_STRTAB, 0,
-                       0, strtab_offset, strtab_size, 0, 0, 1, 0);
+        self.write_shdr(
+            &mut elf,
+            strtab_name,
+            SHT_STRTAB,
+            0,
+            0,
+            strtab_offset,
+            strtab_size,
+            0,
+            0,
+            1,
+            0,
+        );
 
         // 3: .symtab
-        self.write_shdr(&mut elf, symtab_name, SHT_SYMTAB, 0,
-                       0, symtab_offset, symtab_size, 2, 1, 8, symtab_entry_size);
+        self.write_shdr(
+            &mut elf,
+            symtab_name,
+            SHT_SYMTAB,
+            0,
+            0,
+            symtab_offset,
+            symtab_size,
+            2,
+            1,
+            8,
+            symtab_entry_size,
+        );
 
         // 4: .shstrtab
-        self.write_shdr(&mut elf, 1, SHT_STRTAB, 0,
-                       0, shstrtab_offset, shstrtab_size, 0, 0, 1, 0);
+        self.write_shdr(
+            &mut elf,
+            1,
+            SHT_STRTAB,
+            0,
+            0,
+            shstrtab_offset,
+            shstrtab_size,
+            0,
+            0,
+            1,
+            0,
+        );
 
-        let _ = (stack_name, heap_name);  // Suppress unused warnings
+        let _ = (stack_name, heap_name); // Suppress unused warnings
 
         Ok(elf)
     }
 
     /// Write sBPF program with syscall support (dynamic linking)
-    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], string_loads: &[StringLoadRef], rodata: &[u8], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
+    pub fn write_with_syscalls(
+        &mut self,
+        program: &[SbpfInstruction],
+        syscalls: &[SyscallRef],
+        string_loads: &[StringLoadRef],
+        rodata: &[u8],
+        _debug_info: bool,
+        sbpf_version: super::SbpfVersion,
+    ) -> Result<Vec<u8>> {
         if syscalls.is_empty() {
             return self.write(program, _debug_info, sbpf_version);
         }
@@ -298,7 +362,8 @@ impl ElfWriter {
 
         // Build dynamic symbol table
         let mut dynsym_entries: Vec<(usize, String)> = Vec::new(); // (name_idx, name)
-        let mut seen_syscalls: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut seen_syscalls: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
 
         for sc in syscalls {
             if !seen_syscalls.contains_key(&sc.name) {
@@ -336,23 +401,23 @@ impl ElfWriter {
         let ehdr_size = 64usize;
         let phdr_size = 56usize;
         let shdr_size = 64usize;
-        let num_phdrs = 4usize;  // PT_LOAD (.text), PT_LOAD (.rodata), PT_LOAD (dynamic sections), PT_DYNAMIC
-        let num_sections = 8usize;  // NULL, .text, .rodata, .dynamic, .dynsym, .dynstr, .rel.dyn, .shstrtab (matching reference)
+        let num_phdrs = 4usize; // PT_LOAD (.text), PT_LOAD (.rodata), PT_LOAD (dynamic sections), PT_DYNAMIC
+        let num_sections = 8usize; // NULL, .text, .rodata, .dynamic, .dynsym, .dynstr, .rel.dyn, .shstrtab (matching reference)
 
-        let text_offset = 0x120usize;  // Match Solana's working ELFs
+        let text_offset = 0x120usize; // Match Solana's working ELFs
         let text_size = text_section.len();
 
         // .rodata section with actual string literals
         let rodata_offset = text_offset + text_size;
         let rodata_size = if rodata.is_empty() {
-            8usize  // Minimum 8 bytes if no strings
+            8usize // Minimum 8 bytes if no strings
         } else {
             rodata.len()
         };
         let rodata_data = if rodata.is_empty() {
-            vec![0u8; 8]  // Fallback to zeros if empty
+            vec![0u8; 8] // Fallback to zeros if empty
         } else {
-            rodata.to_vec()  // Use actual string data
+            rodata.to_vec() // Use actual string data
         };
 
         // .dynamic section (11 entries * 16 bytes = 176 bytes) - MUST be 8-byte aligned!
@@ -432,7 +497,7 @@ impl ElfWriter {
         elf.extend_from_slice(&TEXT_VADDR.to_le_bytes()); // e_entry
         elf.extend_from_slice(&(ehdr_size as u64).to_le_bytes()); // e_phoff
         elf.extend_from_slice(&(shdr_offset as u64).to_le_bytes()); // e_shoff
-        // Use appropriate flags based on SBPF version
+                                                                    // Use appropriate flags based on SBPF version
         let ef_flags = match sbpf_version {
             super::SbpfVersion::V1 => EF_SBF_V1,
             super::SbpfVersion::V2 => EF_SBF_V2,
@@ -447,16 +512,37 @@ impl ElfWriter {
 
         // ==================== Program Headers ====================
         // PT_LOAD #1: .text only (R+X)
-        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
+        self.write_phdr_aligned(
+            &mut elf,
+            PT_LOAD,
+            PF_R | PF_X,
+            text_offset,
+            TEXT_VADDR,
+            text_size,
+        );
 
         // PT_LOAD #2: .rodata (R+W) - matches reference structure
-        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_W, rodata_offset, rodata_vaddr, rodata_size);
+        self.write_phdr_aligned(
+            &mut elf,
+            PT_LOAD,
+            PF_R | PF_W,
+            rodata_offset,
+            rodata_vaddr,
+            rodata_size,
+        );
 
         // PT_LOAD #3: Dynamic sections (.dynsym, .dynstr, .rel.dyn) - READ-ONLY like reference!
         // These sections are metadata and don't need write access
         // IMPORTANT: Calculate actual file span including alignment padding between sections
         let dyn_sections_size = (reldyn_offset + reldyn_size) - dynsym_offset;
-        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynsym_offset, dynsym_vaddr, dyn_sections_size);
+        self.write_phdr_aligned(
+            &mut elf,
+            PT_LOAD,
+            PF_R,
+            dynsym_offset,
+            dynsym_vaddr,
+            dyn_sections_size,
+        );
 
         // PT_DYNAMIC: Points to .dynamic section (needs 8-byte alignment, not page alignment)
         elf.extend_from_slice(&PT_DYNAMIC.to_le_bytes());
@@ -466,7 +552,7 @@ impl ElfWriter {
         elf.extend_from_slice(&dynamic_vaddr.to_le_bytes());
         elf.extend_from_slice(&(dynamic_size as u64).to_le_bytes());
         elf.extend_from_slice(&(dynamic_size as u64).to_le_bytes());
-        elf.extend_from_slice(&0x8u64.to_le_bytes());  // 8-byte alignment for dynamic entries
+        elf.extend_from_slice(&0x8u64.to_le_bytes()); // 8-byte alignment for dynamic entries
 
         // Padding to 0x120 for .text section
         while elf.len() < text_offset {
@@ -481,16 +567,14 @@ impl ElfWriter {
 
         // Add padding to align .dynamic section to 8 bytes
         let padding_needed = dynamic_offset - (rodata_offset + rodata_size);
-        for _ in 0..padding_needed {
-            elf.push(0);
-        }
+        elf.resize(elf.len() + padding_needed, 0);
 
         // ==================== .dynamic Section ====================
         // Match Solana's test ELF format
         // DT_FLAGS (TEXTREL flag = 0x4, matching Solana's test ELF)
         elf.extend_from_slice(&DT_FLAGS.to_le_bytes());
         elf.extend_from_slice(&0x4u64.to_le_bytes()); // DF_TEXTREL flag
-        // DT_REL
+                                                      // DT_REL
         elf.extend_from_slice(&DT_REL.to_le_bytes());
         elf.extend_from_slice(&reldyn_vaddr.to_le_bytes());
         // DT_RELSZ
@@ -539,9 +623,7 @@ impl ElfWriter {
 
         // Add padding to align .rel.dyn to 8 bytes (Elf64Rel requires 8-byte alignment)
         let padding_needed = reldyn_offset - (dynstr_offset + dynstr_size);
-        for _ in 0..padding_needed {
-            elf.push(0);
-        }
+        elf.resize(elf.len() + padding_needed, 0);
 
         // ==================== .rel.dyn Section ====================
         for sc in syscalls {
@@ -569,38 +651,122 @@ impl ElfWriter {
         elf.extend_from_slice(&[0u8; 64]);
 
         // 1: .text
-        self.write_shdr(&mut elf, text_name, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR,
-                       TEXT_VADDR, text_offset, text_size, 0, 0, 0x1000, 0);
+        self.write_shdr(
+            &mut elf,
+            text_name,
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            TEXT_VADDR,
+            text_offset,
+            text_size,
+            0,
+            0,
+            0x1000,
+            0,
+        );
 
         // 2: .rodata
-        self.write_shdr(&mut elf, rodata_name, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE,
-                       rodata_vaddr, rodata_offset, rodata_size, 0, 0, 0x1, 0);
+        self.write_shdr(
+            &mut elf,
+            rodata_name,
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_WRITE,
+            rodata_vaddr,
+            rodata_offset,
+            rodata_size,
+            0,
+            0,
+            0x1,
+            0,
+        );
 
         // 3: .dynamic (Link=5 for .dynstr)
-        self.write_shdr(&mut elf, dynamic_name, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE,
-                       dynamic_vaddr, dynamic_offset, dynamic_size, 5, 0, 8, 16);
+        self.write_shdr(
+            &mut elf,
+            dynamic_name,
+            SHT_DYNAMIC,
+            SHF_ALLOC | SHF_WRITE,
+            dynamic_vaddr,
+            dynamic_offset,
+            dynamic_size,
+            5,
+            0,
+            8,
+            16,
+        );
 
         // 4: .dynsym (Link=5 for .dynstr, Info=1)
-        self.write_shdr(&mut elf, dynsym_name, SHT_DYNSYM, SHF_ALLOC,
-                       dynsym_vaddr, dynsym_offset, dynsym_size, 5, 1, 8, dynsym_entry_size);
+        self.write_shdr(
+            &mut elf,
+            dynsym_name,
+            SHT_DYNSYM,
+            SHF_ALLOC,
+            dynsym_vaddr,
+            dynsym_offset,
+            dynsym_size,
+            5,
+            1,
+            8,
+            dynsym_entry_size,
+        );
 
         // 5: .dynstr
-        self.write_shdr(&mut elf, dynstr_name, SHT_STRTAB, SHF_ALLOC,
-                       dynstr_vaddr, dynstr_offset, dynstr_size, 0, 0, 1, 0);
+        self.write_shdr(
+            &mut elf,
+            dynstr_name,
+            SHT_STRTAB,
+            SHF_ALLOC,
+            dynstr_vaddr,
+            dynstr_offset,
+            dynstr_size,
+            0,
+            0,
+            1,
+            0,
+        );
 
         // 6: .rel.dyn (Link=4 for .dynsym)
-        self.write_shdr(&mut elf, reldyn_name, SHT_REL, SHF_ALLOC,
-                       reldyn_vaddr, reldyn_offset, reldyn_size, 4, 0, 8, reldyn_entry_size);
+        self.write_shdr(
+            &mut elf,
+            reldyn_name,
+            SHT_REL,
+            SHF_ALLOC,
+            reldyn_vaddr,
+            reldyn_offset,
+            reldyn_size,
+            4,
+            0,
+            8,
+            reldyn_entry_size,
+        );
 
         // 7: .shstrtab (removed .strtab and .symtab to match reference)
-        self.write_shdr(&mut elf, 1, SHT_STRTAB, 0,
-                       0, shstrtab_offset, shstrtab_size, 0, 0, 1, 0);
+        self.write_shdr(
+            &mut elf,
+            1,
+            SHT_STRTAB,
+            0,
+            0,
+            shstrtab_offset,
+            shstrtab_size,
+            0,
+            0,
+            1,
+            0,
+        );
 
         Ok(elf)
     }
 
-    fn write_phdr_aligned(&self, elf: &mut Vec<u8>, p_type: u32, p_flags: u32,
-                  p_offset: usize, p_vaddr: u64, p_size: usize) {
+    fn write_phdr_aligned(
+        &self,
+        elf: &mut Vec<u8>,
+        p_type: u32,
+        p_flags: u32,
+        p_offset: usize,
+        p_vaddr: u64,
+        p_size: usize,
+    ) {
         elf.extend_from_slice(&p_type.to_le_bytes());
         elf.extend_from_slice(&p_flags.to_le_bytes());
         elf.extend_from_slice(&(p_offset as u64).to_le_bytes());
@@ -608,12 +774,24 @@ impl ElfWriter {
         elf.extend_from_slice(&p_vaddr.to_le_bytes());
         elf.extend_from_slice(&(p_size as u64).to_le_bytes());
         elf.extend_from_slice(&(p_size as u64).to_le_bytes());
-        elf.extend_from_slice(&0x1000u64.to_le_bytes());  // Page alignment
+        elf.extend_from_slice(&0x1000u64.to_le_bytes()); // Page alignment
     }
 
-    fn write_shdr(&self, elf: &mut Vec<u8>, sh_name: usize, sh_type: u32, sh_flags: u64,
-                  sh_addr: u64, sh_offset: usize, sh_size: usize,
-                  sh_link: u32, sh_info: u32, sh_addralign: u64, sh_entsize: usize) {
+    #[allow(clippy::too_many_arguments)]
+    fn write_shdr(
+        &self,
+        elf: &mut Vec<u8>,
+        sh_name: usize,
+        sh_type: u32,
+        sh_flags: u64,
+        sh_addr: u64,
+        sh_offset: usize,
+        sh_size: usize,
+        sh_link: u32,
+        sh_info: u32,
+        sh_addralign: u64,
+        sh_entsize: usize,
+    ) {
         elf.extend_from_slice(&(sh_name as u32).to_le_bytes());
         elf.extend_from_slice(&sh_type.to_le_bytes());
         elf.extend_from_slice(&sh_flags.to_le_bytes());
@@ -653,7 +831,7 @@ pub fn validate_sbpf_elf(data: &[u8]) -> Result<()> {
         return Err(Error::runtime("ELF file too small"));
     }
 
-    if &data[0..4] != &ELF_MAGIC {
+    if data[0..4] != ELF_MAGIC {
         return Err(Error::runtime("Invalid ELF magic"));
     }
 
@@ -663,7 +841,10 @@ pub fn validate_sbpf_elf(data: &[u8]) -> Result<()> {
 
     let machine = u16::from_le_bytes([data[18], data[19]]);
     if machine != EM_SBF && machine != 247 {
-        return Err(Error::runtime(format!("Not a BPF ELF: machine={}", machine)));
+        return Err(Error::runtime(format!(
+            "Not a BPF ELF: machine={}",
+            machine
+        )));
     }
 
     Ok(())
@@ -676,7 +857,7 @@ mod tests {
 
     #[test]
     fn test_elf_writer() {
-        use crate::compiler::sbpf_codegen::{SbpfInstruction, alu};
+        use crate::compiler::sbpf_codegen::{alu, SbpfInstruction};
 
         let mut writer = ElfWriter::new();
         let program = vec![

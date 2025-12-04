@@ -75,6 +75,7 @@ struct CircuitBreakerInstance {
 }
 
 /// Main circuit breaker manager with granular control
+#[derive(Clone)]
 pub struct GranularCircuitBreaker {
     /// Circuit breakers per endpoint
     endpoint_breakers: Arc<RwLock<HashMap<EndpointId, CircuitBreakerInstance>>>,

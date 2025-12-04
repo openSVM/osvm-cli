@@ -1,8 +1,8 @@
 // Post database operations
 
-use diesel::prelude::*;
+use super::{now_as_useconds, Result};
 use crate::utils::bbs::{models::*, schema::posts};
-use super::{Result, now_as_useconds};
+use diesel::prelude::*;
 
 /// Get posts for a board (all posts, ordered by creation time descending)
 pub fn list_for_board(conn: &mut SqliteConnection, board_id: i32, limit: i64) -> Result<Vec<Post>> {
@@ -29,7 +29,7 @@ pub fn list_top_level(conn: &mut SqliteConnection, board_id: i32, limit: i64) ->
 pub fn list_replies(conn: &mut SqliteConnection, parent_id: i32) -> Result<Vec<Post>> {
     posts::table
         .filter(posts::parent_id.eq(parent_id))
-        .order(posts::created_at_us.asc())  // Replies in chronological order
+        .order(posts::created_at_us.asc()) // Replies in chronological order
         .load::<Post>(conn)
         .map_err(|e| e.into())
 }
@@ -43,7 +43,12 @@ pub fn get(conn: &mut SqliteConnection, post_id: i32) -> Result<Post> {
 }
 
 /// Create new top-level post
-pub fn create(conn: &mut SqliteConnection, board_id: i32, user_id: i32, body: &str) -> Result<Post> {
+pub fn create(
+    conn: &mut SqliteConnection,
+    board_id: i32,
+    user_id: i32,
+    body: &str,
+) -> Result<Post> {
     create_full(conn, board_id, user_id, body, None, None)
 }
 
@@ -66,7 +71,14 @@ pub fn create_with_federated_parent(
     body: &str,
     federated_parent_id: &str,
 ) -> Result<Post> {
-    create_full(conn, board_id, user_id, body, None, Some(federated_parent_id))
+    create_full(
+        conn,
+        board_id,
+        user_id,
+        body,
+        None,
+        Some(federated_parent_id),
+    )
 }
 
 /// Create new post (full version with all parent options)
@@ -100,7 +112,12 @@ pub fn create_full(
 }
 
 /// Create a reply to an existing local post
-pub fn reply(conn: &mut SqliteConnection, parent_post_id: i32, user_id: i32, body: &str) -> Result<Post> {
+pub fn reply(
+    conn: &mut SqliteConnection,
+    parent_post_id: i32,
+    user_id: i32,
+    body: &str,
+) -> Result<Post> {
     // Get the parent post to determine the board_id
     let parent = get(conn, parent_post_id)?;
     create_with_parent(conn, parent.board_id, user_id, body, Some(parent_post_id))
@@ -134,8 +151,7 @@ pub fn delete(conn: &mut SqliteConnection, post_id: i32, requester_user_id: i32)
     delete_replies(conn, post_id)?;
 
     // Delete the post itself
-    diesel::delete(posts::table.find(post_id))
-        .execute(conn)?;
+    diesel::delete(posts::table.find(post_id)).execute(conn)?;
 
     Ok(true)
 }
@@ -151,8 +167,7 @@ fn delete_replies(conn: &mut SqliteConnection, parent_id: i32) -> Result<()> {
     }
 
     // Delete direct replies
-    diesel::delete(posts::table.filter(posts::parent_id.eq(parent_id)))
-        .execute(conn)?;
+    diesel::delete(posts::table.filter(posts::parent_id.eq(parent_id))).execute(conn)?;
 
     Ok(())
 }
@@ -186,7 +201,11 @@ pub fn get_thread(conn: &mut SqliteConnection, post_id: i32) -> Result<Vec<Post>
 }
 
 /// Helper to collect replies recursively
-fn collect_replies(conn: &mut SqliteConnection, parent_id: i32, thread: &mut Vec<Post>) -> Result<()> {
+fn collect_replies(
+    conn: &mut SqliteConnection,
+    parent_id: i32,
+    thread: &mut Vec<Post>,
+) -> Result<()> {
     let replies = list_replies(conn, parent_id)?;
     for reply in replies {
         let reply_id = reply.id;

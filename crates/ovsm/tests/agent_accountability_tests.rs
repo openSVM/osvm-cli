@@ -6,16 +6,17 @@
 /// 2. Program logic is correct (via bytecode inspection)
 /// 3. Instruction discriminators are properly routed
 /// 4. Account data layouts match specifications
-
-use ovsm::compiler::{Compiler, CompileOptions};
+use ovsm::compiler::{CompileOptions, Compiler};
 use std::fs;
 use std::path::PathBuf;
 
 fn get_examples_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     PathBuf::from(manifest_dir)
-        .parent().unwrap()
-        .parent().unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
         .join("examples")
         .join("ovsm_scripts")
 }
@@ -36,41 +37,73 @@ fn compile_program(filename: &str) -> ovsm::Result<ovsm::compiler::CompileResult
 #[test]
 fn test_agent_escrow_compiles() {
     let result = compile_program("agent_escrow.ovsm");
-    assert!(result.is_ok(), "agent_escrow.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "agent_escrow.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
     assert!(compiled.elf_bytes.len() > 100, "ELF too small");
 
     // Verify reasonable size (not bloated)
-    assert!(compiled.elf_bytes.len() < 50_000, "ELF too large: {} bytes", compiled.elf_bytes.len());
+    assert!(
+        compiled.elf_bytes.len() < 50_000,
+        "ELF too large: {} bytes",
+        compiled.elf_bytes.len()
+    );
 }
 
 #[test]
 fn test_reputation_nft_compiles() {
     let result = compile_program("reputation_nft.ovsm");
-    assert!(result.is_ok(), "reputation_nft.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "reputation_nft.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
 
     // Reputation NFT v2 should have significant logic (decay, negative rep, collateral)
-    assert!(compiled.ir_instruction_count > 100, "IR instruction count too low for v2");
+    assert!(
+        compiled.ir_instruction_count > 100,
+        "IR instruction count too low for v2"
+    );
 }
 
 #[test]
 fn test_dispute_resolution_compiles() {
     let result = compile_program("dispute_resolution.ovsm");
-    assert!(result.is_ok(), "dispute_resolution.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "dispute_resolution.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
 }
 
 #[test]
 fn test_agent_registry_compiles() {
     let result = compile_program("agent_registry.ovsm");
-    assert!(result.is_ok(), "agent_registry.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "agent_registry.ovsm failed to compile: {:?}",
+        result.err()
+    );
 }
 
 // =============================================================================
@@ -84,7 +117,11 @@ fn test_escrow_instruction_count() {
     let result = compile_program("agent_escrow.ovsm").unwrap();
 
     // Should have reasonable CU estimate (not exceeding compute budget)
-    assert!(result.estimated_cu < 200_000, "CU too high: {}", result.estimated_cu);
+    assert!(
+        result.estimated_cu < 200_000,
+        "CU too high: {}",
+        result.estimated_cu
+    );
 }
 
 #[test]
@@ -95,7 +132,10 @@ fn test_reputation_nft_v2_features() {
     let result = compile_program("reputation_nft.ovsm").unwrap();
 
     // V2 should be larger than a simple counter program
-    assert!(result.elf_bytes.len() > 8000, "Reputation NFT v2 too small, missing features?");
+    assert!(
+        result.elf_bytes.len() > 8000,
+        "Reputation NFT v2 too small, missing features?"
+    );
 }
 
 #[test]
@@ -106,7 +146,11 @@ fn test_dispute_resolution_voting() {
 
     // Should compile without verification errors
     let verification = result.verification.as_ref().unwrap();
-    assert!(verification.valid, "Verification failed: {:?}", verification.errors);
+    assert!(
+        verification.valid,
+        "Verification failed: {:?}",
+        verification.errors
+    );
 }
 
 // =============================================================================
@@ -124,7 +168,11 @@ fn test_full_workflow_compilation() {
     let registry = compile_program("agent_registry.ovsm");
 
     assert!(escrow.is_ok(), "Escrow failed: {:?}", escrow.err());
-    assert!(reputation.is_ok(), "Reputation failed: {:?}", reputation.err());
+    assert!(
+        reputation.is_ok(),
+        "Reputation failed: {:?}",
+        reputation.err()
+    );
     assert!(dispute.is_ok(), "Dispute failed: {:?}", dispute.err());
     assert!(registry.is_ok(), "Registry failed: {:?}", registry.err());
 
@@ -137,7 +185,11 @@ fn test_full_workflow_compilation() {
     println!("Total Agent Accountability Suite: {} bytes", total_size);
 
     // Should fit within reasonable deployment limits
-    assert!(total_size < 200_000, "Total suite too large: {} bytes", total_size);
+    assert!(
+        total_size < 200_000,
+        "Total suite too large: {} bytes",
+        total_size
+    );
 }
 
 // =============================================================================
@@ -194,7 +246,11 @@ fn test_collateral_requirement_formula() {
     fn required_collateral(base: i64, reputation_score: i64) -> i64 {
         let required = (base * (100 - reputation_score)) / 100;
         let minimum = base / 10;
-        if required < minimum { minimum } else { required }
+        if required < minimum {
+            minimum
+        } else {
+            required
+        }
     }
 
     // New agent (0 rep) = full collateral
@@ -242,7 +298,13 @@ fn test_escrow_account_layout() {
     ];
 
     for (offset, field) in offsets {
-        assert!(offset < expected_size, "Field {} at offset {} exceeds size {}", field, offset, expected_size);
+        assert!(
+            offset < expected_size,
+            "Field {} at offset {} exceeds size {}",
+            field,
+            offset,
+            expected_size
+        );
     }
 }
 
@@ -285,7 +347,13 @@ fn test_reputation_nft_account_layout() {
     ];
 
     for (offset, field) in offsets {
-        assert!(offset < expected_size, "Field {} at offset {} exceeds size {}", field, offset, expected_size);
+        assert!(
+            offset < expected_size,
+            "Field {} at offset {} exceeds size {}",
+            field,
+            offset,
+            expected_size
+        );
     }
 }
 
@@ -309,11 +377,15 @@ fn test_no_critical_warnings() {
         for warning in &result.warnings {
             assert!(
                 !warning.contains("undefined"),
-                "Program {} has undefined reference: {}", program, warning
+                "Program {} has undefined reference: {}",
+                program,
+                warning
             );
             assert!(
                 !warning.contains("overflow"),
-                "Program {} has overflow warning: {}", program, warning
+                "Program {} has overflow warning: {}",
+                program,
+                warning
             );
         }
     }
@@ -336,8 +408,7 @@ fn test_verification_passes() {
         assert!(
             verification.valid,
             "Program {} failed verification: {:?}",
-            program,
-            verification.errors
+            program, verification.errors
         );
     }
 }
@@ -353,12 +424,30 @@ fn test_escrow_discriminators() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Verify all 6 instructions are present
-    assert!(source.contains("INSTR_CREATE"), "Missing CREATE instruction");
-    assert!(source.contains("INSTR_ACCEPT"), "Missing ACCEPT instruction");
-    assert!(source.contains("INSTR_CONFIRM"), "Missing CONFIRM instruction");
-    assert!(source.contains("INSTR_REJECT"), "Missing REJECT instruction");
-    assert!(source.contains("INSTR_TIMEOUT"), "Missing TIMEOUT instruction");
-    assert!(source.contains("INSTR_CANCEL"), "Missing CANCEL instruction");
+    assert!(
+        source.contains("INSTR_CREATE"),
+        "Missing CREATE instruction"
+    );
+    assert!(
+        source.contains("INSTR_ACCEPT"),
+        "Missing ACCEPT instruction"
+    );
+    assert!(
+        source.contains("INSTR_CONFIRM"),
+        "Missing CONFIRM instruction"
+    );
+    assert!(
+        source.contains("INSTR_REJECT"),
+        "Missing REJECT instruction"
+    );
+    assert!(
+        source.contains("INSTR_TIMEOUT"),
+        "Missing TIMEOUT instruction"
+    );
+    assert!(
+        source.contains("INSTR_CANCEL"),
+        "Missing CANCEL instruction"
+    );
 }
 
 #[test]
@@ -368,10 +457,22 @@ fn test_reputation_nft_discriminators() {
 
     // Verify v2 instructions are present
     assert!(source.contains("MINT NFT"), "Missing MINT instruction");
-    assert!(source.contains("ADD TASK COMPLETE"), "Missing ADD TASK COMPLETE");
-    assert!(source.contains("ADD TASK FAILED"), "Missing ADD TASK FAILED (v2)");
-    assert!(source.contains("VERIFY REPUTATION"), "Missing VERIFY REPUTATION");
-    assert!(source.contains("GET REQUIRED COLLATERAL"), "Missing GET COLLATERAL (v2)");
+    assert!(
+        source.contains("ADD TASK COMPLETE"),
+        "Missing ADD TASK COMPLETE"
+    );
+    assert!(
+        source.contains("ADD TASK FAILED"),
+        "Missing ADD TASK FAILED (v2)"
+    );
+    assert!(
+        source.contains("VERIFY REPUTATION"),
+        "Missing VERIFY REPUTATION"
+    );
+    assert!(
+        source.contains("GET REQUIRED COLLATERAL"),
+        "Missing GET COLLATERAL (v2)"
+    );
 }
 
 // =============================================================================
@@ -400,10 +501,17 @@ fn test_elf_has_valid_header() {
 #[test]
 fn test_reputation_attestation_compiles() {
     let result = compile_program("reputation_attestation.ovsm");
-    assert!(result.is_ok(), "reputation_attestation.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "reputation_attestation.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
 }
 
 #[test]
@@ -412,10 +520,22 @@ fn test_attestation_has_all_instructions() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Verify all 4 attestation instructions are present
-    assert!(source.contains("QUERY REPUTATION"), "Missing QUERY instruction");
-    assert!(source.contains("ATTEST REPUTATION"), "Missing ATTEST instruction");
-    assert!(source.contains("VERIFY THRESHOLD"), "Missing VERIFY instruction");
-    assert!(source.contains("GET COLLATERAL DISCOUNT"), "Missing COLLATERAL instruction");
+    assert!(
+        source.contains("QUERY REPUTATION"),
+        "Missing QUERY instruction"
+    );
+    assert!(
+        source.contains("ATTEST REPUTATION"),
+        "Missing ATTEST instruction"
+    );
+    assert!(
+        source.contains("VERIFY THRESHOLD"),
+        "Missing VERIFY instruction"
+    );
+    assert!(
+        source.contains("GET COLLATERAL DISCOUNT"),
+        "Missing COLLATERAL instruction"
+    );
 }
 
 /// Test trust score calculation formula
@@ -448,7 +568,7 @@ fn test_trust_score_formula() {
 
         let total_disputes = disputes_won + disputes_lost;
         let dispute_score = if total_disputes == 0 {
-            10  // Neutral if no disputes
+            10 // Neutral if no disputes
         } else {
             (disputes_won * 20) / total_disputes
         };
@@ -463,19 +583,30 @@ fn test_trust_score_formula() {
     }
 
     // Perfect agent: 100 tasks, 0 fails, 5.0 rating, all disputes won, no decay
-    assert!(calculate_trust(100, 0, 50, 10, 0, 0) >= 80, "Perfect agent should have high trust");
+    assert!(
+        calculate_trust(100, 0, 50, 10, 0, 0) >= 80,
+        "Perfect agent should have high trust"
+    );
 
     // Bad agent: 10 tasks, 10 fails (net = -10), low rating
     // net_tasks = -10 (negative), so task_score = 0
     // rating_score = 20 * 30 / 50 = 12
     // dispute_score = 0 (all lost)
     // Total = 0 + 12 + 0 = 12
-    assert_eq!(calculate_trust(10, 10, 20, 0, 5, 0), 12, "Bad agent should have low trust");
+    assert_eq!(
+        calculate_trust(10, 10, 20, 0, 5, 0),
+        12,
+        "Bad agent should have low trust"
+    );
 
     // Decayed agent: good stats but 50% decay
     let no_decay = calculate_trust(50, 0, 40, 5, 0, 0);
     let with_decay = calculate_trust(50, 0, 40, 5, 0, 50);
-    assert_eq!(with_decay, no_decay / 2, "50% decay should halve trust score");
+    assert_eq!(
+        with_decay,
+        no_decay / 2,
+        "50% decay should halve trust score"
+    );
 }
 
 /// Test collateral discount formula
@@ -499,10 +630,17 @@ fn test_collateral_discount_formula() {
 #[test]
 fn test_agent_marketplace_compiles() {
     let result = compile_program("agent_marketplace.ovsm");
-    assert!(result.is_ok(), "agent_marketplace.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "agent_marketplace.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
 }
 
 /// Test marketplace has all 5 instructions
@@ -512,12 +650,26 @@ fn test_marketplace_has_all_instructions() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Verify all 5 marketplace instructions are present
-    assert!(source.contains("CREATE LISTING"), "Missing CREATE LISTING instruction");
-    assert!(source.contains("UPDATE LISTING"), "Missing UPDATE LISTING instruction");
-    assert!(source.contains("ACCEPT JOB"), "Missing ACCEPT JOB instruction");
-    assert!(source.contains("COMPLETE LISTING"), "Missing COMPLETE LISTING instruction");
-    assert!(source.contains("QUERY LISTING FEE") || source.contains("QUERY FEE"),
-            "Missing QUERY FEE instruction");
+    assert!(
+        source.contains("CREATE LISTING"),
+        "Missing CREATE LISTING instruction"
+    );
+    assert!(
+        source.contains("UPDATE LISTING"),
+        "Missing UPDATE LISTING instruction"
+    );
+    assert!(
+        source.contains("ACCEPT JOB"),
+        "Missing ACCEPT JOB instruction"
+    );
+    assert!(
+        source.contains("COMPLETE LISTING"),
+        "Missing COMPLETE LISTING instruction"
+    );
+    assert!(
+        source.contains("QUERY LISTING FEE") || source.contains("QUERY FEE"),
+        "Missing QUERY FEE instruction"
+    );
 }
 
 /// Test marketplace threshold requirements
@@ -528,13 +680,25 @@ fn test_marketplace_threshold_requirements() {
 
     // Verify threshold constants are defined
     assert!(source.contains("MIN_TASKS"), "Missing MIN_TASKS threshold");
-    assert!(source.contains("MIN_RATING_X10"), "Missing MIN_RATING_X10 threshold");
+    assert!(
+        source.contains("MIN_RATING_X10"),
+        "Missing MIN_RATING_X10 threshold"
+    );
     assert!(source.contains("MAX_DECAY"), "Missing MAX_DECAY threshold");
 
     // Verify threshold values
-    assert!(source.contains("(define MIN_TASKS 5)"), "MIN_TASKS should be 5");
-    assert!(source.contains("(define MIN_RATING_X10 30)"), "MIN_RATING_X10 should be 30 (3.0 stars)");
-    assert!(source.contains("(define MAX_DECAY 50)"), "MAX_DECAY should be 50%");
+    assert!(
+        source.contains("(define MIN_TASKS 5)"),
+        "MIN_TASKS should be 5"
+    );
+    assert!(
+        source.contains("(define MIN_RATING_X10 30)"),
+        "MIN_RATING_X10 should be 30 (3.0 stars)"
+    );
+    assert!(
+        source.contains("(define MAX_DECAY 50)"),
+        "MAX_DECAY should be 50%"
+    );
 }
 
 /// Test marketplace fee constants
@@ -545,12 +709,21 @@ fn test_marketplace_fee_constants() {
 
     // Verify fee constants
     assert!(source.contains("BASE_FEE"), "Missing BASE_FEE constant");
-    assert!(source.contains("BASE_DEPOSIT"), "Missing BASE_DEPOSIT constant");
+    assert!(
+        source.contains("BASE_DEPOSIT"),
+        "Missing BASE_DEPOSIT constant"
+    );
 
     // BASE_FEE should be 0.01 SOL (10,000,000 lamports)
-    assert!(source.contains("10000000"), "BASE_FEE should be 10,000,000 lamports");
+    assert!(
+        source.contains("10000000"),
+        "BASE_FEE should be 10,000,000 lamports"
+    );
     // BASE_DEPOSIT should be 0.1 SOL (100,000,000 lamports)
-    assert!(source.contains("100000000"), "BASE_DEPOSIT should be 100,000,000 lamports");
+    assert!(
+        source.contains("100000000"),
+        "BASE_DEPOSIT should be 100,000,000 lamports"
+    );
 }
 
 /// Test marketplace listing account layout
@@ -561,19 +734,40 @@ fn test_marketplace_listing_layout() {
 
     // Verify correct memory offsets are used for listing data
     // offset 0: status
-    assert!(source.contains("(mem-store listing_ptr 0"), "Should write status at offset 0");
+    assert!(
+        source.contains("(mem-store listing_ptr 0"),
+        "Should write status at offset 0"
+    );
     // offset 8: price
-    assert!(source.contains("(mem-store listing_ptr 8"), "Should write price at offset 8");
+    assert!(
+        source.contains("(mem-store listing_ptr 8"),
+        "Should write price at offset 8"
+    );
     // offset 16: deposit
-    assert!(source.contains("(mem-store listing_ptr 16"), "Should write deposit at offset 16");
+    assert!(
+        source.contains("(mem-store listing_ptr 16"),
+        "Should write deposit at offset 16"
+    );
     // offset 24: created_at
-    assert!(source.contains("(mem-store listing_ptr 24"), "Should write created_at at offset 24");
+    assert!(
+        source.contains("(mem-store listing_ptr 24"),
+        "Should write created_at at offset 24"
+    );
     // offset 32: expires_at
-    assert!(source.contains("(mem-store listing_ptr 32"), "Should write expires_at at offset 32");
+    assert!(
+        source.contains("(mem-store listing_ptr 32"),
+        "Should write expires_at at offset 32"
+    );
     // offset 40-71: agent pubkey (32 bytes)
-    assert!(source.contains("(mem-store listing_ptr 40"), "Should write agent pubkey at offset 40");
+    assert!(
+        source.contains("(mem-store listing_ptr 40"),
+        "Should write agent pubkey at offset 40"
+    );
     // offset 72-103: client pubkey (32 bytes)
-    assert!(source.contains("(mem-store listing_ptr 72"), "Should write client pubkey at offset 72");
+    assert!(
+        source.contains("(mem-store listing_ptr 72"),
+        "Should write client pubkey at offset 72"
+    );
 }
 
 /// Test marketplace fee discount formula
@@ -584,8 +778,8 @@ fn test_marketplace_fee_discount_formula() {
     // discount = trust_score * 90 / 100
     // actual_fee = BASE_FEE * (100 - discount) / 100
 
-    const BASE_FEE: i64 = 10_000_000;  // 0.01 SOL
-    const BASE_DEPOSIT: i64 = 100_000_000;  // 0.1 SOL
+    const BASE_FEE: i64 = 10_000_000; // 0.01 SOL
+    const BASE_DEPOSIT: i64 = 100_000_000; // 0.1 SOL
 
     fn calculate_marketplace_fee(trust_score: i64) -> (i64, i64) {
         let discount = (trust_score * 90) / 100;
@@ -618,9 +812,15 @@ fn test_marketplace_threshold_logic() {
     const MAX_DECAY: i64 = 50;
 
     fn passes_threshold(net_tasks: i64, rating_x10: i64, decay_factor: i64) -> bool {
-        if net_tasks < MIN_TASKS { return false; }
-        if rating_x10 < MIN_RATING_X10 { return false; }
-        if decay_factor > MAX_DECAY { return false; }
+        if net_tasks < MIN_TASKS {
+            return false;
+        }
+        if rating_x10 < MIN_RATING_X10 {
+            return false;
+        }
+        if decay_factor > MAX_DECAY {
+            return false;
+        }
         true
     }
 
@@ -634,13 +834,19 @@ fn test_marketplace_threshold_logic() {
     assert!(!passes_threshold(4, 40, 20), "Below MIN_TASKS should fail");
 
     // Below rating fails
-    assert!(!passes_threshold(10, 29, 20), "Below MIN_RATING should fail");
+    assert!(
+        !passes_threshold(10, 29, 20),
+        "Below MIN_RATING should fail"
+    );
 
     // Above decay fails
     assert!(!passes_threshold(10, 40, 51), "Above MAX_DECAY should fail");
 
     // Negative net_tasks fails
-    assert!(!passes_threshold(-5, 40, 20), "Negative net_tasks should fail");
+    assert!(
+        !passes_threshold(-5, 40, 20),
+        "Negative net_tasks should fail"
+    );
 }
 
 /// Test marketplace reads reputation NFT correctly
@@ -650,21 +856,42 @@ fn test_marketplace_reads_nft() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Should read from account 2 (reputation NFT)
-    assert!(source.contains("(account-data-ptr 2)"), "Should read NFT from account 2");
+    assert!(
+        source.contains("(account-data-ptr 2)"),
+        "Should read NFT from account 2"
+    );
 
     // Should read NFT fields at correct offsets
     // offset 0: initialized flag
-    assert!(source.contains("(mem-load1 nft_ptr 0)"), "Should check NFT initialized at offset 0");
+    assert!(
+        source.contains("(mem-load1 nft_ptr 0)"),
+        "Should check NFT initialized at offset 0"
+    );
     // offset 8: tasks_ok
-    assert!(source.contains("(mem-load nft_ptr 8)"), "Should read tasks_ok at offset 8");
+    assert!(
+        source.contains("(mem-load nft_ptr 8)"),
+        "Should read tasks_ok at offset 8"
+    );
     // offset 16: tasks_fail
-    assert!(source.contains("(mem-load nft_ptr 16)"), "Should read tasks_fail at offset 16");
+    assert!(
+        source.contains("(mem-load nft_ptr 16)"),
+        "Should read tasks_fail at offset 16"
+    );
     // offset 40: total_ratings
-    assert!(source.contains("(mem-load nft_ptr 40)"), "Should read total_ratings at offset 40");
+    assert!(
+        source.contains("(mem-load nft_ptr 40)"),
+        "Should read total_ratings at offset 40"
+    );
     // offset 48: sum_ratings
-    assert!(source.contains("(mem-load nft_ptr 48)"), "Should read sum_ratings at offset 48");
+    assert!(
+        source.contains("(mem-load nft_ptr 48)"),
+        "Should read sum_ratings at offset 48"
+    );
     // offset 80: last_active
-    assert!(source.contains("(mem-load nft_ptr 80)"), "Should read last_active at offset 80");
+    assert!(
+        source.contains("(mem-load nft_ptr 80)"),
+        "Should read last_active at offset 80"
+    );
 }
 
 /// Test marketplace status transitions
@@ -677,15 +904,36 @@ fn test_marketplace_status_constants() {
     assert!(source.contains("STATUS_EMPTY"), "Missing STATUS_EMPTY");
     assert!(source.contains("STATUS_ACTIVE"), "Missing STATUS_ACTIVE");
     assert!(source.contains("STATUS_HIRED"), "Missing STATUS_HIRED");
-    assert!(source.contains("STATUS_COMPLETED"), "Missing STATUS_COMPLETED");
-    assert!(source.contains("STATUS_CANCELLED"), "Missing STATUS_CANCELLED");
+    assert!(
+        source.contains("STATUS_COMPLETED"),
+        "Missing STATUS_COMPLETED"
+    );
+    assert!(
+        source.contains("STATUS_CANCELLED"),
+        "Missing STATUS_CANCELLED"
+    );
 
     // Verify status values
-    assert!(source.contains("(define STATUS_EMPTY 0)"), "STATUS_EMPTY should be 0");
-    assert!(source.contains("(define STATUS_ACTIVE 1)"), "STATUS_ACTIVE should be 1");
-    assert!(source.contains("(define STATUS_HIRED 2)"), "STATUS_HIRED should be 2");
-    assert!(source.contains("(define STATUS_COMPLETED 3)"), "STATUS_COMPLETED should be 3");
-    assert!(source.contains("(define STATUS_CANCELLED 4)"), "STATUS_CANCELLED should be 4");
+    assert!(
+        source.contains("(define STATUS_EMPTY 0)"),
+        "STATUS_EMPTY should be 0"
+    );
+    assert!(
+        source.contains("(define STATUS_ACTIVE 1)"),
+        "STATUS_ACTIVE should be 1"
+    );
+    assert!(
+        source.contains("(define STATUS_HIRED 2)"),
+        "STATUS_HIRED should be 2"
+    );
+    assert!(
+        source.contains("(define STATUS_COMPLETED 3)"),
+        "STATUS_COMPLETED should be 3"
+    );
+    assert!(
+        source.contains("(define STATUS_CANCELLED 4)"),
+        "STATUS_CANCELLED should be 4"
+    );
 }
 
 /// Test full suite with marketplace included
@@ -704,7 +952,12 @@ fn test_full_suite_with_marketplace() {
 
     for prog in &programs {
         let result = compile_program(prog);
-        assert!(result.is_ok(), "{} failed to compile: {:?}", prog, result.err());
+        assert!(
+            result.is_ok(),
+            "{} failed to compile: {:?}",
+            prog,
+            result.err()
+        );
 
         let compiled = result.unwrap();
         total_instructions += compiled.sbpf_instruction_count;
@@ -712,12 +965,19 @@ fn test_full_suite_with_marketplace() {
     }
 
     // Combined stats
-    assert!(total_instructions > 4000, "Combined suite should have >4000 instructions");
+    assert!(
+        total_instructions > 4000,
+        "Combined suite should have >4000 instructions"
+    );
     assert!(total_size > 50000, "Combined suite should be >50KB total");
 
     println!("Full Agent Accountability Suite:");
     println!("  Total sBPF instructions: {}", total_instructions);
-    println!("  Total ELF size: {} bytes ({:.1} KB)", total_size, total_size as f64 / 1024.0);
+    println!(
+        "  Total ELF size: {} bytes ({:.1} KB)",
+        total_size,
+        total_size as f64 / 1024.0
+    );
 }
 
 // =============================================================================
@@ -727,12 +987,23 @@ fn test_full_suite_with_marketplace() {
 #[test]
 fn test_escrow_pda_compiles() {
     let result = compile_program("agent_escrow_pda.ovsm");
-    assert!(result.is_ok(), "agent_escrow_pda.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "agent_escrow_pda.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
     assert!(compiled.elf_bytes.len() > 1000, "ELF too small");
-    assert!(compiled.elf_bytes.len() < 50_000, "ELF too large: {} bytes", compiled.elf_bytes.len());
+    assert!(
+        compiled.elf_bytes.len() < 50_000,
+        "ELF too large: {} bytes",
+        compiled.elf_bytes.len()
+    );
 }
 
 #[test]
@@ -741,7 +1012,10 @@ fn test_escrow_pda_has_cpi_invoke_signed() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Must use cpi-invoke-signed for PDA transfers
-    assert!(source.contains("cpi-invoke-signed"), "Must use cpi-invoke-signed for PDA");
+    assert!(
+        source.contains("cpi-invoke-signed"),
+        "Must use cpi-invoke-signed for PDA"
+    );
 }
 
 #[test]
@@ -751,13 +1025,24 @@ fn test_escrow_pda_uses_correct_seeds() {
 
     // PDA seed structure: ["escrow", job_id, bump]
     // Seed prefix should store "escrow" bytes (ASCII: 101, 115, 99, 114, 111, 119)
-    assert!(source.contains("HEAP_SEED_PREFIX"), "Must define seed prefix heap location");
-    assert!(source.contains("HEAP_SEED_JOB"), "Must define job_id seed heap location");
-    assert!(source.contains("HEAP_SEED_BUMP"), "Must define bump seed heap location");
+    assert!(
+        source.contains("HEAP_SEED_PREFIX"),
+        "Must define seed prefix heap location"
+    );
+    assert!(
+        source.contains("HEAP_SEED_JOB"),
+        "Must define job_id seed heap location"
+    );
+    assert!(
+        source.contains("HEAP_SEED_BUMP"),
+        "Must define bump seed heap location"
+    );
 
     // "escrow" = e(101), s(115), c(99), r(114), o(111), w(119)
-    assert!(source.contains("101") && source.contains("115") && source.contains("99"),
-            "Should store 'escrow' ASCII bytes");
+    assert!(
+        source.contains("101") && source.contains("115") && source.contains("99"),
+        "Should store 'escrow' ASCII bytes"
+    );
 }
 
 #[test]
@@ -772,11 +1057,26 @@ fn test_escrow_pda_job_state_layout() {
     //   offset 48: job_id
     //   offset 56: bump
 
-    assert!(source.contains("(mem-store job_ptr 0"), "Should write status at offset 0");
-    assert!(source.contains("(mem-store job_ptr 8"), "Should write client pubkey at offset 8");
-    assert!(source.contains("(mem-store job_ptr 40"), "Should write amount at offset 40");
-    assert!(source.contains("(mem-store job_ptr 48"), "Should write job_id at offset 48");
-    assert!(source.contains("(mem-store job_ptr 56"), "Should write bump at offset 56");
+    assert!(
+        source.contains("(mem-store job_ptr 0"),
+        "Should write status at offset 0"
+    );
+    assert!(
+        source.contains("(mem-store job_ptr 8"),
+        "Should write client pubkey at offset 8"
+    );
+    assert!(
+        source.contains("(mem-store job_ptr 40"),
+        "Should write amount at offset 40"
+    );
+    assert!(
+        source.contains("(mem-store job_ptr 48"),
+        "Should write job_id at offset 48"
+    );
+    assert!(
+        source.contains("(mem-store job_ptr 56"),
+        "Should write bump at offset 56"
+    );
 }
 
 #[test]
@@ -785,10 +1085,22 @@ fn test_escrow_pda_status_constants() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Status constants
-    assert!(source.contains("(define STATUS_EMPTY 0)"), "STATUS_EMPTY should be 0");
-    assert!(source.contains("(define STATUS_FUNDED 1)"), "STATUS_FUNDED should be 1");
-    assert!(source.contains("(define STATUS_COMPLETED 2)"), "STATUS_COMPLETED should be 2");
-    assert!(source.contains("(define STATUS_REFUNDED 3)"), "STATUS_REFUNDED should be 3");
+    assert!(
+        source.contains("(define STATUS_EMPTY 0)"),
+        "STATUS_EMPTY should be 0"
+    );
+    assert!(
+        source.contains("(define STATUS_FUNDED 1)"),
+        "STATUS_FUNDED should be 1"
+    );
+    assert!(
+        source.contains("(define STATUS_COMPLETED 2)"),
+        "STATUS_COMPLETED should be 2"
+    );
+    assert!(
+        source.contains("(define STATUS_REFUNDED 3)"),
+        "STATUS_REFUNDED should be 3"
+    );
 }
 
 #[test]
@@ -798,8 +1110,14 @@ fn test_escrow_pda_has_all_instructions() {
 
     // All 4 instructions
     assert!(source.contains("INIT JOB"), "Missing INIT instruction");
-    assert!(source.contains("RELEASE TO AGENT"), "Missing RELEASE instruction");
-    assert!(source.contains("REFUND CLIENT"), "Missing REFUND instruction");
+    assert!(
+        source.contains("RELEASE TO AGENT"),
+        "Missing RELEASE instruction"
+    );
+    assert!(
+        source.contains("REFUND CLIENT"),
+        "Missing REFUND instruction"
+    );
     assert!(source.contains("QUERY"), "Missing QUERY instruction");
 }
 
@@ -815,9 +1133,15 @@ fn test_escrow_pda_cpi_accounts_format() {
     //   - Account 3: System Program (read-only)
 
     // Check that escrow PDA is marked as signer (1 1 1)
-    assert!(source.contains("[1 1 1]"), "Escrow PDA should be writable and signer");
+    assert!(
+        source.contains("[1 1 1]"),
+        "Escrow PDA should be writable and signer"
+    );
     // Check system program is read-only (3 0 0) or similar
-    assert!(source.contains("[3 0 0]"), "System program should be read-only non-signer");
+    assert!(
+        source.contains("[3 0 0]"),
+        "System program should be read-only non-signer"
+    );
 }
 
 #[test]
@@ -831,9 +1155,18 @@ fn test_escrow_pda_seeds_array_format() {
     //   - job_id = 8 bytes
     //   - bump = 1 byte
 
-    assert!(source.contains("HEAP_SEED_PREFIX 6]"), "Escrow prefix seed should be 6 bytes");
-    assert!(source.contains("HEAP_SEED_JOB 8]"), "Job ID seed should be 8 bytes");
-    assert!(source.contains("HEAP_SEED_BUMP 1]"), "Bump seed should be 1 byte");
+    assert!(
+        source.contains("HEAP_SEED_PREFIX 6]"),
+        "Escrow prefix seed should be 6 bytes"
+    );
+    assert!(
+        source.contains("HEAP_SEED_JOB 8]"),
+        "Job ID seed should be 8 bytes"
+    );
+    assert!(
+        source.contains("HEAP_SEED_BUMP 1]"),
+        "Bump seed should be 1 byte"
+    );
 }
 
 // =============================================================================
@@ -843,10 +1176,17 @@ fn test_escrow_pda_seeds_array_format() {
 #[test]
 fn test_marketplace_real_cpi_compiles() {
     let result = compile_program("agent_marketplace_real_cpi.ovsm");
-    assert!(result.is_ok(), "agent_marketplace_real_cpi.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "agent_marketplace_real_cpi.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
 }
 
 #[test]
@@ -855,7 +1195,10 @@ fn test_marketplace_real_cpi_uses_cpi_invoke() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Should use cpi-invoke (not cpi-invoke-signed, as it's calling another program)
-    assert!(source.contains("cpi-invoke"), "Must use cpi-invoke for cross-program calls");
+    assert!(
+        source.contains("cpi-invoke"),
+        "Must use cpi-invoke for cross-program calls"
+    );
 }
 
 #[test]
@@ -864,7 +1207,10 @@ fn test_marketplace_real_cpi_heap_constants() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Should define heap address for CPI data
-    assert!(source.contains("HEAP_CPI_DATA"), "Must define heap location for CPI data");
+    assert!(
+        source.contains("HEAP_CPI_DATA"),
+        "Must define heap location for CPI data"
+    );
 }
 
 // =============================================================================
@@ -889,7 +1235,12 @@ fn test_full_suite_with_cpi_programs() {
 
     for prog in &programs {
         let result = compile_program(prog);
-        assert!(result.is_ok(), "{} failed to compile: {:?}", prog, result.err());
+        assert!(
+            result.is_ok(),
+            "{} failed to compile: {:?}",
+            prog,
+            result.err()
+        );
 
         let compiled = result.unwrap();
         total_instructions += compiled.sbpf_instruction_count;
@@ -898,13 +1249,20 @@ fn test_full_suite_with_cpi_programs() {
     }
 
     // Combined stats for 7 programs
-    assert!(total_instructions > 5000, "Combined suite should have >5000 instructions");
+    assert!(
+        total_instructions > 5000,
+        "Combined suite should have >5000 instructions"
+    );
     assert!(total_size > 60000, "Combined suite should be >60KB total");
 
     println!("Full Agent Accountability Suite (with CPI):");
     println!("  Programs: {}", programs.len());
     println!("  Total sBPF instructions: {}", total_instructions);
-    println!("  Total ELF size: {} bytes ({:.1} KB)", total_size, total_size as f64 / 1024.0);
+    println!(
+        "  Total ELF size: {} bytes ({:.1} KB)",
+        total_size,
+        total_size as f64 / 1024.0
+    );
     println!("\n  Per-program sizes:");
     for (prog, size) in &program_sizes {
         println!("    {}: {} bytes", prog, size);
@@ -918,12 +1276,23 @@ fn test_full_suite_with_cpi_programs() {
 #[test]
 fn test_token_escrow_compiles() {
     let result = compile_program("token_escrow.ovsm");
-    assert!(result.is_ok(), "token_escrow.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "token_escrow.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 0, "No sBPF instructions generated");
+    assert!(
+        compiled.sbpf_instruction_count > 0,
+        "No sBPF instructions generated"
+    );
     assert!(compiled.elf_bytes.len() > 1000, "ELF too small");
-    assert!(compiled.elf_bytes.len() < 50_000, "ELF too large: {} bytes", compiled.elf_bytes.len());
+    assert!(
+        compiled.elf_bytes.len() < 50_000,
+        "ELF too large: {} bytes",
+        compiled.elf_bytes.len()
+    );
 }
 
 #[test]
@@ -932,7 +1301,10 @@ fn test_token_escrow_uses_spl_token_transfer() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Must use spl-token-transfer for SPL Token transfers
-    assert!(source.contains("spl-token-transfer"), "Must use spl-token-transfer for SPL tokens");
+    assert!(
+        source.contains("spl-token-transfer"),
+        "Must use spl-token-transfer for SPL tokens"
+    );
 }
 
 #[test]
@@ -942,7 +1314,10 @@ fn test_token_escrow_has_all_instructions() {
 
     // All 4 instructions
     assert!(source.contains("CREATE JOB"), "Missing CREATE instruction");
-    assert!(source.contains("COMPLETE JOB"), "Missing COMPLETE instruction");
+    assert!(
+        source.contains("COMPLETE JOB"),
+        "Missing COMPLETE instruction"
+    );
     assert!(source.contains("CANCEL JOB"), "Missing CANCEL instruction");
     assert!(source.contains("QUERY JOB"), "Missing QUERY instruction");
 }
@@ -953,10 +1328,22 @@ fn test_token_escrow_status_constants() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Status constants
-    assert!(source.contains("(define STATUS_EMPTY 0)"), "STATUS_EMPTY should be 0");
-    assert!(source.contains("(define STATUS_FUNDED 1)"), "STATUS_FUNDED should be 1");
-    assert!(source.contains("(define STATUS_COMPLETED 2)"), "STATUS_COMPLETED should be 2");
-    assert!(source.contains("(define STATUS_REFUNDED 3)"), "STATUS_REFUNDED should be 3");
+    assert!(
+        source.contains("(define STATUS_EMPTY 0)"),
+        "STATUS_EMPTY should be 0"
+    );
+    assert!(
+        source.contains("(define STATUS_FUNDED 1)"),
+        "STATUS_FUNDED should be 1"
+    );
+    assert!(
+        source.contains("(define STATUS_COMPLETED 2)"),
+        "STATUS_COMPLETED should be 2"
+    );
+    assert!(
+        source.contains("(define STATUS_REFUNDED 3)"),
+        "STATUS_REFUNDED should be 3"
+    );
 }
 
 #[test]
@@ -971,10 +1358,22 @@ fn test_token_escrow_job_layout() {
     //   [17-48]: client pubkey (32 bytes)
     //   [49-80]: agent pubkey (32 bytes)
 
-    assert!(source.contains("(mem-store job_ptr 1"), "Should write job_id at offset 1");
-    assert!(source.contains("(mem-store job_ptr 9"), "Should write amount at offset 9");
-    assert!(source.contains("(mem-store job_ptr 17"), "Should write client pubkey at offset 17");
-    assert!(source.contains("(mem-store job_ptr 49"), "Should write agent pubkey at offset 49");
+    assert!(
+        source.contains("(mem-store job_ptr 1"),
+        "Should write job_id at offset 1"
+    );
+    assert!(
+        source.contains("(mem-store job_ptr 9"),
+        "Should write amount at offset 9"
+    );
+    assert!(
+        source.contains("(mem-store job_ptr 17"),
+        "Should write client pubkey at offset 17"
+    );
+    assert!(
+        source.contains("(mem-store job_ptr 49"),
+        "Should write agent pubkey at offset 49"
+    );
 }
 
 #[test]
@@ -990,13 +1389,22 @@ fn test_token_escrow_transfer_accounts() {
     //   4 = Authority
 
     // Create job: client(2) -> escrow(1)
-    assert!(source.contains("spl-token-transfer 5 2 1 4"), "Create should transfer from client(2) to escrow(1)");
+    assert!(
+        source.contains("spl-token-transfer 5 2 1 4"),
+        "Create should transfer from client(2) to escrow(1)"
+    );
 
     // Complete job: escrow(1) -> agent(3)
-    assert!(source.contains("spl-token-transfer 5 1 3 4"), "Complete should transfer from escrow(1) to agent(3)");
+    assert!(
+        source.contains("spl-token-transfer 5 1 3 4"),
+        "Complete should transfer from escrow(1) to agent(3)"
+    );
 
     // Cancel job: escrow(1) -> client(2)
-    assert!(source.contains("spl-token-transfer 5 1 2 4"), "Cancel should transfer from escrow(1) to client(2)");
+    assert!(
+        source.contains("spl-token-transfer 5 1 2 4"),
+        "Cancel should transfer from escrow(1) to client(2)"
+    );
 }
 
 // =============================================================================
@@ -1022,7 +1430,12 @@ fn test_complete_accountability_suite() {
 
     for prog in &programs {
         let result = compile_program(prog);
-        assert!(result.is_ok(), "{} failed to compile: {:?}", prog, result.err());
+        assert!(
+            result.is_ok(),
+            "{} failed to compile: {:?}",
+            prog,
+            result.err()
+        );
 
         let compiled = result.unwrap();
         total_instructions += compiled.sbpf_instruction_count;
@@ -1031,14 +1444,21 @@ fn test_complete_accountability_suite() {
     }
 
     // Combined stats for 8 programs
-    assert!(total_instructions > 6000, "Combined suite should have >6000 instructions");
+    assert!(
+        total_instructions > 6000,
+        "Combined suite should have >6000 instructions"
+    );
     assert!(total_size > 70000, "Combined suite should be >70KB total");
 
     println!("\n======================================================");
     println!("COMPLETE AGENT ACCOUNTABILITY SUITE (8 PROGRAMS):");
     println!("======================================================");
     println!("  Total sBPF instructions: {}", total_instructions);
-    println!("  Total ELF size: {} bytes ({:.1} KB)", total_size, total_size as f64 / 1024.0);
+    println!(
+        "  Total ELF size: {} bytes ({:.1} KB)",
+        total_size,
+        total_size as f64 / 1024.0
+    );
     println!("\n  Per-program sizes:");
     for (prog, size) in &program_sizes {
         println!("    {}: {} bytes", prog, size);
@@ -1053,10 +1473,17 @@ fn test_complete_accountability_suite() {
 #[test]
 fn test_accountability_demo_compiles() {
     let result = compile_program("accountability_demo.ovsm");
-    assert!(result.is_ok(), "accountability_demo.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "accountability_demo.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 500, "Demo should have >500 sBPF instructions");
+    assert!(
+        compiled.sbpf_instruction_count > 500,
+        "Demo should have >500 sBPF instructions"
+    );
     assert!(compiled.elf_bytes.len() > 5000, "Demo ELF too small");
     assert!(compiled.elf_bytes.len() < 50_000, "Demo ELF too large");
 
@@ -1072,10 +1499,19 @@ fn test_accountability_demo_has_all_phases() {
 
     // All phases
     assert!(source.contains("PHASE_INIT"), "Missing PHASE_INIT");
-    assert!(source.contains("PHASE_REGISTERED"), "Missing PHASE_REGISTERED");
-    assert!(source.contains("PHASE_BUILDING_REP"), "Missing PHASE_BUILDING_REP");
+    assert!(
+        source.contains("PHASE_REGISTERED"),
+        "Missing PHASE_REGISTERED"
+    );
+    assert!(
+        source.contains("PHASE_BUILDING_REP"),
+        "Missing PHASE_BUILDING_REP"
+    );
     assert!(source.contains("PHASE_LISTED"), "Missing PHASE_LISTED");
-    assert!(source.contains("PHASE_JOB_ACTIVE"), "Missing PHASE_JOB_ACTIVE");
+    assert!(
+        source.contains("PHASE_JOB_ACTIVE"),
+        "Missing PHASE_JOB_ACTIVE"
+    );
     assert!(source.contains("PHASE_COMPLETE"), "Missing PHASE_COMPLETE");
 }
 
@@ -1086,14 +1522,38 @@ fn test_accountability_demo_has_all_instructions() {
 
     // All instructions
     assert!(source.contains("INIT DEMO"), "Missing INIT instruction");
-    assert!(source.contains("REGISTER AGENT"), "Missing REGISTER instruction");
-    assert!(source.contains("COMPLETE TASK"), "Missing COMPLETE_TASK instruction");
-    assert!(source.contains("FAIL TASK"), "Missing FAIL_TASK instruction");
-    assert!(source.contains("LIST SERVICE"), "Missing LIST_SERVICE instruction");
-    assert!(source.contains("HIRE AGENT"), "Missing HIRE_AGENT instruction");
-    assert!(source.contains("DELIVER JOB"), "Missing DELIVER_JOB instruction");
-    assert!(source.contains("DISPUTE JOB"), "Missing DISPUTE_JOB instruction");
-    assert!(source.contains("QUERY STATUS"), "Missing QUERY_STATUS instruction");
+    assert!(
+        source.contains("REGISTER AGENT"),
+        "Missing REGISTER instruction"
+    );
+    assert!(
+        source.contains("COMPLETE TASK"),
+        "Missing COMPLETE_TASK instruction"
+    );
+    assert!(
+        source.contains("FAIL TASK"),
+        "Missing FAIL_TASK instruction"
+    );
+    assert!(
+        source.contains("LIST SERVICE"),
+        "Missing LIST_SERVICE instruction"
+    );
+    assert!(
+        source.contains("HIRE AGENT"),
+        "Missing HIRE_AGENT instruction"
+    );
+    assert!(
+        source.contains("DELIVER JOB"),
+        "Missing DELIVER_JOB instruction"
+    );
+    assert!(
+        source.contains("DISPUTE JOB"),
+        "Missing DISPUTE_JOB instruction"
+    );
+    assert!(
+        source.contains("QUERY STATUS"),
+        "Missing QUERY_STATUS instruction"
+    );
 }
 
 #[test]
@@ -1102,12 +1562,30 @@ fn test_accountability_demo_simulates_workflow() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Simulation markers
-    assert!(source.contains("[SIM] Minted Reputation NFT"), "Should simulate NFT minting");
-    assert!(source.contains("[SIM] Created attestation"), "Should simulate attestation creation");
-    assert!(source.contains("[SIM] Created marketplace listing"), "Should simulate marketplace listing");
-    assert!(source.contains("[SIM] Created escrow account"), "Should simulate escrow creation");
-    assert!(source.contains("[SIM] Released escrow to agent"), "Should simulate escrow release");
-    assert!(source.contains("[SIM] Created dispute case"), "Should simulate dispute creation");
+    assert!(
+        source.contains("[SIM] Minted Reputation NFT"),
+        "Should simulate NFT minting"
+    );
+    assert!(
+        source.contains("[SIM] Created attestation"),
+        "Should simulate attestation creation"
+    );
+    assert!(
+        source.contains("[SIM] Created marketplace listing"),
+        "Should simulate marketplace listing"
+    );
+    assert!(
+        source.contains("[SIM] Created escrow account"),
+        "Should simulate escrow creation"
+    );
+    assert!(
+        source.contains("[SIM] Released escrow to agent"),
+        "Should simulate escrow release"
+    );
+    assert!(
+        source.contains("[SIM] Created dispute case"),
+        "Should simulate dispute creation"
+    );
 }
 
 // =============================================================================
@@ -1134,23 +1612,42 @@ fn test_final_accountability_suite() {
 
     for prog in &programs {
         let result = compile_program(prog);
-        assert!(result.is_ok(), "{} failed to compile: {:?}", prog, result.err());
+        assert!(
+            result.is_ok(),
+            "{} failed to compile: {:?}",
+            prog,
+            result.err()
+        );
 
         let compiled = result.unwrap();
         total_instructions += compiled.sbpf_instruction_count;
         total_size += compiled.elf_bytes.len();
-        program_sizes.push((prog.to_string(), compiled.sbpf_instruction_count, compiled.elf_bytes.len()));
+        program_sizes.push((
+            prog.to_string(),
+            compiled.sbpf_instruction_count,
+            compiled.elf_bytes.len(),
+        ));
     }
 
     // Combined stats for 9 programs
-    assert!(total_instructions > 7000, "Combined suite should have >7000 instructions");
+    assert!(
+        total_instructions > 7000,
+        "Combined suite should have >7000 instructions"
+    );
     assert!(total_size > 80000, "Combined suite should be >80KB total");
 
     println!("\n╔══════════════════════════════════════════════════════════════════╗");
     println!("║     FINAL AGENT ACCOUNTABILITY SUITE - 9 PROGRAMS               ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
-    println!("║ Total sBPF instructions: {:>6}                                  ║", total_instructions);
-    println!("║ Total ELF size: {:>6} bytes ({:.1} KB)                         ║", total_size, total_size as f64 / 1024.0);
+    println!(
+        "║ Total sBPF instructions: {:>6}                                  ║",
+        total_instructions
+    );
+    println!(
+        "║ Total ELF size: {:>6} bytes ({:.1} KB)                         ║",
+        total_size,
+        total_size as f64 / 1024.0
+    );
     println!("╠══════════════════════════════════════════════════════════════════╣");
     println!("║ Program Breakdown:                                               ║");
     for (prog, instrs, size) in &program_sizes {
@@ -1166,31 +1663,64 @@ fn test_final_accountability_suite() {
 #[test]
 fn test_strategy_registry_compiles() {
     let result = compile_program("strategy_registry.ovsm");
-    assert!(result.is_ok(), "strategy_registry.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "strategy_registry.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 500, "Strategy registry should have >500 instructions");
-    println!("✅ strategy_registry.ovsm: {} instructions, {} bytes", compiled.sbpf_instruction_count, compiled.elf_bytes.len());
+    assert!(
+        compiled.sbpf_instruction_count > 500,
+        "Strategy registry should have >500 instructions"
+    );
+    println!(
+        "✅ strategy_registry.ovsm: {} instructions, {} bytes",
+        compiled.sbpf_instruction_count,
+        compiled.elf_bytes.len()
+    );
 }
 
 #[test]
 fn test_basic_strategy_compiles() {
     let result = compile_program("basic_strategy.ovsm");
-    assert!(result.is_ok(), "basic_strategy.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "basic_strategy.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 100, "Basic strategy should have >100 instructions");
-    println!("✅ basic_strategy.ovsm: {} instructions, {} bytes", compiled.sbpf_instruction_count, compiled.elf_bytes.len());
+    assert!(
+        compiled.sbpf_instruction_count > 100,
+        "Basic strategy should have >100 instructions"
+    );
+    println!(
+        "✅ basic_strategy.ovsm: {} instructions, {} bytes",
+        compiled.sbpf_instruction_count,
+        compiled.elf_bytes.len()
+    );
 }
 
 #[test]
 fn test_advanced_strategy_compiles() {
     let result = compile_program("advanced_strategy.ovsm");
-    assert!(result.is_ok(), "advanced_strategy.ovsm failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "advanced_strategy.ovsm failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
-    assert!(compiled.sbpf_instruction_count > 200, "Advanced strategy should have >200 instructions");
-    println!("✅ advanced_strategy.ovsm: {} instructions, {} bytes", compiled.sbpf_instruction_count, compiled.elf_bytes.len());
+    assert!(
+        compiled.sbpf_instruction_count > 200,
+        "Advanced strategy should have >200 instructions"
+    );
+    println!(
+        "✅ advanced_strategy.ovsm: {} instructions, {} bytes",
+        compiled.sbpf_instruction_count,
+        compiled.elf_bytes.len()
+    );
 }
 
 #[test]
@@ -1199,12 +1729,30 @@ fn test_strategy_registry_has_all_instructions() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Check for all instruction handlers
-    assert!(source.contains("INSTR_INIT_REGISTRY"), "Should have init registry instruction");
-    assert!(source.contains("INSTR_REGISTER_STRATEGY"), "Should have register strategy instruction");
-    assert!(source.contains("INSTR_DEACTIVATE"), "Should have deactivate instruction");
-    assert!(source.contains("INSTR_UPDATE_FEE"), "Should have update fee instruction");
-    assert!(source.contains("INSTR_SELECT_EXECUTE"), "Should have select execute instruction");
-    assert!(source.contains("INSTR_QUERY_AVAILABLE"), "Should have query instruction");
+    assert!(
+        source.contains("INSTR_INIT_REGISTRY"),
+        "Should have init registry instruction"
+    );
+    assert!(
+        source.contains("INSTR_REGISTER_STRATEGY"),
+        "Should have register strategy instruction"
+    );
+    assert!(
+        source.contains("INSTR_DEACTIVATE"),
+        "Should have deactivate instruction"
+    );
+    assert!(
+        source.contains("INSTR_UPDATE_FEE"),
+        "Should have update fee instruction"
+    );
+    assert!(
+        source.contains("INSTR_SELECT_EXECUTE"),
+        "Should have select execute instruction"
+    );
+    assert!(
+        source.contains("INSTR_QUERY_AVAILABLE"),
+        "Should have query instruction"
+    );
 }
 
 #[test]
@@ -1213,10 +1761,19 @@ fn test_strategy_registry_reputation_gating() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Check reputation-gated access
-    assert!(source.contains("min_reputation"), "Should have min_reputation field");
+    assert!(
+        source.contains("min_reputation"),
+        "Should have min_reputation field"
+    );
     assert!(source.contains("agent_rep"), "Should read agent reputation");
-    assert!(source.contains("< agent_rep min_rep"), "Should compare agent rep against strategy min");
-    assert!(source.contains("REP_TOO_LOW"), "Should have reputation too low error");
+    assert!(
+        source.contains("< agent_rep min_rep"),
+        "Should compare agent rep against strategy min"
+    );
+    assert!(
+        source.contains("REP_TOO_LOW"),
+        "Should have reputation too low error"
+    );
 }
 
 #[test]
@@ -1225,9 +1782,18 @@ fn test_strategy_registry_uses_clock() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Check timestamp usage
-    assert!(source.contains("get-clock-timestamp"), "Should use clock sysvar");
-    assert!(source.contains("registered_at"), "Should track registration time");
-    assert!(source.contains("last_executed_at"), "Should track last execution time");
+    assert!(
+        source.contains("get-clock-timestamp"),
+        "Should use clock sysvar"
+    );
+    assert!(
+        source.contains("registered_at"),
+        "Should track registration time"
+    );
+    assert!(
+        source.contains("last_executed_at"),
+        "Should track last execution time"
+    );
 }
 
 #[test]
@@ -1236,9 +1802,18 @@ fn test_basic_strategy_task_types() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Check supported task types
-    assert!(source.contains("TASK_COMPUTE"), "Should support compute tasks");
-    assert!(source.contains("TASK_VALIDATE"), "Should support validate tasks");
-    assert!(source.contains("TASK_TRANSFORM"), "Should support transform tasks");
+    assert!(
+        source.contains("TASK_COMPUTE"),
+        "Should support compute tasks"
+    );
+    assert!(
+        source.contains("TASK_VALIDATE"),
+        "Should support validate tasks"
+    );
+    assert!(
+        source.contains("TASK_TRANSFORM"),
+        "Should support transform tasks"
+    );
 }
 
 #[test]
@@ -1247,14 +1822,32 @@ fn test_advanced_strategy_features() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Check advanced features
-    assert!(source.contains("INSTR_PIPELINE"), "Should have pipeline instruction");
-    assert!(source.contains("INSTR_AGGREGATE"), "Should have aggregate instruction");
-    assert!(source.contains("INSTR_CONDITIONAL"), "Should have conditional instruction");
-    assert!(source.contains("INSTR_VERIFY"), "Should have verify instruction");
+    assert!(
+        source.contains("INSTR_PIPELINE"),
+        "Should have pipeline instruction"
+    );
+    assert!(
+        source.contains("INSTR_AGGREGATE"),
+        "Should have aggregate instruction"
+    );
+    assert!(
+        source.contains("INSTR_CONDITIONAL"),
+        "Should have conditional instruction"
+    );
+    assert!(
+        source.contains("INSTR_VERIFY"),
+        "Should have verify instruction"
+    );
 
     // Check advanced computations
-    assert!(source.contains("Newton-Raphson"), "Should mention sqrt approximation method");
-    assert!(source.contains("tolerance"), "Should have tolerance-based verification");
+    assert!(
+        source.contains("Newton-Raphson"),
+        "Should mention sqrt approximation method"
+    );
+    assert!(
+        source.contains("tolerance"),
+        "Should have tolerance-based verification"
+    );
 }
 
 #[test]
@@ -1263,9 +1856,18 @@ fn test_strategy_fee_tracking() {
     let source = fs::read_to_string(&path).unwrap();
 
     // Check fee tracking
-    assert!(source.contains("fee_lamports"), "Should track fees in lamports");
-    assert!(source.contains("total_fees_earned"), "Should track cumulative fees");
-    assert!(source.contains("total_executions"), "Should track execution count");
+    assert!(
+        source.contains("fee_lamports"),
+        "Should track fees in lamports"
+    );
+    assert!(
+        source.contains("total_fees_earned"),
+        "Should track cumulative fees"
+    );
+    assert!(
+        source.contains("total_executions"),
+        "Should track execution count"
+    );
 }
 
 #[test]
@@ -1281,7 +1883,12 @@ fn test_complete_strategy_suite() {
 
     for prog in &programs {
         let result = compile_program(prog);
-        assert!(result.is_ok(), "{} failed to compile: {:?}", prog, result.err());
+        assert!(
+            result.is_ok(),
+            "{} failed to compile: {:?}",
+            prog,
+            result.err()
+        );
 
         let compiled = result.unwrap();
         total_instructions += compiled.sbpf_instruction_count;
@@ -1291,11 +1898,21 @@ fn test_complete_strategy_suite() {
     println!("\n╔══════════════════════════════════════════════════════════════════╗");
     println!("║         STRATEGY ROUTER SUITE - 3 PROGRAMS                       ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
-    println!("║ Total sBPF instructions: {:>6}                                  ║", total_instructions);
-    println!("║ Total ELF size: {:>6} bytes ({:.1} KB)                         ║", total_size, total_size as f64 / 1024.0);
+    println!(
+        "║ Total sBPF instructions: {:>6}                                  ║",
+        total_instructions
+    );
+    println!(
+        "║ Total ELF size: {:>6} bytes ({:.1} KB)                         ║",
+        total_size,
+        total_size as f64 / 1024.0
+    );
     println!("╚══════════════════════════════════════════════════════════════════╝\n");
 
-    assert!(total_instructions > 800, "Strategy suite should have >800 instructions");
+    assert!(
+        total_instructions > 800,
+        "Strategy suite should have >800 instructions"
+    );
 }
 
 #[test]
@@ -1322,7 +1939,12 @@ fn test_full_suite_with_strategy_router() {
 
     for prog in &programs {
         let result = compile_program(prog);
-        assert!(result.is_ok(), "{} failed to compile: {:?}", prog, result.err());
+        assert!(
+            result.is_ok(),
+            "{} failed to compile: {:?}",
+            prog,
+            result.err()
+        );
 
         let compiled = result.unwrap();
         total_instructions += compiled.sbpf_instruction_count;
@@ -1332,11 +1954,21 @@ fn test_full_suite_with_strategy_router() {
     println!("\n╔══════════════════════════════════════════════════════════════════╗");
     println!("║   COMPLETE AGENT ECOSYSTEM SUITE - 13 PROGRAMS                   ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
-    println!("║ Total sBPF instructions: {:>6}                                  ║", total_instructions);
-    println!("║ Total ELF size: {:>6} bytes ({:.1} KB)                         ║", total_size, total_size as f64 / 1024.0);
+    println!(
+        "║ Total sBPF instructions: {:>6}                                  ║",
+        total_instructions
+    );
+    println!(
+        "║ Total ELF size: {:>6} bytes ({:.1} KB)                         ║",
+        total_size,
+        total_size as f64 / 1024.0
+    );
     println!("╚══════════════════════════════════════════════════════════════════╝\n");
 
-    assert!(total_instructions > 10000, "Complete suite should have >10000 instructions");
+    assert!(
+        total_instructions > 10000,
+        "Complete suite should have >10000 instructions"
+    );
     assert!(programs.len() == 13, "Suite should have 13 programs");
 }
 
@@ -1358,13 +1990,19 @@ fn test_generate_idl_from_accountability_demo() {
     assert!(!idl.name.is_empty(), "Should extract program name");
 
     // Should extract multiple instructions
-    assert!(idl.instructions.len() >= 8, "Should have at least 8 instructions, got {}", idl.instructions.len());
+    assert!(
+        idl.instructions.len() >= 8,
+        "Should have at least 8 instructions, got {}",
+        idl.instructions.len()
+    );
 
     // Should extract errors
     assert!(idl.errors.len() >= 1, "Should have extracted errors");
 
     // Generate JSON and verify it's valid
-    let json = generator.generate_json().expect("JSON serialization failed");
+    let json = generator
+        .generate_json()
+        .expect("JSON serialization failed");
     assert!(json.contains("\"version\""));
     assert!(json.contains("\"instructions\""));
 
@@ -1482,14 +2120,30 @@ fn test_spl_token_transfer_signed_compiles() {
     // Compile directly from source string
     let compiler = Compiler::new(CompileOptions::default());
     let result = compiler.compile(source);
-    assert!(result.is_ok(), "spl-token-transfer-signed test failed to compile: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "spl-token-transfer-signed test failed to compile: {:?}",
+        result.err()
+    );
 
     let compiled = result.unwrap();
 
     // Verify reasonable instruction counts
-    assert!(compiled.sbpf_instruction_count > 100, "Should have >100 sBPF instructions, got {}", compiled.sbpf_instruction_count);
-    assert!(compiled.elf_bytes.len() > 1000, "ELF too small: {} bytes", compiled.elf_bytes.len());
-    assert!(compiled.elf_bytes.len() < 10000, "ELF too large: {} bytes", compiled.elf_bytes.len());
+    assert!(
+        compiled.sbpf_instruction_count > 100,
+        "Should have >100 sBPF instructions, got {}",
+        compiled.sbpf_instruction_count
+    );
+    assert!(
+        compiled.elf_bytes.len() > 1000,
+        "ELF too small: {} bytes",
+        compiled.elf_bytes.len()
+    );
+    assert!(
+        compiled.elf_bytes.len() < 10000,
+        "ELF too large: {} bytes",
+        compiled.elf_bytes.len()
+    );
 
     println!("✅ spl-token-transfer-signed test program:");
     println!("   sBPF instructions: {}", compiled.sbpf_instruction_count);
@@ -1532,7 +2186,11 @@ fn test_spl_token_transfer_signed_multiple_seeds() {
     // Compile directly from source string
     let compiler = Compiler::new(CompileOptions::default());
     let result = compiler.compile(source);
-    assert!(result.is_ok(), "Multi-seed spl-token-transfer-signed failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Multi-seed spl-token-transfer-signed failed: {:?}",
+        result.err()
+    );
 
     println!("✅ Multi-seed PDA transfer compiles successfully");
 }

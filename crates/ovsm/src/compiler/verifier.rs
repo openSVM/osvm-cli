@@ -3,8 +3,8 @@
 //! Validates compiled sBPF programs before deployment.
 //! Ensures programs meet Solana runtime constraints.
 
-use super::sbpf_codegen::{SbpfInstruction, memory};
-use crate::{Result, Error};
+use super::sbpf_codegen::{memory, SbpfInstruction};
+use crate::{Error, Result};
 
 /// Verification result with warnings
 #[derive(Debug)]
@@ -77,7 +77,11 @@ impl std::fmt::Display for VerifyError {
                 write!(f, "Invalid opcode 0x{:02x} at offset {}", opcode, offset)
             }
             VerifyError::JumpOutOfBounds { offset, target } => {
-                write!(f, "Jump at offset {} targets out of bounds: {}", offset, target)
+                write!(
+                    f,
+                    "Jump at offset {} targets out of bounds: {}",
+                    offset, target
+                )
             }
             VerifyError::InvalidRegister { offset, reg } => {
                 write!(f, "Invalid register {} at offset {}", reg, offset)
@@ -86,7 +90,11 @@ impl std::fmt::Display for VerifyError {
                 write!(f, "Possible division by zero at offset {}", offset)
             }
             VerifyError::MemoryAccessOutOfBounds { offset, address } => {
-                write!(f, "Memory access out of bounds at offset {}: address 0x{:x}", offset, address)
+                write!(
+                    f,
+                    "Memory access out of bounds at offset {}: address 0x{:x}",
+                    offset, address
+                )
             }
             VerifyError::NoExitInstruction => {
                 write!(f, "Program has no exit instruction")
@@ -133,12 +141,14 @@ impl Verifier {
     pub fn verify(&self, program: &[SbpfInstruction]) -> VerifyResult {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
-        let mut stats = ProgramStats::default();
 
         // Calculate basic stats
-        stats.instruction_count = program.len();
-        stats.bytecode_size = program.iter().map(|i| i.size()).sum();
-        stats.estimated_cu = program.iter().map(|i| i.compute_cost()).sum();
+        let mut stats = ProgramStats {
+            instruction_count: program.len(),
+            bytecode_size: program.iter().map(|i| i.size()).sum(),
+            estimated_cu: program.iter().map(|i| i.compute_cost()).sum(),
+            ..ProgramStats::default()
+        };
 
         // Check instruction count limit
         if stats.instruction_count > self.max_instructions {
@@ -217,10 +227,7 @@ impl Verifier {
             // Check for division by immediate zero
             // DIV64 imm = 0x37, MOD64 imm = 0x97
             // DIV32 imm = 0x34, MOD32 imm = 0x94
-            let is_div_or_mod_imm = matches!(
-                instr.opcode,
-                0x34 | 0x37 | 0x94 | 0x97
-            );
+            let is_div_or_mod_imm = matches!(instr.opcode, 0x34 | 0x37 | 0x94 | 0x97);
             if is_div_or_mod_imm && instr.imm == 0 {
                 errors.push(VerifyError::PossibleDivisionByZero { offset });
             }
@@ -311,12 +318,13 @@ mod tests {
     #[test]
     fn test_no_exit_error() {
         let verifier = Verifier::new();
-        let program = vec![
-            SbpfInstruction::alu64_imm(0xb0, 0, 42),
-        ];
+        let program = vec![SbpfInstruction::alu64_imm(0xb0, 0, 42)];
         let result = verifier.verify(&program);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| matches!(e, VerifyError::NoExitInstruction)));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| matches!(e, VerifyError::NoExitInstruction)));
     }
 
     #[test]
@@ -328,7 +336,10 @@ mod tests {
         ];
         let result = verifier.verify(&program);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| matches!(e, VerifyError::InvalidRegister { .. })));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| matches!(e, VerifyError::InvalidRegister { .. })));
     }
 
     #[test]
@@ -340,6 +351,9 @@ mod tests {
         ];
         let result = verifier.verify(&program);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| matches!(e, VerifyError::PossibleDivisionByZero { .. })));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| matches!(e, VerifyError::PossibleDivisionByZero { .. })));
     }
 }

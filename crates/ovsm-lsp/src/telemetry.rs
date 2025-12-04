@@ -135,10 +135,13 @@ pub struct LearningEngine {
 impl LearningEngine {
     /// Create a new learning engine
     pub fn new(config: LearningConfig) -> Self {
-        let session_id = format!("{:x}", SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis());
+        let session_id = format!(
+            "{:x}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
 
         let engine = Self {
             config: config.clone(),
@@ -202,7 +205,8 @@ impl LearningEngine {
         // Check if we should save
         let should_save = {
             let last_save = self.last_save.read().await;
-            last_save.elapsed().unwrap_or_default() > Duration::from_secs(self.config.save_interval_secs)
+            last_save.elapsed().unwrap_or_default()
+                > Duration::from_secs(self.config.save_interval_secs)
         };
 
         if should_save && events.len() >= self.config.min_events_for_analysis {
@@ -216,22 +220,25 @@ impl LearningEngine {
         // We'll track this separately and compare with accepted
         // For now, just note it was shown
         self.log_event(EventType::CompletionIgnored {
-            label: label.to_string()
-        }).await;
+            label: label.to_string(),
+        })
+        .await;
     }
 
     /// Log a completion being accepted
     pub async fn log_completion_accepted(&self, label: &str) {
         self.log_event(EventType::CompletionAccepted {
-            label: label.to_string()
-        }).await;
+            label: label.to_string(),
+        })
+        .await;
     }
 
     /// Log a hover lookup
     pub async fn log_hover(&self, symbol: &str) {
         self.log_event(EventType::HoverLookup {
-            symbol: symbol.to_string()
-        }).await;
+            symbol: symbol.to_string(),
+        })
+        .await;
     }
 
     /// Log code execution
@@ -239,7 +246,8 @@ impl LearningEngine {
         self.log_event(EventType::CodeExecuted {
             function: function.to_string(),
             success,
-        }).await;
+        })
+        .await;
     }
 
     /// Log an error
@@ -247,7 +255,8 @@ impl LearningEngine {
         self.log_event(EventType::ErrorEncountered {
             error_type: error_type.to_string(),
             context: context.to_string(),
-        }).await;
+        })
+        .await;
     }
 
     /// Log a wallet analysis
@@ -260,8 +269,9 @@ impl LearningEngine {
         };
 
         self.log_event(EventType::WalletAnalyzed {
-            address_prefix: prefix
-        }).await;
+            address_prefix: prefix,
+        })
+        .await;
     }
 
     /// Analyze events and update patterns
@@ -280,7 +290,10 @@ impl LearningEngine {
                 EventType::HoverLookup { symbol } => {
                     *function_counts.entry(symbol.clone()).or_default() += 1;
                 }
-                EventType::CodeExecuted { function, success: true } => {
+                EventType::CodeExecuted {
+                    function,
+                    success: true,
+                } => {
                     *function_counts.entry(function.clone()).or_default() += 2; // Weight successful execution higher
                 }
                 _ => {}
@@ -291,10 +304,15 @@ impl LearningEngine {
         let total: usize = function_counts.values().sum();
         if total > 0 {
             for (func, count) in function_counts {
-                let old_freq = patterns.function_frequency.get(&func).copied().unwrap_or(0.0);
+                let old_freq = patterns
+                    .function_frequency
+                    .get(&func)
+                    .copied()
+                    .unwrap_or(0.0);
                 let new_freq = count as f64 / total as f64;
                 // Exponential moving average
-                let combined = old_freq * self.config.decay_factor + new_freq * (1.0 - self.config.decay_factor);
+                let combined = old_freq * self.config.decay_factor
+                    + new_freq * (1.0 - self.config.decay_factor);
                 patterns.function_frequency.insert(func, combined);
             }
         }
@@ -327,7 +345,11 @@ impl LearningEngine {
         let mut sequences: Vec<Vec<String>> = Vec::new();
 
         for event in events.iter() {
-            if let EventType::CodeExecuted { function, success: true } = &event.event_type {
+            if let EventType::CodeExecuted {
+                function,
+                success: true,
+            } = &event.event_type
+            {
                 current_sequence.push(function.clone());
                 if current_sequence.len() >= 3 {
                     sequences.push(current_sequence.clone());
@@ -355,7 +377,10 @@ impl LearningEngine {
         // Analyze wallet patterns
         for event in events.iter() {
             if let EventType::WalletAnalyzed { address_prefix } = &event.event_type {
-                *patterns.wallet_patterns.entry(address_prefix.clone()).or_default() += 1;
+                *patterns
+                    .wallet_patterns
+                    .entry(address_prefix.clone())
+                    .or_default() += 1;
             }
         }
 
@@ -400,7 +425,11 @@ impl LearningEngine {
         let patterns = self.patterns.read().await;
 
         // Combine frequency and acceptance rate
-        let freq = patterns.function_frequency.get(label).copied().unwrap_or(0.0);
+        let freq = patterns
+            .function_frequency
+            .get(label)
+            .copied()
+            .unwrap_or(0.0);
         let rate = patterns.completion_rates.get(label).copied().unwrap_or(0.5);
 
         // Weighted combination: frequency matters more for common operations
@@ -434,7 +463,8 @@ impl LearningEngine {
     pub async fn get_frequent_functions(&self, limit: usize) -> Vec<String> {
         let patterns = self.patterns.read().await;
 
-        let mut funcs: Vec<_> = patterns.function_frequency
+        let mut funcs: Vec<_> = patterns
+            .function_frequency
             .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
@@ -485,14 +515,22 @@ impl LearningEngine {
 
         // Merge function frequencies
         for (func, freq) in &other.function_frequency {
-            let existing = patterns.function_frequency.get(func).copied().unwrap_or(0.0);
+            let existing = patterns
+                .function_frequency
+                .get(func)
+                .copied()
+                .unwrap_or(0.0);
             let merged = existing * (1.0 - weight) + freq * weight;
             patterns.function_frequency.insert(func.clone(), merged);
         }
 
         // Add new sequences
         for seq in &other.investigation_sequences {
-            if !patterns.investigation_sequences.iter().any(|s| s.functions == seq.functions) {
+            if !patterns
+                .investigation_sequences
+                .iter()
+                .any(|s| s.functions == seq.functions)
+            {
                 patterns.investigation_sequences.push(seq.clone());
             }
         }

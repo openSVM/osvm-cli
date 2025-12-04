@@ -273,19 +273,18 @@
 #![allow(clippy::manual_strip)] // Existing pattern is clear and works
 #![allow(clippy::needless_range_loop)] // Index needed for error messages
 #![allow(clippy::collapsible_match)] // Separate error handling for clarity
-#![allow(missing_docs)]
 
 // Module declarations
 /// Version of the OVSM interpreter
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+pub mod compiler;
+pub mod decompiler;
 pub mod error;
 pub mod lexer;
 pub mod parser;
 pub mod runtime;
 pub mod tools;
-pub mod compiler;
-pub mod decompiler;
 pub mod types;
 
 // Re-export main types
@@ -294,7 +293,7 @@ pub use lexer::{SExprScanner, Token, TokenKind};
 pub use parser::{BinaryOp, Expression, Program, SExprParser, Statement, UnaryOp};
 pub use runtime::{Environment, LispEvaluator, Value};
 pub use tools::{Tool, ToolRegistry};
-pub use types::{Type, TypeContext, TypeChecker, TypeError, BidirectionalChecker, TypeBridge};
+pub use types::{BidirectionalChecker, Type, TypeBridge, TypeChecker, TypeContext, TypeError};
 
 // Convenient type aliases for the primary LISP-based interpreter
 /// Type alias for the S-expression scanner (lexer).

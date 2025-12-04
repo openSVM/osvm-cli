@@ -1,8 +1,11 @@
 // Moderator database operations
 
+use super::{now_as_useconds, Result};
+use crate::utils::bbs::{
+    models::*,
+    schema::{boards, moderators},
+};
 use diesel::prelude::*;
-use crate::utils::bbs::{models::*, schema::{moderators, boards}};
-use super::{Result, now_as_useconds};
 
 /// List all moderators for a board
 pub fn list_for_board(conn: &mut SqliteConnection, board_id: i32) -> Result<Vec<Moderator>> {
@@ -30,11 +33,13 @@ pub fn is_moderator(conn: &mut SqliteConnection, user_id: i32, board_id: i32) ->
 }
 
 /// Check if user is board creator or moderator
-pub fn has_mod_permissions(conn: &mut SqliteConnection, user_id: i32, board_id: i32) -> Result<bool> {
+pub fn has_mod_permissions(
+    conn: &mut SqliteConnection,
+    user_id: i32,
+    board_id: i32,
+) -> Result<bool> {
     // Check if user is board creator
-    let board = boards::table
-        .find(board_id)
-        .first::<Board>(conn)?;
+    let board = boards::table.find(board_id).first::<Board>(conn)?;
 
     if board.creator_id == Some(user_id) {
         return Ok(true);
@@ -52,9 +57,7 @@ pub fn add(
     granted_by: i32,
 ) -> Result<Option<Moderator>> {
     // Check if granter is the board creator
-    let board = boards::table
-        .find(board_id)
-        .first::<Board>(conn)?;
+    let board = boards::table.find(board_id).first::<Board>(conn)?;
 
     if board.creator_id != Some(granted_by) {
         return Ok(None); // Only creator can add mods
@@ -93,9 +96,7 @@ pub fn remove(
     requester_id: i32,
 ) -> Result<bool> {
     // Check if requester is the board creator
-    let board = boards::table
-        .find(board_id)
-        .first::<Board>(conn)?;
+    let board = boards::table.find(board_id).first::<Board>(conn)?;
 
     if board.creator_id != Some(requester_id) {
         return Ok(false); // Only creator can remove mods
@@ -104,8 +105,9 @@ pub fn remove(
     let deleted = diesel::delete(
         moderators::table
             .filter(moderators::user_id.eq(user_id))
-            .filter(moderators::board_id.eq(board_id))
-    ).execute(conn)?;
+            .filter(moderators::board_id.eq(board_id)),
+    )
+    .execute(conn)?;
 
     Ok(deleted > 0)
 }

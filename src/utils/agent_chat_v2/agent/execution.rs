@@ -145,7 +145,10 @@ impl AdvancedChatState {
 
         // Check if AI service used Ollama fallback and notify user
         if self.ai_service.did_use_fallback() {
-            let fallback_model = self.ai_service.get_fallback_model().unwrap_or("local model");
+            let fallback_model = self
+                .ai_service
+                .get_fallback_model()
+                .unwrap_or("local model");
             let _ = self.add_message_to_session(
                 session_id,
                 ChatMessage::System(format!(

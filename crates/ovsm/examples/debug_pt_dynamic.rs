@@ -13,13 +13,23 @@ fn main() {
 
     for i in 0..e_phnum {
         let phdr_offset = e_phoff as usize + (i as usize * 56);
-        let p_type = u32::from_le_bytes(elf_bytes[phdr_offset..phdr_offset+4].try_into().unwrap());
+        let p_type =
+            u32::from_le_bytes(elf_bytes[phdr_offset..phdr_offset + 4].try_into().unwrap());
 
-        if p_type == 2 { // PT_DYNAMIC
+        if p_type == 2 {
+            // PT_DYNAMIC
             println!("📊 Found PT_DYNAMIC at program header {}", i);
 
-            let p_offset = u64::from_le_bytes(elf_bytes[phdr_offset+8..phdr_offset+16].try_into().unwrap());
-            let p_filesz = u64::from_le_bytes(elf_bytes[phdr_offset+32..phdr_offset+40].try_into().unwrap());
+            let p_offset = u64::from_le_bytes(
+                elf_bytes[phdr_offset + 8..phdr_offset + 16]
+                    .try_into()
+                    .unwrap(),
+            );
+            let p_filesz = u64::from_le_bytes(
+                elf_bytes[phdr_offset + 32..phdr_offset + 40]
+                    .try_into()
+                    .unwrap(),
+            );
 
             println!("  p_offset: 0x{:x} ({})", p_offset, p_offset);
             println!("  p_filesz: 0x{:x} ({})", p_filesz, p_filesz);
@@ -46,7 +56,11 @@ fn main() {
                 println!("  ❌ FAIL: Size not divisible by {}", entry_size);
                 return;
             }
-            println!("  ✅ Size is divisible by {} (entries = {})", entry_size, p_filesz / entry_size);
+            println!(
+                "  ✅ Size is divisible by {} (entries = {})",
+                entry_size,
+                p_filesz / entry_size
+            );
 
             // Check 3: Alignment
             let slice = &elf_bytes[start..end];
@@ -67,8 +81,16 @@ fn main() {
             println!("\n📊 PT_DYNAMIC content:");
             for j in 0..(p_filesz / entry_size) {
                 let entry_offset = start + (j as usize * entry_size as usize);
-                let d_tag = u64::from_le_bytes(elf_bytes[entry_offset..entry_offset+8].try_into().unwrap());
-                let d_val = u64::from_le_bytes(elf_bytes[entry_offset+8..entry_offset+16].try_into().unwrap());
+                let d_tag = u64::from_le_bytes(
+                    elf_bytes[entry_offset..entry_offset + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                let d_val = u64::from_le_bytes(
+                    elf_bytes[entry_offset + 8..entry_offset + 16]
+                        .try_into()
+                        .unwrap(),
+                );
 
                 let tag_name = match d_tag {
                     0 => "DT_NULL",
@@ -81,12 +103,17 @@ fn main() {
                     19 => "DT_RELENT",
                     30 => "DT_FLAGS",
                     0x6ffffffa => "DT_RELCOUNT",
-                    _ => "Unknown"
+                    _ => "Unknown",
                 };
 
-                println!("  Entry {}: {} (0x{:x}) = 0x{:x}", j, tag_name, d_tag, d_val);
+                println!(
+                    "  Entry {}: {} (0x{:x}) = 0x{:x}",
+                    j, tag_name, d_tag, d_val
+                );
 
-                if d_tag == 0 { break; } // DT_NULL terminates
+                if d_tag == 0 {
+                    break;
+                } // DT_NULL terminates
             }
 
             // Now check if this matches what's in SHT_DYNAMIC
@@ -97,11 +124,24 @@ fn main() {
 
             for k in 0..e_shnum {
                 let shdr_offset = e_shoff as usize + (k as usize * 64);
-                let sh_type = u32::from_le_bytes(elf_bytes[shdr_offset+4..shdr_offset+8].try_into().unwrap());
+                let sh_type = u32::from_le_bytes(
+                    elf_bytes[shdr_offset + 4..shdr_offset + 8]
+                        .try_into()
+                        .unwrap(),
+                );
 
-                if sh_type == 6 { // SHT_DYNAMIC
-                    let sh_offset = u64::from_le_bytes(elf_bytes[shdr_offset+24..shdr_offset+32].try_into().unwrap());
-                    let sh_size = u64::from_le_bytes(elf_bytes[shdr_offset+32..shdr_offset+40].try_into().unwrap());
+                if sh_type == 6 {
+                    // SHT_DYNAMIC
+                    let sh_offset = u64::from_le_bytes(
+                        elf_bytes[shdr_offset + 24..shdr_offset + 32]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let sh_size = u64::from_le_bytes(
+                        elf_bytes[shdr_offset + 32..shdr_offset + 40]
+                            .try_into()
+                            .unwrap(),
+                    );
 
                     println!("  SHT_DYNAMIC section header:");
                     println!("    sh_offset: 0x{:x}", sh_offset);
@@ -111,8 +151,14 @@ fn main() {
                         println!("  ✅ PT_DYNAMIC and SHT_DYNAMIC point to same data!");
                     } else {
                         println!("  ⚠️  PT_DYNAMIC and SHT_DYNAMIC differ!");
-                        println!("     PT_DYNAMIC: offset=0x{:x}, size=0x{:x}", p_offset, p_filesz);
-                        println!("     SHT_DYNAMIC: offset=0x{:x}, size=0x{:x}", sh_offset, sh_size);
+                        println!(
+                            "     PT_DYNAMIC: offset=0x{:x}, size=0x{:x}",
+                            p_offset, p_filesz
+                        );
+                        println!(
+                            "     SHT_DYNAMIC: offset=0x{:x}, size=0x{:x}",
+                            sh_offset, sh_size
+                        );
                     }
                     break;
                 }

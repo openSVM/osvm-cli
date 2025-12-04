@@ -112,6 +112,7 @@ pub struct TemplateCollection {
 }
 
 /// Main template manager
+#[derive(Clone)]
 pub struct PromptTemplateManager {
     /// Loaded templates by ID
     templates: HashMap<String, PromptTemplate>,

@@ -19,9 +19,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// Live range for a virtual register
 #[derive(Debug, Clone)]
 pub struct LiveRange {
-    pub def_point: usize,      // Instruction where defined
-    pub last_use: usize,       // Last instruction where used
-    pub is_large_const: bool,  // True if 64-bit constant (requires lddw)
+    pub def_point: usize,     // Instruction where defined
+    pub last_use: usize,      // Last instruction where used
+    pub is_large_const: bool, // True if 64-bit constant (requires lddw)
 }
 
 /// Interference graph edge
@@ -31,7 +31,11 @@ pub struct Edge(pub IrReg, pub IrReg);
 impl Edge {
     pub fn new(a: IrReg, b: IrReg) -> Self {
         // Normalize edge direction for deduplication
-        if a.0 < b.0 { Edge(a, b) } else { Edge(b, a) }
+        if a.0 < b.0 {
+            Edge(a, b)
+        } else {
+            Edge(b, a)
+        }
     }
 }
 
@@ -78,8 +82,11 @@ impl GraphColoringAllocator {
         Self {
             // Order: callee-saved first (survive syscalls), then caller-saved
             available_regs: vec![
-                SbpfReg::R9, SbpfReg::R8,  // Callee-saved
-                SbpfReg::R5, SbpfReg::R4, SbpfReg::R3,  // Caller-saved
+                SbpfReg::R9,
+                SbpfReg::R8, // Callee-saved
+                SbpfReg::R5,
+                SbpfReg::R4,
+                SbpfReg::R3, // Caller-saved
             ],
             k: 5,
             live_ranges: HashMap::new(),
@@ -140,11 +147,14 @@ impl GraphColoringAllocator {
         // Build live ranges
         for (reg, def_idx) in &defs {
             let last_use = uses.get(reg).copied().unwrap_or(*def_idx);
-            self.live_ranges.insert(*reg, LiveRange {
-                def_point: *def_idx,
-                last_use,
-                is_large_const: is_large_const.get(reg).copied().unwrap_or(false),
-            });
+            self.live_ranges.insert(
+                *reg,
+                LiveRange {
+                    def_point: *def_idx,
+                    last_use,
+                    is_large_const: is_large_const.get(reg).copied().unwrap_or(false),
+                },
+            );
         }
     }
 
@@ -170,19 +180,26 @@ impl GraphColoringAllocator {
                 defs.push(*dst);
                 is_large_const = true; // String addresses are 64-bit
             }
-            IrInstruction::Add(dst, a, b) | IrInstruction::Sub(dst, a, b) |
-            IrInstruction::Mul(dst, a, b) | IrInstruction::Div(dst, a, b) |
-            IrInstruction::Mod(dst, a, b) | IrInstruction::And(dst, a, b) |
-            IrInstruction::Or(dst, a, b) | IrInstruction::Eq(dst, a, b) |
-            IrInstruction::Ne(dst, a, b) | IrInstruction::Lt(dst, a, b) |
-            IrInstruction::Le(dst, a, b) | IrInstruction::Gt(dst, a, b) |
-            IrInstruction::Ge(dst, a, b) => {
+            IrInstruction::Add(dst, a, b)
+            | IrInstruction::Sub(dst, a, b)
+            | IrInstruction::Mul(dst, a, b)
+            | IrInstruction::Div(dst, a, b)
+            | IrInstruction::Mod(dst, a, b)
+            | IrInstruction::And(dst, a, b)
+            | IrInstruction::Or(dst, a, b)
+            | IrInstruction::Eq(dst, a, b)
+            | IrInstruction::Ne(dst, a, b)
+            | IrInstruction::Lt(dst, a, b)
+            | IrInstruction::Le(dst, a, b)
+            | IrInstruction::Gt(dst, a, b)
+            | IrInstruction::Ge(dst, a, b) => {
                 defs.push(*dst);
                 uses.push(*a);
                 uses.push(*b);
             }
-            IrInstruction::Not(dst, src) | IrInstruction::Neg(dst, src) |
-            IrInstruction::Move(dst, src) => {
+            IrInstruction::Not(dst, src)
+            | IrInstruction::Neg(dst, src)
+            | IrInstruction::Move(dst, src) => {
                 defs.push(*dst);
                 uses.push(*src);
             }
@@ -235,7 +252,7 @@ impl GraphColoringAllocator {
 
         // Initialize adjacency lists
         for reg in &regs {
-            self.interference.entry(*reg).or_insert_with(HashSet::new);
+            self.interference.entry(*reg).or_default();
         }
 
         // Two registers interfere if their live ranges overlap
@@ -249,8 +266,8 @@ impl GraphColoringAllocator {
                 {
                     // Ranges overlap if one's definition is before the other's last use
                     // and vice versa
-                    let overlaps = range_a.def_point <= range_b.last_use &&
-                                   range_b.def_point <= range_a.last_use;
+                    let overlaps = range_a.def_point <= range_b.last_use
+                        && range_b.def_point <= range_a.last_use;
 
                     if overlaps {
                         self.interference.entry(reg_a).or_default().insert(reg_b);
@@ -263,7 +280,7 @@ impl GraphColoringAllocator {
         // Pre-colored registers interfere with each other
         let precolored_regs: Vec<IrReg> = self.precolored.keys().copied().collect();
         for reg in &precolored_regs {
-            self.interference.entry(*reg).or_insert_with(HashSet::new);
+            self.interference.entry(*reg).or_default();
         }
     }
 
@@ -280,7 +297,9 @@ impl GraphColoringAllocator {
         let mut select_stack: Vec<IrReg> = Vec::new();
 
         // Get all non-precolored registers
-        let mut remaining: HashSet<IrReg> = self.live_ranges.keys()
+        let mut remaining: HashSet<IrReg> = self
+            .live_ranges
+            .keys()
             .filter(|r| !self.precolored.contains_key(r))
             .copied()
             .collect();
@@ -364,7 +383,8 @@ impl GraphColoringAllocator {
 
     /// Compute degree of a register (number of neighbors still in graph)
     fn degree(&self, reg: IrReg, remaining: &HashSet<IrReg>) -> usize {
-        self.interference.get(&reg)
+        self.interference
+            .get(&reg)
             .map(|neighbors| neighbors.iter().filter(|n| remaining.contains(n)).count())
             .unwrap_or(0)
     }
@@ -382,13 +402,13 @@ impl GraphColoringAllocator {
         for (idx, &reg) in candidates.iter().enumerate() {
             let range = self.live_ranges.get(&reg);
             let is_large_const = range.map(|r| r.is_large_const).unwrap_or(false);
-            let live_length = range.map(|r| (r.last_use - r.def_point) as i64).unwrap_or(0);
+            let live_length = range
+                .map(|r| (r.last_use - r.def_point) as i64)
+                .unwrap_or(0);
             let degree = self.degree(reg, remaining) as i64;
 
             // Score: prefer large constants, high degree, short ranges
-            let score = if is_large_const { 1000 } else { 0 }
-                + degree * 10
-                - live_length;
+            let score = if is_large_const { 1000 } else { 0 } + degree * 10 - live_length;
 
             if score > best_score {
                 best_score = score;
@@ -451,8 +471,8 @@ impl AllocationResult {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ir::IrProgram;
+    use super::*;
     use std::collections::HashMap;
 
     fn make_program(instructions: Vec<IrInstruction>) -> IrProgram {
@@ -515,6 +535,9 @@ mod tests {
         // we need spills. The allocator should detect this.
         // Note: The graph coloring may find clever solutions, but with
         // enough pressure, some spills should occur.
-        assert!(result.allocation.len() >= 10, "Should allocate all registers");
+        assert!(
+            result.allocation.len() >= 10,
+            "Should allocate all registers"
+        );
     }
 }

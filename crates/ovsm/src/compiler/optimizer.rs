@@ -141,8 +141,10 @@ impl Optimizer {
                 }
 
                 // Labels and jumps invalidate our constant tracking
-                IrInstruction::Label(_) | IrInstruction::Jump(_)
-                | IrInstruction::JumpIf(_, _) | IrInstruction::JumpIfNot(_, _) => {
+                IrInstruction::Label(_)
+                | IrInstruction::Jump(_)
+                | IrInstruction::JumpIf(_, _)
+                | IrInstruction::JumpIfNot(_, _) => {
                     constants.clear();
                 }
 
@@ -159,31 +161,30 @@ impl Optimizer {
         // First pass: find all registers that are used
         for instr in &program.instructions {
             match instr {
-                IrInstruction::Add(_, src1, src2) |
-                IrInstruction::Sub(_, src1, src2) |
-                IrInstruction::Mul(_, src1, src2) |
-                IrInstruction::Div(_, src1, src2) |
-                IrInstruction::Mod(_, src1, src2) |
-                IrInstruction::Eq(_, src1, src2) |
-                IrInstruction::Ne(_, src1, src2) |
-                IrInstruction::Lt(_, src1, src2) |
-                IrInstruction::Le(_, src1, src2) |
-                IrInstruction::Gt(_, src1, src2) |
-                IrInstruction::Ge(_, src1, src2) |
-                IrInstruction::And(_, src1, src2) |
-                IrInstruction::Or(_, src1, src2) => {
+                IrInstruction::Add(_, src1, src2)
+                | IrInstruction::Sub(_, src1, src2)
+                | IrInstruction::Mul(_, src1, src2)
+                | IrInstruction::Div(_, src1, src2)
+                | IrInstruction::Mod(_, src1, src2)
+                | IrInstruction::Eq(_, src1, src2)
+                | IrInstruction::Ne(_, src1, src2)
+                | IrInstruction::Lt(_, src1, src2)
+                | IrInstruction::Le(_, src1, src2)
+                | IrInstruction::Gt(_, src1, src2)
+                | IrInstruction::Ge(_, src1, src2)
+                | IrInstruction::And(_, src1, src2)
+                | IrInstruction::Or(_, src1, src2) => {
                     used_regs.insert(*src1);
                     used_regs.insert(*src2);
                 }
 
-                IrInstruction::Neg(_, src) |
-                IrInstruction::Not(_, src) |
-                IrInstruction::Move(_, src) => {
+                IrInstruction::Neg(_, src)
+                | IrInstruction::Not(_, src)
+                | IrInstruction::Move(_, src) => {
                     used_regs.insert(*src);
                 }
 
-                IrInstruction::JumpIf(cond, _) |
-                IrInstruction::JumpIfNot(cond, _) => {
+                IrInstruction::JumpIf(cond, _) | IrInstruction::JumpIfNot(cond, _) => {
                     used_regs.insert(*cond);
                 }
 
@@ -195,15 +196,13 @@ impl Optimizer {
                     used_regs.insert(*reg);
                 }
 
-                IrInstruction::Call(_, _, args) |
-                IrInstruction::Syscall(_, _, args) => {
+                IrInstruction::Call(_, _, args) | IrInstruction::Syscall(_, _, args) => {
                     for arg in args {
                         used_regs.insert(*arg);
                     }
                 }
 
-                IrInstruction::Load(_, base, _) |
-                IrInstruction::Store(base, _, _) => {
+                IrInstruction::Load(_, base, _) | IrInstruction::Store(base, _, _) => {
                     used_regs.insert(*base);
                 }
 
@@ -218,27 +217,27 @@ impl Optimizer {
         // Second pass: mark dead instructions as Nop
         for instr in program.instructions.iter_mut() {
             let dst = match instr {
-                IrInstruction::ConstI64(dst, _) |
-                IrInstruction::ConstF64(dst, _) |
-                IrInstruction::ConstBool(dst, _) |
-                IrInstruction::ConstNull(dst) |
-                IrInstruction::ConstString(dst, _) |
-                IrInstruction::Add(dst, _, _) |
-                IrInstruction::Sub(dst, _, _) |
-                IrInstruction::Mul(dst, _, _) |
-                IrInstruction::Div(dst, _, _) |
-                IrInstruction::Mod(dst, _, _) |
-                IrInstruction::Eq(dst, _, _) |
-                IrInstruction::Ne(dst, _, _) |
-                IrInstruction::Lt(dst, _, _) |
-                IrInstruction::Le(dst, _, _) |
-                IrInstruction::Gt(dst, _, _) |
-                IrInstruction::Ge(dst, _, _) |
-                IrInstruction::And(dst, _, _) |
-                IrInstruction::Or(dst, _, _) |
-                IrInstruction::Neg(dst, _) |
-                IrInstruction::Not(dst, _) |
-                IrInstruction::Move(dst, _) => Some(*dst),
+                IrInstruction::ConstI64(dst, _)
+                | IrInstruction::ConstF64(dst, _)
+                | IrInstruction::ConstBool(dst, _)
+                | IrInstruction::ConstNull(dst)
+                | IrInstruction::ConstString(dst, _)
+                | IrInstruction::Add(dst, _, _)
+                | IrInstruction::Sub(dst, _, _)
+                | IrInstruction::Mul(dst, _, _)
+                | IrInstruction::Div(dst, _, _)
+                | IrInstruction::Mod(dst, _, _)
+                | IrInstruction::Eq(dst, _, _)
+                | IrInstruction::Ne(dst, _, _)
+                | IrInstruction::Lt(dst, _, _)
+                | IrInstruction::Le(dst, _, _)
+                | IrInstruction::Gt(dst, _, _)
+                | IrInstruction::Ge(dst, _, _)
+                | IrInstruction::And(dst, _, _)
+                | IrInstruction::Or(dst, _, _)
+                | IrInstruction::Neg(dst, _)
+                | IrInstruction::Not(dst, _)
+                | IrInstruction::Move(dst, _) => Some(*dst),
 
                 _ => None,
             };
@@ -379,7 +378,9 @@ impl Optimizer {
 
     /// Remove all Nop instructions
     fn remove_nops(&mut self, program: &mut IrProgram) {
-        program.instructions.retain(|instr| !matches!(instr, IrInstruction::Nop));
+        program
+            .instructions
+            .retain(|instr| !matches!(instr, IrInstruction::Nop));
     }
 }
 

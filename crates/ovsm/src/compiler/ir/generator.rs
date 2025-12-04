@@ -34,15 +34,17 @@
 //! 4. Use `self.emit(IrInstruction::...)` to generate IR
 //! 5. Return `Ok(Some(result_reg))` or `Ok(None)` for void
 
-use std::collections::HashMap;
-use crate::{Result, Error};
-use crate::compiler::types::{TypedProgram, TypedStatement, OvsmType};
-use crate::{Statement, Expression, BinaryOp, UnaryOp};
-use super::types::{PrimitiveType, FieldType, StructField, StructDef};
-use super::instruction::{IrReg, IrInstruction};
+use super::instruction::{IrInstruction, IrReg};
+use super::memory_model::{
+    account_layout, Alignment, MemoryError, MemoryRegion, PointerType, RegType, TypeEnv, TypedReg,
+};
 use super::program::{BasicBlock, IrProgram};
-use super::memory_model::{TypeEnv, RegType, PointerType, TypedReg, MemoryRegion, Alignment, MemoryError, account_layout};
-use crate::types::{Type, TypeContext, TypeBridge};
+use super::types::{FieldType, PrimitiveType, StructDef, StructField};
+use crate::compiler::types::{OvsmType, TypedProgram, TypedStatement};
+use crate::types::{Type, TypeBridge, TypeContext};
+use crate::{BinaryOp, Expression, Statement, UnaryOp};
+use crate::{Error, Result};
+use std::collections::HashMap;
 
 /// IR Generator - transforms typed AST to IR
 ///
@@ -82,16 +84,22 @@ impl IrGenerator {
         let instr_data_reg = IrReg::new(2);
 
         // Register the types for the built-in registers
-        type_env.set_type(accounts_reg, RegType::Pointer(PointerType {
-            region: MemoryRegion::InputBuffer,
-            bounds: None, // Size unknown until we parse header
-            struct_type: None,
-            offset: 0,
-            alignment: super::memory_model::Alignment::Byte8,
-            writable: false, // Accounts metadata region
-        }));
+        type_env.set_type(
+            accounts_reg,
+            RegType::Pointer(PointerType {
+                region: MemoryRegion::InputBuffer,
+                bounds: None, // Size unknown until we parse header
+                struct_type: None,
+                offset: 0,
+                alignment: super::memory_model::Alignment::Byte8,
+                writable: false, // Accounts metadata region
+            }),
+        );
 
-        type_env.set_type(instr_data_reg, RegType::Pointer(PointerType::instruction_data(None)));
+        type_env.set_type(
+            instr_data_reg,
+            RegType::Pointer(PointerType::instruction_data(None)),
+        );
 
         let mut gen = Self {
             next_reg: 0,
@@ -106,7 +114,8 @@ impl IrGenerator {
         };
 
         gen.var_map.insert("accounts".to_string(), accounts_reg);
-        gen.var_map.insert("instruction-data".to_string(), instr_data_reg);
+        gen.var_map
+            .insert("instruction-data".to_string(), instr_data_reg);
         gen.next_reg = 3; // Start allocating from R3
         gen
     }
@@ -127,7 +136,8 @@ impl IrGenerator {
 
         // Update var_map to use the saved registers
         self.var_map.insert("accounts".to_string(), saved_accounts);
-        self.var_map.insert("instruction-data".to_string(), saved_instr_data);
+        self.var_map
+            .insert("instruction-data".to_string(), saved_instr_data);
 
         // CRITICAL: Ensure next_reg skips past the reserved registers (6 and 7)
         // Otherwise alloc_reg() will return IrReg(6) or IrReg(7) for temporaries,
@@ -165,7 +175,10 @@ impl IrGenerator {
         // ═══════════════════════════════════════════════════════════════════════════
         self.emit_account_offset_table_init(saved_accounts);
 
-        eprintln!("🔍 IR DEBUG: Generating IR for {} statements", program.statements.len());
+        eprintln!(
+            "🔍 IR DEBUG: Generating IR for {} statements",
+            program.statements.len()
+        );
 
         // Generate IR for each statement, tracking last result
         let mut _last_result: Option<IrReg> = None;
@@ -193,12 +206,11 @@ impl IrGenerator {
 
     fn generate_statement(&mut self, stmt: &Statement) -> Result<Option<IrReg>> {
         match stmt {
-            Statement::Expression(expr) => {
-                self.generate_expr(expr)
-            }
+            Statement::Expression(expr) => self.generate_expr(expr),
 
             Statement::Assignment { name, value } => {
-                let value_reg = self.generate_expr(value)?
+                let value_reg = self
+                    .generate_expr(value)?
                     .ok_or_else(|| Error::runtime("Assignment value has no result"))?;
 
                 // Store in variable map
@@ -206,8 +218,13 @@ impl IrGenerator {
                 Ok(Some(value_reg))
             }
 
-            Statement::If { condition, then_branch, else_branch } => {
-                let cond_reg = self.generate_expr(condition)?
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond_reg = self
+                    .generate_expr(condition)?
                     .ok_or_else(|| Error::runtime("Condition has no result"))?;
 
                 let then_label = self.new_label("then");
@@ -245,7 +262,8 @@ impl IrGenerator {
                 // Loop header
                 self.emit(IrInstruction::Label(loop_label.clone()));
 
-                let cond_reg = self.generate_expr(condition)?
+                let cond_reg = self
+                    .generate_expr(condition)?
                     .ok_or_else(|| Error::runtime("While condition has no result"))?;
 
                 self.emit(IrInstruction::JumpIfNot(cond_reg, end_label.clone()));
@@ -263,14 +281,23 @@ impl IrGenerator {
                 Ok(None)
             }
 
-            Statement::For { variable, iterable, body } => {
+            Statement::For {
+                variable,
+                iterable,
+                body,
+            } => {
                 // Generate iterable
-                let iter_reg = self.generate_expr(iterable)?
+                let iter_reg = self
+                    .generate_expr(iterable)?
                     .ok_or_else(|| Error::runtime("For iterable has no result"))?;
 
                 // Get length
                 let len_reg = self.alloc_reg();
-                self.emit(IrInstruction::Call(Some(len_reg), "length".to_string(), vec![iter_reg]));
+                self.emit(IrInstruction::Call(
+                    Some(len_reg),
+                    "length".to_string(),
+                    vec![iter_reg],
+                ));
 
                 // Index register
                 let idx_reg = self.alloc_reg();
@@ -289,7 +316,11 @@ impl IrGenerator {
 
                 // Get current element
                 let elem_reg = self.alloc_reg();
-                self.emit(IrInstruction::Call(Some(elem_reg), "get".to_string(), vec![iter_reg, idx_reg]));
+                self.emit(IrInstruction::Call(
+                    Some(elem_reg),
+                    "get".to_string(),
+                    vec![iter_reg, idx_reg],
+                ));
                 self.var_map.insert(variable.clone(), elem_reg);
 
                 // Body
@@ -358,17 +389,19 @@ impl IrGenerator {
                 Ok(Some(reg))
             }
 
-            Expression::Variable(name) => {
-                self.var_map.get(name)
-                    .copied()
-                    .map(Some)
-                    .ok_or_else(|| Error::runtime(format!("Undefined variable: {}", name)))
-            }
+            Expression::Variable(name) => self
+                .var_map
+                .get(name)
+                .copied()
+                .map(Some)
+                .ok_or_else(|| Error::runtime(format!("Undefined variable: {}", name))),
 
             Expression::Binary { op, left, right } => {
-                let left_reg = self.generate_expr(left)?
+                let left_reg = self
+                    .generate_expr(left)?
                     .ok_or_else(|| Error::runtime("Binary left has no result"))?;
-                let right_reg = self.generate_expr(right)?
+                let right_reg = self
+                    .generate_expr(right)?
                     .ok_or_else(|| Error::runtime("Binary right has no result"))?;
                 let dst = self.alloc_reg();
 
@@ -393,7 +426,8 @@ impl IrGenerator {
             }
 
             Expression::Unary { op, operand } => {
-                let operand_reg = self.generate_expr(operand)?
+                let operand_reg = self
+                    .generate_expr(operand)?
                     .ok_or_else(|| Error::runtime("Unary operand has no result"))?;
                 let dst = self.alloc_reg();
 
@@ -409,7 +443,8 @@ impl IrGenerator {
                 // Handle (define var value) specially
                 if name == "define" && args.len() == 2 {
                     if let Expression::Variable(var_name) = &args[0].value {
-                        let value_reg = self.generate_expr(&args[1].value)?
+                        let value_reg = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("Define value has no result"))?;
                         self.var_map.insert(var_name.clone(), value_reg);
                         return Ok(Some(value_reg));
@@ -421,12 +456,13 @@ impl IrGenerator {
                 if name == "set!" && args.len() == 2 {
                     if let Expression::Variable(var_name) = &args[0].value {
                         // Get the existing register for this variable
-                        let old_reg = self.var_map.get(var_name)
-                            .copied()
-                            .ok_or_else(|| Error::runtime(format!("Cannot set! undefined variable: {}", var_name)))?;
+                        let old_reg = self.var_map.get(var_name).copied().ok_or_else(|| {
+                            Error::runtime(format!("Cannot set! undefined variable: {}", var_name))
+                        })?;
 
                         // Compute the new value
-                        let value_reg = self.generate_expr(&args[1].value)?
+                        let value_reg = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("Set! value has no result"))?;
 
                         // Emit Move instruction to copy new value into old register
@@ -454,18 +490,28 @@ impl IrGenerator {
 
                         // Parse each field: (field_name type_spec)
                         for field_arg in args.iter().skip(1) {
-                            if let Expression::ToolCall { name: field_name, args: field_args } = &field_arg.value {
+                            if let Expression::ToolCall {
+                                name: field_name,
+                                args: field_args,
+                            } = &field_arg.value
+                            {
                                 if field_args.len() == 1 {
                                     // Parse the type specification
-                                    let (field_type, elem_size, arr_count) = match &field_args[0].value {
+                                    let (field_type, elem_size, arr_count) = match &field_args[0]
+                                        .value
+                                    {
                                         // Simple type: u8, u16, u32, u64, i8, i16, i32, i64, pubkey
                                         Expression::Variable(type_name) => {
-                                            if let Some(ft) = FieldType::from_str(type_name) {
+                                            if let Some(ft) = FieldType::parse(type_name) {
                                                 (ft, None, None)
                                             } else {
                                                 // Check if it's a reference to another struct
                                                 if self.struct_defs.contains_key(type_name) {
-                                                    (FieldType::Struct(type_name.clone()), None, None)
+                                                    (
+                                                        FieldType::Struct(type_name.clone()),
+                                                        None,
+                                                        None,
+                                                    )
                                                 } else {
                                                     return Err(Error::runtime(format!(
                                                         "Unknown field type '{}' in struct '{}'. Valid types: u8, u16, u32, u64, i8, i16, i32, i64, pubkey, [type count], or a defined struct name",
@@ -475,20 +521,27 @@ impl IrGenerator {
                                             }
                                         }
                                         // Array type: [element_type count]
-                                        Expression::ArrayLiteral(elements) if elements.len() == 2 => {
-                                            if let (Expression::Variable(elem_type), Expression::IntLiteral(count)) =
-                                                (&elements[0], &elements[1])
+                                        Expression::ArrayLiteral(elements)
+                                            if elements.len() == 2 =>
+                                        {
+                                            if let (
+                                                Expression::Variable(elem_type),
+                                                Expression::IntLiteral(count),
+                                            ) = (&elements[0], &elements[1])
                                             {
-                                                let primitive = PrimitiveType::from_str(elem_type)
+                                                let primitive = PrimitiveType::parse(elem_type)
                                                     .ok_or_else(|| Error::runtime(format!(
                                                         "Array element type '{}' must be a primitive (u8-u64, i8-i64) in struct '{}'",
                                                         elem_type, struct_name
                                                     )))?;
                                                 let cnt = *count as usize;
                                                 (
-                                                    FieldType::Array { element_type: primitive, count: cnt },
+                                                    FieldType::Array {
+                                                        element_type: primitive,
+                                                        count: cnt,
+                                                    },
                                                     Some(primitive.size()),
-                                                    Some(cnt)
+                                                    Some(cnt),
                                                 )
                                             } else {
                                                 return Err(Error::runtime(format!(
@@ -526,12 +579,19 @@ impl IrGenerator {
                             total_size: current_offset,
                         };
 
-                        eprintln!("📦 Defined struct '{}' with {} bytes:", struct_name, current_offset);
+                        eprintln!(
+                            "📦 Defined struct '{}' with {} bytes:",
+                            struct_name, current_offset
+                        );
                         for field in &struct_def.fields {
-                            eprintln!("   +{}: {} ({:?})", field.offset, field.name, field.field_type);
+                            eprintln!(
+                                "   +{}: {} ({:?})",
+                                field.offset, field.name, field.field_type
+                            );
                         }
 
-                        self.struct_defs.insert(struct_name.clone(), struct_def.clone());
+                        self.struct_defs
+                            .insert(struct_name.clone(), struct_def.clone());
 
                         // Sync to type environment for memory model validation
                         let mut defs = std::collections::HashMap::new();
@@ -551,21 +611,32 @@ impl IrGenerator {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
                     {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let field = struct_def.fields.iter()
+                        let field = struct_def
+                            .fields
+                            .iter()
                             .find(|f| &f.name == field_name)
-                            .ok_or_else(|| Error::runtime(format!(
-                                "Unknown field '{}' in struct '{}'", field_name, struct_name
-                            )))?;
+                            .ok_or_else(|| {
+                                Error::runtime(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, struct_name
+                                ))
+                            })?;
 
-                        let base_reg = self.generate_expr(&args[1].value)?
+                        let base_reg = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("struct-get base_ptr has no result"))?;
 
                         // MEMORY MODEL: Validate struct field access (checks bounds if base_reg has type info)
-                        self.type_env.validate_struct_field(struct_name, field_name, base_reg);
+                        self.type_env
+                            .validate_struct_field(struct_name, field_name, base_reg);
 
                         let dst = self.alloc_reg();
                         let offset = field.offset;
@@ -573,26 +644,46 @@ impl IrGenerator {
 
                         // Emit the appropriate load instruction based on field type
                         match &field.field_type {
-                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                            FieldType::Primitive(PrimitiveType::U8)
+                            | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Load1(dst, base_reg, offset));
                                 // Register result as u8 value
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I8));
-                                self.type_env.set_type(dst, RegType::Value { size: 1, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I8)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 1, signed });
                             }
-                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                            FieldType::Primitive(PrimitiveType::U16)
+                            | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Load2(dst, base_reg, offset));
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I16));
-                                self.type_env.set_type(dst, RegType::Value { size: 2, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I16)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 2, signed });
                             }
-                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                            FieldType::Primitive(PrimitiveType::U32)
+                            | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Load4(dst, base_reg, offset));
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I32));
-                                self.type_env.set_type(dst, RegType::Value { size: 4, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I32)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 4, signed });
                             }
-                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                            FieldType::Primitive(PrimitiveType::U64)
+                            | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Load(dst, base_reg, offset));
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I64));
-                                self.type_env.set_type(dst, RegType::Value { size: 8, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I64)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 8, signed });
                             }
                             FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
                                 // For pubkey/array/struct, return pointer to field (not value)
@@ -603,30 +694,43 @@ impl IrGenerator {
                                 // Register result as pointer to the field
                                 let field_size = match &field_type_clone {
                                     FieldType::Pubkey => 32,
-                                    FieldType::Array { element_type, count } => {
-                                        element_type.size() * (*count as i64)
-                                    }
-                                    FieldType::Struct(nested_name) => {
-                                        self.struct_defs.get(nested_name)
-                                            .map(|s| s.total_size)
-                                            .unwrap_or(0)
-                                    }
+                                    FieldType::Array {
+                                        element_type,
+                                        count,
+                                    } => element_type.size() * (*count as i64),
+                                    FieldType::Struct(nested_name) => self
+                                        .struct_defs
+                                        .get(nested_name)
+                                        .map(|s| s.total_size)
+                                        .unwrap_or(0),
                                     _ => 0,
                                 };
                                 // If base_reg has pointer info, derive field pointer from it
-                                if let Some(RegType::Pointer(base_ptr)) = self.type_env.get_type(base_reg).cloned() {
-                                    let field_ptr = base_ptr.field_access(offset, field_size, field_name.clone());
+                                if let Some(RegType::Pointer(base_ptr)) =
+                                    self.type_env.get_type(base_reg).cloned()
+                                {
+                                    let field_ptr = base_ptr.field_access(
+                                        offset,
+                                        field_size,
+                                        field_name.clone(),
+                                    );
                                     self.type_env.set_type(dst, RegType::Pointer(field_ptr));
                                 } else {
                                     // Unknown base, create a generic pointer
-                                    self.type_env.set_type(dst, RegType::Pointer(PointerType {
-                                        region: MemoryRegion::Unknown,
-                                        bounds: Some((0, field_size)),
-                                        struct_type: Some(format!("{}.{}", struct_name, field_name)),
-                                        offset: 0,
-                                        alignment: Alignment::Byte1,
-                                        writable: true,
-                                    }));
+                                    self.type_env.set_type(
+                                        dst,
+                                        RegType::Pointer(PointerType {
+                                            region: MemoryRegion::Unknown,
+                                            bounds: Some((0, field_size)),
+                                            struct_type: Some(format!(
+                                                "{}.{}",
+                                                struct_name, field_name
+                                            )),
+                                            offset: 0,
+                                            alignment: Alignment::Byte1,
+                                            writable: true,
+                                        }),
+                                    );
                                 }
                             }
                         }
@@ -643,21 +747,32 @@ impl IrGenerator {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
                     {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let field = struct_def.fields.iter()
+                        let field = struct_def
+                            .fields
+                            .iter()
                             .find(|f| &f.name == field_name)
-                            .ok_or_else(|| Error::runtime(format!(
-                                "Unknown field '{}' in struct '{}'", field_name, struct_name
-                            )))?;
+                            .ok_or_else(|| {
+                                Error::runtime(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, struct_name
+                                ))
+                            })?;
 
-                        let base_reg = self.generate_expr(&args[1].value)?
+                        let base_reg = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("struct-set base_ptr has no result"))?;
 
                         // MEMORY MODEL: Validate struct field access and writability
-                        self.type_env.validate_struct_field(struct_name, field_name, base_reg);
+                        self.type_env
+                            .validate_struct_field(struct_name, field_name, base_reg);
 
                         // Also validate writability if base_reg has type info
                         if let Some(RegType::Pointer(ptr)) = self.type_env.get_type(base_reg) {
@@ -668,23 +783,28 @@ impl IrGenerator {
                             }
                         }
 
-                        let value_reg = self.generate_expr(&args[3].value)?
+                        let value_reg = self
+                            .generate_expr(&args[3].value)?
                             .ok_or_else(|| Error::runtime("struct-set value has no result"))?;
 
                         let offset = field.offset;
 
                         // Emit the appropriate store instruction based on field type
                         match &field.field_type {
-                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                            FieldType::Primitive(PrimitiveType::U8)
+                            | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Store1(base_reg, value_reg, offset));
                             }
-                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                            FieldType::Primitive(PrimitiveType::U16)
+                            | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Store2(base_reg, value_reg, offset));
                             }
-                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                            FieldType::Primitive(PrimitiveType::U32)
+                            | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Store4(base_reg, value_reg, offset));
                             }
-                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                            FieldType::Primitive(PrimitiveType::U64)
+                            | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Store(base_reg, value_reg, offset));
                             }
                             FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
@@ -706,8 +826,12 @@ impl IrGenerator {
                 if name == "struct-size" && args.len() == 1 {
                     if let Expression::Variable(struct_name) = &args[0].value {
                         // Get the size first to avoid borrow conflict
-                        let total_size = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let total_size = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .total_size;
 
                         let dst = self.alloc_reg();
@@ -723,17 +847,27 @@ impl IrGenerator {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
                     {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let field = struct_def.fields.iter()
+                        let field = struct_def
+                            .fields
+                            .iter()
                             .find(|f| &f.name == field_name)
-                            .ok_or_else(|| Error::runtime(format!(
-                                "Unknown field '{}' in struct '{}'", field_name, struct_name
-                            )))?;
+                            .ok_or_else(|| {
+                                Error::runtime(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, struct_name
+                                ))
+                            })?;
 
-                        let base_reg = self.generate_expr(&args[1].value)?
+                        let base_reg = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("struct-ptr base_ptr has no result"))?;
 
                         let dst = self.alloc_reg();
@@ -752,15 +886,24 @@ impl IrGenerator {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[1].value)
                     {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let field = struct_def.fields.iter()
+                        let field = struct_def
+                            .fields
+                            .iter()
                             .find(|f| &f.name == field_name)
-                            .ok_or_else(|| Error::runtime(format!(
-                                "Unknown field '{}' in struct '{}'", field_name, struct_name
-                            )))?;
+                            .ok_or_else(|| {
+                                Error::runtime(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, struct_name
+                                ))
+                            })?;
 
                         let dst = self.alloc_reg();
                         self.emit(IrInstruction::ConstI64(dst, field.offset));
@@ -775,15 +918,24 @@ impl IrGenerator {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[1].value)
                     {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let field = struct_def.fields.iter()
+                        let field = struct_def
+                            .fields
+                            .iter()
                             .find(|f| &f.name == field_name)
-                            .ok_or_else(|| Error::runtime(format!(
-                                "Unknown field '{}' in struct '{}'", field_name, struct_name
-                            )))?;
+                            .ok_or_else(|| {
+                                Error::runtime(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, struct_name
+                                ))
+                            })?;
 
                         let dst = self.alloc_reg();
                         let field_size = field.field_type.size_with_structs(&self.struct_defs);
@@ -797,8 +949,12 @@ impl IrGenerator {
                 // Example: (struct-idl MyState) => prints JSON and returns 0
                 if name == "struct-idl" && args.len() == 1 {
                     if let Expression::Variable(struct_name) = &args[0].value {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
                         // Print the IDL at compile time
@@ -823,15 +979,21 @@ impl IrGenerator {
                 // Returns the number of bytes written
                 if name == "borsh-serialize" && args.len() >= 3 {
                     if let Expression::Variable(struct_name) = &args[0].value {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let src_ptr = self.generate_expr(&args[1].value)?
-                            .ok_or_else(|| Error::runtime("borsh-serialize src_ptr has no result"))?;
+                        let src_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                            Error::runtime("borsh-serialize src_ptr has no result")
+                        })?;
 
-                        let dst_buffer = self.generate_expr(&args[2].value)?
-                            .ok_or_else(|| Error::runtime("borsh-serialize dst_buffer has no result"))?;
+                        let dst_buffer = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                            Error::runtime("borsh-serialize dst_buffer has no result")
+                        })?;
 
                         // Optional offset argument (defaults to 0)
                         let base_offset = if args.len() >= 4 {
@@ -850,35 +1012,70 @@ impl IrGenerator {
 
                             // Load from source struct and store to buffer
                             match &field.field_type {
-                                FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                                FieldType::Primitive(PrimitiveType::U8)
+                                | FieldType::Primitive(PrimitiveType::I8) => {
                                     let temp_reg = self.alloc_reg();
-                                    self.emit(IrInstruction::Load1(temp_reg, src_ptr, field_offset));
-                                    self.emit(IrInstruction::Store1(dst_buffer, temp_reg, dst_offset));
+                                    self.emit(IrInstruction::Load1(
+                                        temp_reg,
+                                        src_ptr,
+                                        field_offset,
+                                    ));
+                                    self.emit(IrInstruction::Store1(
+                                        dst_buffer, temp_reg, dst_offset,
+                                    ));
                                 }
-                                FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                                FieldType::Primitive(PrimitiveType::U16)
+                                | FieldType::Primitive(PrimitiveType::I16) => {
                                     let temp_reg = self.alloc_reg();
-                                    self.emit(IrInstruction::Load2(temp_reg, src_ptr, field_offset));
-                                    self.emit(IrInstruction::Store2(dst_buffer, temp_reg, dst_offset));
+                                    self.emit(IrInstruction::Load2(
+                                        temp_reg,
+                                        src_ptr,
+                                        field_offset,
+                                    ));
+                                    self.emit(IrInstruction::Store2(
+                                        dst_buffer, temp_reg, dst_offset,
+                                    ));
                                 }
-                                FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                                FieldType::Primitive(PrimitiveType::U32)
+                                | FieldType::Primitive(PrimitiveType::I32) => {
                                     let temp_reg = self.alloc_reg();
-                                    self.emit(IrInstruction::Load4(temp_reg, src_ptr, field_offset));
-                                    self.emit(IrInstruction::Store4(dst_buffer, temp_reg, dst_offset));
+                                    self.emit(IrInstruction::Load4(
+                                        temp_reg,
+                                        src_ptr,
+                                        field_offset,
+                                    ));
+                                    self.emit(IrInstruction::Store4(
+                                        dst_buffer, temp_reg, dst_offset,
+                                    ));
                                 }
-                                FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                                FieldType::Primitive(PrimitiveType::U64)
+                                | FieldType::Primitive(PrimitiveType::I64) => {
                                     let temp_reg = self.alloc_reg();
                                     self.emit(IrInstruction::Load(temp_reg, src_ptr, field_offset));
-                                    self.emit(IrInstruction::Store(dst_buffer, temp_reg, dst_offset));
+                                    self.emit(IrInstruction::Store(
+                                        dst_buffer, temp_reg, dst_offset,
+                                    ));
                                 }
                                 FieldType::Pubkey => {
                                     // Copy 32 bytes (4 x 8-byte loads/stores)
                                     for i in 0..4 {
                                         let temp_reg = self.alloc_reg();
-                                        self.emit(IrInstruction::Load(temp_reg, src_ptr, field_offset + i * 8));
-                                        self.emit(IrInstruction::Store(dst_buffer, temp_reg, dst_offset + i * 8));
+                                        self.emit(IrInstruction::Load(
+                                            temp_reg,
+                                            src_ptr,
+                                            field_offset + i * 8,
+                                        ));
+                                        self.emit(IrInstruction::Store(
+                                            dst_buffer,
+                                            temp_reg,
+                                            dst_offset + i * 8,
+                                        ));
                                     }
                                 }
-                                FieldType::Array { element_type, count } => {
+                                FieldType::Array {
+                                    element_type,
+                                    count,
+                                } => {
                                     // Copy array elements
                                     let elem_size = element_type.size();
                                     for i in 0..(*count as i64) {
@@ -887,20 +1084,52 @@ impl IrGenerator {
                                         let dst_elem_offset = dst_offset + i * elem_size;
                                         match element_type {
                                             PrimitiveType::U8 | PrimitiveType::I8 => {
-                                                self.emit(IrInstruction::Load1(temp_reg, src_ptr, elem_offset));
-                                                self.emit(IrInstruction::Store1(dst_buffer, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load1(
+                                                    temp_reg,
+                                                    src_ptr,
+                                                    elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store1(
+                                                    dst_buffer,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                             PrimitiveType::U16 | PrimitiveType::I16 => {
-                                                self.emit(IrInstruction::Load2(temp_reg, src_ptr, elem_offset));
-                                                self.emit(IrInstruction::Store2(dst_buffer, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load2(
+                                                    temp_reg,
+                                                    src_ptr,
+                                                    elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store2(
+                                                    dst_buffer,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                             PrimitiveType::U32 | PrimitiveType::I32 => {
-                                                self.emit(IrInstruction::Load4(temp_reg, src_ptr, elem_offset));
-                                                self.emit(IrInstruction::Store4(dst_buffer, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load4(
+                                                    temp_reg,
+                                                    src_ptr,
+                                                    elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store4(
+                                                    dst_buffer,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                             PrimitiveType::U64 | PrimitiveType::I64 => {
-                                                self.emit(IrInstruction::Load(temp_reg, src_ptr, elem_offset));
-                                                self.emit(IrInstruction::Store(dst_buffer, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load(
+                                                    temp_reg,
+                                                    src_ptr,
+                                                    elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store(
+                                                    dst_buffer,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                         }
                                     }
@@ -924,15 +1153,21 @@ impl IrGenerator {
                 // Returns the number of bytes read
                 if name == "borsh-deserialize" && args.len() >= 3 {
                     if let Expression::Variable(struct_name) = &args[0].value {
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let src_buffer = self.generate_expr(&args[1].value)?
-                            .ok_or_else(|| Error::runtime("borsh-deserialize src_buffer has no result"))?;
+                        let src_buffer = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                            Error::runtime("borsh-deserialize src_buffer has no result")
+                        })?;
 
-                        let dst_ptr = self.generate_expr(&args[2].value)?
-                            .ok_or_else(|| Error::runtime("borsh-deserialize dst_ptr has no result"))?;
+                        let dst_ptr = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                            Error::runtime("borsh-deserialize dst_ptr has no result")
+                        })?;
 
                         // Optional offset argument (defaults to 0)
                         let base_offset = if args.len() >= 4 {
@@ -951,35 +1186,74 @@ impl IrGenerator {
 
                             // Load from source buffer and store to struct
                             match &field.field_type {
-                                FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                                FieldType::Primitive(PrimitiveType::U8)
+                                | FieldType::Primitive(PrimitiveType::I8) => {
                                     let temp_reg = self.alloc_reg();
-                                    self.emit(IrInstruction::Load1(temp_reg, src_buffer, src_offset));
-                                    self.emit(IrInstruction::Store1(dst_ptr, temp_reg, field_offset));
+                                    self.emit(IrInstruction::Load1(
+                                        temp_reg, src_buffer, src_offset,
+                                    ));
+                                    self.emit(IrInstruction::Store1(
+                                        dst_ptr,
+                                        temp_reg,
+                                        field_offset,
+                                    ));
                                 }
-                                FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                                FieldType::Primitive(PrimitiveType::U16)
+                                | FieldType::Primitive(PrimitiveType::I16) => {
                                     let temp_reg = self.alloc_reg();
-                                    self.emit(IrInstruction::Load2(temp_reg, src_buffer, src_offset));
-                                    self.emit(IrInstruction::Store2(dst_ptr, temp_reg, field_offset));
+                                    self.emit(IrInstruction::Load2(
+                                        temp_reg, src_buffer, src_offset,
+                                    ));
+                                    self.emit(IrInstruction::Store2(
+                                        dst_ptr,
+                                        temp_reg,
+                                        field_offset,
+                                    ));
                                 }
-                                FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                                FieldType::Primitive(PrimitiveType::U32)
+                                | FieldType::Primitive(PrimitiveType::I32) => {
                                     let temp_reg = self.alloc_reg();
-                                    self.emit(IrInstruction::Load4(temp_reg, src_buffer, src_offset));
-                                    self.emit(IrInstruction::Store4(dst_ptr, temp_reg, field_offset));
+                                    self.emit(IrInstruction::Load4(
+                                        temp_reg, src_buffer, src_offset,
+                                    ));
+                                    self.emit(IrInstruction::Store4(
+                                        dst_ptr,
+                                        temp_reg,
+                                        field_offset,
+                                    ));
                                 }
-                                FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                                FieldType::Primitive(PrimitiveType::U64)
+                                | FieldType::Primitive(PrimitiveType::I64) => {
                                     let temp_reg = self.alloc_reg();
-                                    self.emit(IrInstruction::Load(temp_reg, src_buffer, src_offset));
-                                    self.emit(IrInstruction::Store(dst_ptr, temp_reg, field_offset));
+                                    self.emit(IrInstruction::Load(
+                                        temp_reg, src_buffer, src_offset,
+                                    ));
+                                    self.emit(IrInstruction::Store(
+                                        dst_ptr,
+                                        temp_reg,
+                                        field_offset,
+                                    ));
                                 }
                                 FieldType::Pubkey => {
                                     // Copy 32 bytes (4 x 8-byte loads/stores)
                                     for i in 0..4 {
                                         let temp_reg = self.alloc_reg();
-                                        self.emit(IrInstruction::Load(temp_reg, src_buffer, src_offset + i * 8));
-                                        self.emit(IrInstruction::Store(dst_ptr, temp_reg, field_offset + i * 8));
+                                        self.emit(IrInstruction::Load(
+                                            temp_reg,
+                                            src_buffer,
+                                            src_offset + i * 8,
+                                        ));
+                                        self.emit(IrInstruction::Store(
+                                            dst_ptr,
+                                            temp_reg,
+                                            field_offset + i * 8,
+                                        ));
                                     }
                                 }
-                                FieldType::Array { element_type, count } => {
+                                FieldType::Array {
+                                    element_type,
+                                    count,
+                                } => {
                                     // Copy array elements
                                     let elem_size = element_type.size();
                                     for i in 0..(*count as i64) {
@@ -988,20 +1262,52 @@ impl IrGenerator {
                                         let dst_elem_offset = field_offset + i * elem_size;
                                         match element_type {
                                             PrimitiveType::U8 | PrimitiveType::I8 => {
-                                                self.emit(IrInstruction::Load1(temp_reg, src_buffer, src_elem_offset));
-                                                self.emit(IrInstruction::Store1(dst_ptr, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load1(
+                                                    temp_reg,
+                                                    src_buffer,
+                                                    src_elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store1(
+                                                    dst_ptr,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                             PrimitiveType::U16 | PrimitiveType::I16 => {
-                                                self.emit(IrInstruction::Load2(temp_reg, src_buffer, src_elem_offset));
-                                                self.emit(IrInstruction::Store2(dst_ptr, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load2(
+                                                    temp_reg,
+                                                    src_buffer,
+                                                    src_elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store2(
+                                                    dst_ptr,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                             PrimitiveType::U32 | PrimitiveType::I32 => {
-                                                self.emit(IrInstruction::Load4(temp_reg, src_buffer, src_elem_offset));
-                                                self.emit(IrInstruction::Store4(dst_ptr, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load4(
+                                                    temp_reg,
+                                                    src_buffer,
+                                                    src_elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store4(
+                                                    dst_ptr,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                             PrimitiveType::U64 | PrimitiveType::I64 => {
-                                                self.emit(IrInstruction::Load(temp_reg, src_buffer, src_elem_offset));
-                                                self.emit(IrInstruction::Store(dst_ptr, temp_reg, dst_elem_offset));
+                                                self.emit(IrInstruction::Load(
+                                                    temp_reg,
+                                                    src_buffer,
+                                                    src_elem_offset,
+                                                ));
+                                                self.emit(IrInstruction::Store(
+                                                    dst_ptr,
+                                                    temp_reg,
+                                                    dst_elem_offset,
+                                                ));
                                             }
                                         }
                                     }
@@ -1024,8 +1330,12 @@ impl IrGenerator {
                 // Returns the serialized size of a struct (same as struct-size for fixed-size structs)
                 if name == "borsh-size" && args.len() == 1 {
                     if let Expression::Variable(struct_name) = &args[0].value {
-                        let total_size = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let total_size = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .total_size;
 
                         let dst = self.alloc_reg();
@@ -1036,9 +1346,11 @@ impl IrGenerator {
 
                 // Handle (get array index) - array/object access
                 if name == "get" && args.len() == 2 {
-                    let base_reg = self.generate_expr(&args[0].value)?
+                    let base_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("Get base has no result"))?;
-                    let idx_reg = self.generate_expr(&args[1].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("Get index has no result"))?;
                     let dst = self.alloc_reg();
                     // Calculate offset: base + idx * 8
@@ -1054,12 +1366,14 @@ impl IrGenerator {
 
                 // Handle (mem-load base offset) - direct memory load
                 if name == "mem-load" && args.len() == 2 {
-                    let base_reg = self.generate_expr(&args[0].value)?
+                    let base_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-load base has no result"))?;
                     let offset = match &args[1].value {
                         Expression::IntLiteral(n) => *n,
                         _ => {
-                            let off_reg = self.generate_expr(&args[1].value)?
+                            let off_reg = self
+                                .generate_expr(&args[1].value)?
                                 .ok_or_else(|| Error::runtime("mem-load offset has no result"))?;
                             let dst = self.alloc_reg();
                             let addr_reg = self.alloc_reg();
@@ -1076,7 +1390,9 @@ impl IrGenerator {
                 // Handle (num-accounts) - get number of accounts from saved accounts pointer
                 if name == "num-accounts" && args.is_empty() {
                     // accounts pointer was saved to virtual register 6 (R6) at entry
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Load(dst, accounts_ptr, 0));
@@ -1107,10 +1423,13 @@ impl IrGenerator {
                 // (account-lamports idx) - get lamport balance for account
                 // Uses precomputed account offset table for dynamic account sizes
                 if name == "account-lamports" && args.len() == 1 {
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-lamports index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1121,7 +1440,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(lamports_offset, 72));
 
                     let total_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(total_offset, account_base, lamports_offset));
+                    self.emit(IrInstruction::Add(
+                        total_offset,
+                        account_base,
+                        lamports_offset,
+                    ));
 
                     let addr = self.alloc_reg();
                     self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
@@ -1134,12 +1457,16 @@ impl IrGenerator {
                 // Handle (set-lamports idx value) - set lamport balance for account
                 // Uses precomputed account offset table for dynamic account sizes
                 if name == "set-lamports" && args.len() == 2 {
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("set-lamports index has no result"))?;
-                    let value_reg = self.generate_expr(&args[1].value)?
+                    let value_reg = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("set-lamports value has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1150,7 +1477,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(lamports_offset, 72));
 
                     let total_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(total_offset, account_base, lamports_offset));
+                    self.emit(IrInstruction::Add(
+                        total_offset,
+                        account_base,
+                        lamports_offset,
+                    ));
 
                     let addr = self.alloc_reg();
                     self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
@@ -1163,10 +1494,13 @@ impl IrGenerator {
                 // Handle (account-executable idx) - check if account is executable (1 byte at offset 3)
                 // Uses precomputed account offset table for dynamic account sizes
                 if name == "account-executable" && args.len() == 1 {
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-executable index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1200,7 +1534,9 @@ impl IrGenerator {
                 // Uses precomputed account offset table: the offset AFTER the last account
                 // is computed by looking up offset[num_accounts] (or iterating to end).
                 if name == "instruction-data-len" && args.is_empty() {
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get the instruction data offset from the precomputed table
@@ -1208,7 +1544,11 @@ impl IrGenerator {
 
                     // Read instruction data length at that offset
                     let instr_len_addr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(instr_len_addr, accounts_ptr, instr_offset));
+                    self.emit(IrInstruction::Add(
+                        instr_len_addr,
+                        accounts_ptr,
+                        instr_offset,
+                    ));
 
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Load(dst, instr_len_addr, 0));
@@ -1218,7 +1558,9 @@ impl IrGenerator {
                 // Handle (instruction-data-ptr) - get pointer to instruction data
                 // Same calculation as instruction-data-len, but return ptr + 8 (skip length)
                 if name == "instruction-data-ptr" && args.is_empty() {
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get the instruction data offset from the precomputed table
@@ -1229,14 +1571,19 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(eight, 8));
 
                     let instr_data_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(instr_data_offset, instr_len_offset, eight));
+                    self.emit(IrInstruction::Add(
+                        instr_data_offset,
+                        instr_len_offset,
+                        eight,
+                    ));
 
                     // Return pointer to instruction data
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Add(dst, accounts_ptr, instr_data_offset));
 
                     // Register as instruction data pointer
-                    self.type_env.set_type(dst, RegType::Pointer(PointerType::instruction_data(None)));
+                    self.type_env
+                        .set_type(dst, RegType::Pointer(PointerType::instruction_data(None)));
 
                     return Ok(Some(dst));
                 }
@@ -1251,10 +1598,13 @@ impl IrGenerator {
                         _ => None,
                     };
 
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-data-ptr index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1277,14 +1627,17 @@ impl IrGenerator {
                         self.type_env.set_type(dst, RegType::Pointer(ptr_type));
                     } else {
                         // Dynamic index - use Unknown region since we can't track statically
-                        self.type_env.set_type(dst, RegType::Pointer(PointerType {
-                            region: MemoryRegion::AccountData(255), // Marker for "unknown account"
-                            bounds: None,
-                            struct_type: None,
-                            offset: 0,
-                            alignment: super::memory_model::Alignment::Byte1,
-                            writable: true,
-                        }));
+                        self.type_env.set_type(
+                            dst,
+                            RegType::Pointer(PointerType {
+                                region: MemoryRegion::AccountData(255), // Marker for "unknown account"
+                                bounds: None,
+                                struct_type: None,
+                                offset: 0,
+                                alignment: super::memory_model::Alignment::Byte1,
+                                writable: true,
+                            }),
+                        );
                     }
 
                     return Ok(Some(dst));
@@ -1294,10 +1647,13 @@ impl IrGenerator {
                 // Uses precomputed account offset table for dynamic account sizes
                 // data_len is at offset 80 from account start
                 if name == "account-data-len" && args.len() == 1 {
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-data-len index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1329,10 +1685,13 @@ impl IrGenerator {
                         _ => None,
                     };
 
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-pubkey index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1340,10 +1699,17 @@ impl IrGenerator {
 
                     // Pubkey offset within account = 8 (after flags and padding)
                     let pubkey_offset = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(pubkey_offset, account_layout::PUBKEY));
+                    self.emit(IrInstruction::ConstI64(
+                        pubkey_offset,
+                        account_layout::PUBKEY,
+                    ));
 
                     let total_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(total_offset, account_base, pubkey_offset));
+                    self.emit(IrInstruction::Add(
+                        total_offset,
+                        account_base,
+                        pubkey_offset,
+                    ));
 
                     // Return pointer to the pubkey (not the value itself - it's 32 bytes)
                     let dst = self.alloc_reg();
@@ -1351,9 +1717,14 @@ impl IrGenerator {
 
                     // Register as pointer to account pubkey field (32 bytes, read-only)
                     if let Some(idx) = account_idx {
-                        self.type_env.set_type(dst, RegType::Pointer(
-                            PointerType::account_field(idx, account_layout::PUBKEY, account_layout::PUBKEY_LEN)
-                        ));
+                        self.type_env.set_type(
+                            dst,
+                            RegType::Pointer(PointerType::account_field(
+                                idx,
+                                account_layout::PUBKEY,
+                                account_layout::PUBKEY_LEN,
+                            )),
+                        );
                     }
 
                     return Ok(Some(dst));
@@ -1369,10 +1740,13 @@ impl IrGenerator {
                         _ => None,
                     };
 
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-owner index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1391,9 +1765,14 @@ impl IrGenerator {
 
                     // Register as pointer to account owner field (32 bytes, read-only)
                     if let Some(idx) = account_idx {
-                        self.type_env.set_type(dst, RegType::Pointer(
-                            PointerType::account_field(idx, account_layout::OWNER, account_layout::OWNER_LEN)
-                        ));
+                        self.type_env.set_type(
+                            dst,
+                            RegType::Pointer(PointerType::account_field(
+                                idx,
+                                account_layout::OWNER,
+                                account_layout::OWNER_LEN,
+                            )),
+                        );
                     }
 
                     return Ok(Some(dst));
@@ -1402,10 +1781,13 @@ impl IrGenerator {
                 // Handle (account-is-signer idx) - check if account is signer (1 byte at offset 1)
                 // Uses precomputed account offset table for dynamic account sizes
                 if name == "account-is-signer" && args.len() == 1 {
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-is-signer index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1416,7 +1798,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(signer_offset, 1));
 
                     let total_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(total_offset, account_base, signer_offset));
+                    self.emit(IrInstruction::Add(
+                        total_offset,
+                        account_base,
+                        signer_offset,
+                    ));
 
                     let addr = self.alloc_reg();
                     self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
@@ -1430,10 +1816,13 @@ impl IrGenerator {
                 // Handle (account-is-writable idx) - check if account is writable (1 byte at offset 2)
                 // Uses precomputed account offset table for dynamic account sizes
                 if name == "account-is-writable" && args.len() == 1 {
-                    let idx_reg = self.generate_expr(&args[0].value)?
+                    let idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("account-is-writable index has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -1444,7 +1833,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(writable_offset, 2));
 
                     let total_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(total_offset, account_base, writable_offset));
+                    self.emit(IrInstruction::Add(
+                        total_offset,
+                        account_base,
+                        writable_offset,
+                    ));
 
                     let addr = self.alloc_reg();
                     self.emit(IrInstruction::Add(addr, accounts_ptr, total_offset));
@@ -1458,7 +1851,8 @@ impl IrGenerator {
                 // Handle (mem-load ptr offset) - load 8 bytes from memory
                 // Returns: u64 value at ptr+offset
                 if name == "mem-load" && args.len() == 2 {
-                    let ptr_reg = self.generate_expr(&args[0].value)?
+                    let ptr_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-load ptr has no result"))?;
                     let offset = match &args[1].value {
                         Expression::IntLiteral(n) => *n,
@@ -1472,7 +1866,8 @@ impl IrGenerator {
                 // Handle (mem-load1 ptr offset) - load 1 byte (8-bit) from memory
                 // Returns: u8 value at ptr+offset (zero-extended to u64)
                 if name == "mem-load1" && args.len() == 2 {
-                    let ptr_reg = self.generate_expr(&args[0].value)?
+                    let ptr_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-load1 ptr has no result"))?;
                     let offset = match &args[1].value {
                         Expression::IntLiteral(n) => *n,
@@ -1486,7 +1881,8 @@ impl IrGenerator {
                 // Handle (mem-load2 ptr offset) - load 2 bytes (16-bit) from memory
                 // Returns: u16 value at ptr+offset (zero-extended to u64)
                 if name == "mem-load2" && args.len() == 2 {
-                    let ptr_reg = self.generate_expr(&args[0].value)?
+                    let ptr_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-load2 ptr has no result"))?;
                     let offset = match &args[1].value {
                         Expression::IntLiteral(n) => *n,
@@ -1500,7 +1896,8 @@ impl IrGenerator {
                 // Handle (mem-load4 ptr offset) - load 4 bytes (32-bit) from memory
                 // Returns: u32 value at ptr+offset (zero-extended to u64)
                 if name == "mem-load4" && args.len() == 2 {
-                    let ptr_reg = self.generate_expr(&args[0].value)?
+                    let ptr_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-load4 ptr has no result"))?;
                     let offset = match &args[1].value {
                         Expression::IntLiteral(n) => *n,
@@ -1514,9 +1911,11 @@ impl IrGenerator {
                 // Handle (mem-store base offset value) - direct memory store
                 // Supports both constant and dynamic offsets
                 if name == "mem-store" && args.len() == 3 {
-                    let base_reg = self.generate_expr(&args[0].value)?
+                    let base_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-store base has no result"))?;
-                    let value_reg = self.generate_expr(&args[2].value)?
+                    let value_reg = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("mem-store value has no result"))?;
 
                     // Try constant offset first (most common case)
@@ -1524,7 +1923,8 @@ impl IrGenerator {
                         self.emit(IrInstruction::Store(base_reg, value_reg, *offset));
                     } else {
                         // Dynamic offset: compute effective address = base + offset
-                        let offset_reg = self.generate_expr(&args[1].value)?
+                        let offset_reg = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("mem-store offset has no result"))?;
                         let addr_reg = self.alloc_reg();
                         self.emit(IrInstruction::Add(addr_reg, base_reg, offset_reg));
@@ -1538,9 +1938,11 @@ impl IrGenerator {
                 // Stores the low byte of value at ptr+offset
                 // Supports both constant and dynamic offsets
                 if name == "mem-store1" && args.len() == 3 {
-                    let base_reg = self.generate_expr(&args[0].value)?
+                    let base_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-store1 base has no result"))?;
-                    let value_reg = self.generate_expr(&args[2].value)?
+                    let value_reg = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("mem-store1 value has no result"))?;
 
                     // Try constant offset first (most common case)
@@ -1548,7 +1950,8 @@ impl IrGenerator {
                         self.emit(IrInstruction::Store1(base_reg, value_reg, *offset));
                     } else {
                         // Dynamic offset: compute effective address = base + offset
-                        let offset_reg = self.generate_expr(&args[1].value)?
+                        let offset_reg = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("mem-store1 offset has no result"))?;
                         let addr_reg = self.alloc_reg();
                         self.emit(IrInstruction::Add(addr_reg, base_reg, offset_reg));
@@ -1560,13 +1963,15 @@ impl IrGenerator {
 
                 // Handle (mem-store2 base offset value) - store 2 bytes (16-bit) to memory
                 if name == "mem-store2" && args.len() == 3 {
-                    let base_reg = self.generate_expr(&args[0].value)?
+                    let base_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-store2 base has no result"))?;
                     let offset = match &args[1].value {
                         Expression::IntLiteral(n) => *n,
                         _ => return Err(Error::runtime("mem-store2 offset must be constant")),
                     };
-                    let value_reg = self.generate_expr(&args[2].value)?
+                    let value_reg = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("mem-store2 value has no result"))?;
                     self.emit(IrInstruction::Store2(base_reg, value_reg, offset));
                     return Ok(None); // Store has no result
@@ -1574,13 +1979,15 @@ impl IrGenerator {
 
                 // Handle (mem-store4 base offset value) - store 4 bytes (32-bit) to memory
                 if name == "mem-store4" && args.len() == 3 {
-                    let base_reg = self.generate_expr(&args[0].value)?
+                    let base_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("mem-store4 base has no result"))?;
                     let offset = match &args[1].value {
                         Expression::IntLiteral(n) => *n,
                         _ => return Err(Error::runtime("mem-store4 offset must be constant")),
                     };
-                    let value_reg = self.generate_expr(&args[2].value)?
+                    let value_reg = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("mem-store4 value has no result"))?;
                     self.emit(IrInstruction::Store4(base_reg, value_reg, offset));
                     return Ok(None); // Store has no result
@@ -1591,7 +1998,11 @@ impl IrGenerator {
                     // First arg must be the syscall name as a string literal
                     let syscall_name = match &args[0].value {
                         Expression::StringLiteral(s) => s.clone(),
-                        _ => return Err(Error::runtime("syscall first argument must be a string literal")),
+                        _ => {
+                            return Err(Error::runtime(
+                                "syscall first argument must be a string literal",
+                            ))
+                        }
                     };
 
                     // Evaluate remaining arguments
@@ -1612,7 +2023,8 @@ impl IrGenerator {
                     // Check if the argument is a string literal
                     if let Expression::StringLiteral(ref s) = args[0].value {
                         // Get message pointer register
-                        let msg_reg = self.generate_expr(&args[0].value)?
+                        let msg_reg = self
+                            .generate_expr(&args[0].value)?
                             .ok_or_else(|| Error::runtime("log message has no result"))?;
 
                         // sol_log_ requires: R1 = pointer, R2 = length
@@ -1621,18 +2033,25 @@ impl IrGenerator {
                         self.emit(IrInstruction::ConstI64(len_reg, s.len() as i64));
 
                         let dst = self.alloc_reg();
-                        self.emit(IrInstruction::Syscall(Some(dst), name.clone(), vec![msg_reg, len_reg]));
+                        self.emit(IrInstruction::Syscall(
+                            Some(dst),
+                            name.clone(),
+                            vec![msg_reg, len_reg],
+                        ));
                         return Ok(Some(dst));
                     } else {
-                        return Err(Error::runtime("sol_log_ requires a string literal argument"));
+                        return Err(Error::runtime(
+                            "sol_log_ requires a string literal argument",
+                        ));
                     }
                 }
 
                 // Handle (sol_log_64_ ...) - log up to 5 numeric values
-                if name == "sol_log_64_" && args.len() >= 1 && args.len() <= 5 {
+                if name == "sol_log_64_" && !args.is_empty() && args.len() <= 5 {
                     let mut arg_regs = Vec::new();
                     for arg in args {
-                        let reg = self.generate_expr(&arg.value)?
+                        let reg = self
+                            .generate_expr(&arg.value)?
                             .ok_or_else(|| Error::runtime("log argument has no result"))?;
                         arg_regs.push(reg);
                     }
@@ -1645,11 +2064,16 @@ impl IrGenerator {
                 // Handle (sol_log_pubkey ptr) - log a 32-byte public key
                 // Takes a pointer to 32 bytes and logs it in base58 format
                 if name == "sol_log_pubkey" && args.len() == 1 {
-                    let ptr_reg = self.generate_expr(&args[0].value)?
+                    let ptr_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("sol_log_pubkey ptr has no result"))?;
 
                     let dst = self.alloc_reg();
-                    self.emit(IrInstruction::Syscall(Some(dst), "sol_log_pubkey".to_string(), vec![ptr_reg]));
+                    self.emit(IrInstruction::Syscall(
+                        Some(dst),
+                        "sol_log_pubkey".to_string(),
+                        vec![ptr_reg],
+                    ));
                     return Ok(Some(dst));
                 }
 
@@ -1694,14 +2118,19 @@ impl IrGenerator {
                 // dest_idx: account index of destination
                 // amount: lamports to transfer
                 if name == "system-transfer" && args.len() == 3 {
-                    let src_idx = self.generate_expr(&args[0].value)?
+                    let src_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("system-transfer src_idx has no result"))?;
-                    let dest_idx = self.generate_expr(&args[1].value)?
+                    let dest_idx = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("system-transfer dest_idx has no result"))?;
-                    let amount_reg = self.generate_expr(&args[2].value)?
+                    let amount_reg = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("system-transfer amount has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // System Program ID: 11111111111111111111111111111111 (all 0 bytes in binary)
@@ -1742,7 +2171,11 @@ impl IrGenerator {
                     let instr_data_ptr = self.alloc_reg();
                     let thirty_two_offset = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(thirty_two_offset, 32));
-                    self.emit(IrInstruction::Add(instr_data_ptr, heap_base, thirty_two_offset));
+                    self.emit(IrInstruction::Add(
+                        instr_data_ptr,
+                        heap_base,
+                        thirty_two_offset,
+                    ));
 
                     // Write transfer instruction index (2) as first 4 bytes
                     let transfer_idx = self.alloc_reg();
@@ -1796,9 +2229,17 @@ impl IrGenerator {
                     let pubkey_field_offset = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(pubkey_field_offset, 8));
                     let src_pubkey_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(src_pubkey_offset, src_base, pubkey_field_offset));
+                    self.emit(IrInstruction::Add(
+                        src_pubkey_offset,
+                        src_base,
+                        pubkey_field_offset,
+                    ));
                     let src_pubkey_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(src_pubkey_ptr, accounts_ptr, src_pubkey_offset));
+                    self.emit(IrInstruction::Add(
+                        src_pubkey_ptr,
+                        accounts_ptr,
+                        src_pubkey_offset,
+                    ));
 
                     // Meta[0]: source (signer, writable)
                     self.emit(IrInstruction::Store(meta_array_ptr, src_pubkey_ptr, 0)); // pubkey ptr
@@ -1813,9 +2254,17 @@ impl IrGenerator {
                     // Get dest account pubkey pointer using dynamic offset table
                     let dest_base = self.emit_get_account_offset(dest_idx);
                     let dest_pubkey_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(dest_pubkey_offset, dest_base, pubkey_field_offset));
+                    self.emit(IrInstruction::Add(
+                        dest_pubkey_offset,
+                        dest_base,
+                        pubkey_field_offset,
+                    ));
                     let dest_pubkey_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(dest_pubkey_ptr, accounts_ptr, dest_pubkey_offset));
+                    self.emit(IrInstruction::Add(
+                        dest_pubkey_ptr,
+                        accounts_ptr,
+                        dest_pubkey_offset,
+                    ));
 
                     // Meta[1]: dest (writable, not signer)
                     let meta1_ptr = self.alloc_reg();
@@ -1901,7 +2350,11 @@ impl IrGenerator {
                     let eight_for_offset = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight_for_offset, 8));
                     let acct_infos_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(acct_infos_ptr, accounts_ptr, eight_for_offset));
+                    self.emit(IrInstruction::Add(
+                        acct_infos_ptr,
+                        accounts_ptr,
+                        eight_for_offset,
+                    ));
 
                     // 6. Call sol_invoke_signed_c
                     // R1: instruction*
@@ -1923,11 +2376,14 @@ impl IrGenerator {
                 // Handle (invoke instruction-ptr account-infos-ptr num-accounts) - Low-level CPI
                 // For advanced users who build their own instruction structures
                 if name == "invoke" && args.len() == 3 {
-                    let instr_ptr = self.generate_expr(&args[0].value)?
+                    let instr_ptr = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("invoke instruction-ptr has no result"))?;
-                    let acct_infos_ptr = self.generate_expr(&args[1].value)?
+                    let acct_infos_ptr = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("invoke account-infos-ptr has no result"))?;
-                    let num_accounts = self.generate_expr(&args[2].value)?
+                    let num_accounts = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("invoke num-accounts has no result"))?;
 
                     let zero_reg = self.alloc_reg();
@@ -1946,22 +2402,34 @@ impl IrGenerator {
                 // Handle (invoke-signed instr-ptr acct-infos-ptr num-accts signers-seeds-ptr num-signers)
                 // For PDA-signed CPIs
                 if name == "invoke-signed" && args.len() == 5 {
-                    let instr_ptr = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("invoke-signed instruction-ptr has no result"))?;
-                    let acct_infos_ptr = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("invoke-signed account-infos-ptr has no result"))?;
-                    let num_accounts = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("invoke-signed num-accounts has no result"))?;
-                    let signers_seeds_ptr = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("invoke-signed signers-seeds-ptr has no result"))?;
-                    let num_signers = self.generate_expr(&args[4].value)?
+                    let instr_ptr = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("invoke-signed instruction-ptr has no result")
+                    })?;
+                    let acct_infos_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("invoke-signed account-infos-ptr has no result")
+                    })?;
+                    let num_accounts = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("invoke-signed num-accounts has no result")
+                    })?;
+                    let signers_seeds_ptr =
+                        self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                            Error::runtime("invoke-signed signers-seeds-ptr has no result")
+                        })?;
+                    let num_signers = self
+                        .generate_expr(&args[4].value)?
                         .ok_or_else(|| Error::runtime("invoke-signed num-signers has no result"))?;
 
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
-                        vec![instr_ptr, acct_infos_ptr, num_accounts, signers_seeds_ptr, num_signers],
+                        vec![
+                            instr_ptr,
+                            acct_infos_ptr,
+                            num_accounts,
+                            signers_seeds_ptr,
+                            num_signers,
+                        ],
                     ));
 
                     return Ok(Some(dst));
@@ -1982,11 +2450,13 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000500_i64));
 
                     // Get program pubkey from account index
-                    let program_idx = self.generate_expr(&args[0].value)?
+                    let program_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("cpi-call program-idx has no result"))?;
 
                     // Get discriminator
-                    let discriminator = self.generate_expr(&args[1].value)?
+                    let discriminator = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("cpi-call discriminator has no result"))?;
 
                     // Store discriminator as instruction data at heap+100
@@ -2063,15 +2533,18 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000700_i64));
 
                     // Get program account index
-                    let program_idx = self.generate_expr(&args[0].value)?
+                    let program_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("cpi-invoke program-idx has no result"))?;
 
                     // Get instruction data pointer
-                    let data_ptr = self.generate_expr(&args[1].value)?
+                    let data_ptr = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("cpi-invoke data-ptr has no result"))?;
 
                     // Get instruction data length
-                    let data_len = self.generate_expr(&args[2].value)?
+                    let data_len = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("cpi-invoke data-len has no result"))?;
 
                     // Get program pubkey pointer (account pubkey at program_idx)
@@ -2089,31 +2562,58 @@ impl IrGenerator {
                                 if let Expression::ArrayLiteral(triple) = spec {
                                     if triple.len() >= 3 {
                                         // Get account index
-                                        let acct_idx = self.generate_expr(&triple[0])?
-                                            .ok_or_else(|| Error::runtime("cpi-invoke account idx has no result"))?;
+                                        let acct_idx =
+                                            self.generate_expr(&triple[0])?.ok_or_else(|| {
+                                                Error::runtime(
+                                                    "cpi-invoke account idx has no result",
+                                                )
+                                            })?;
                                         // Get is_writable
-                                        let is_writable = self.generate_expr(&triple[1])?
-                                            .ok_or_else(|| Error::runtime("cpi-invoke is_writable has no result"))?;
+                                        let is_writable =
+                                            self.generate_expr(&triple[1])?.ok_or_else(|| {
+                                                Error::runtime(
+                                                    "cpi-invoke is_writable has no result",
+                                                )
+                                            })?;
                                         // Get is_signer
-                                        let is_signer = self.generate_expr(&triple[2])?
-                                            .ok_or_else(|| Error::runtime("cpi-invoke is_signer has no result"))?;
+                                        let is_signer =
+                                            self.generate_expr(&triple[2])?.ok_or_else(|| {
+                                                Error::runtime("cpi-invoke is_signer has no result")
+                                            })?;
 
                                         // Calculate pubkey pointer for this account using dynamic offset table
-                                        let acct_pk_ptr = self.emit_get_account_pubkey_ptr(acct_idx);
+                                        let acct_pk_ptr =
+                                            self.emit_get_account_pubkey_ptr(acct_idx);
 
                                         // Write SolAccountMeta at heap_base + i*16
                                         // SolAccountMeta: pubkey* (8), is_writable (1), is_signer (1), padding (6)
                                         let meta_offset = (i * 16) as i64;
-                                        self.emit(IrInstruction::Store(heap_base, acct_pk_ptr, meta_offset));
+                                        self.emit(IrInstruction::Store(
+                                            heap_base,
+                                            acct_pk_ptr,
+                                            meta_offset,
+                                        ));
                                         // Store writable and signer as bytes at +8 and +9
                                         // We need to combine them into a u64 for the store
                                         let shift_8 = self.alloc_reg();
                                         self.emit(IrInstruction::ConstI64(shift_8, 256)); // 2^8
                                         let signer_shifted = self.alloc_reg();
-                                        self.emit(IrInstruction::Mul(signer_shifted, is_signer, shift_8));
+                                        self.emit(IrInstruction::Mul(
+                                            signer_shifted,
+                                            is_signer,
+                                            shift_8,
+                                        ));
                                         let flags_combined = self.alloc_reg();
-                                        self.emit(IrInstruction::Or(flags_combined, is_writable, signer_shifted));
-                                        self.emit(IrInstruction::Store(heap_base, flags_combined, meta_offset + 8));
+                                        self.emit(IrInstruction::Or(
+                                            flags_combined,
+                                            is_writable,
+                                            signer_shifted,
+                                        ));
+                                        self.emit(IrInstruction::Store(
+                                            heap_base,
+                                            flags_combined,
+                                            meta_offset + 8,
+                                        ));
                                     }
                                 }
                             }
@@ -2135,7 +2635,8 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, program_pk_ptr, 0)); // program_id
 
                     if num_accounts > 0 {
-                        self.emit(IrInstruction::Store(instr_ptr, heap_base, 8)); // accounts ptr
+                        self.emit(IrInstruction::Store(instr_ptr, heap_base, 8));
+                    // accounts ptr
                     } else {
                         let zero = self.alloc_reg();
                         self.emit(IrInstruction::ConstI64(zero, 0));
@@ -2150,7 +2651,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, data_len, 32)); // data_len
 
                     // Get account_infos pointer from accounts (accounts_ptr + 8 points to first account)
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available for cpi-invoke"))?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
@@ -2204,16 +2707,19 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000700_i64));
 
                     // Get program account index
-                    let program_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("cpi-invoke-signed program-idx has no result"))?;
+                    let program_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("cpi-invoke-signed program-idx has no result")
+                    })?;
 
                     // Get instruction data pointer
-                    let data_ptr = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("cpi-invoke-signed data-ptr has no result"))?;
+                    let data_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("cpi-invoke-signed data-ptr has no result")
+                    })?;
 
                     // Get instruction data length
-                    let data_len = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("cpi-invoke-signed data-len has no result"))?;
+                    let data_len = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("cpi-invoke-signed data-len has no result")
+                    })?;
 
                     // Get program pubkey pointer using dynamic offset table
                     let program_pk_ptr = self.emit_get_account_pubkey_ptr(program_idx);
@@ -2226,26 +2732,54 @@ impl IrGenerator {
                         for (i, spec) in account_specs.iter().enumerate() {
                             if let Expression::ArrayLiteral(triple) = spec {
                                 if triple.len() >= 3 {
-                                    let acct_idx = self.generate_expr(&triple[0])?
-                                        .ok_or_else(|| Error::runtime("cpi-invoke-signed account idx has no result"))?;
-                                    let is_writable = self.generate_expr(&triple[1])?
-                                        .ok_or_else(|| Error::runtime("cpi-invoke-signed is_writable has no result"))?;
-                                    let is_signer = self.generate_expr(&triple[2])?
-                                        .ok_or_else(|| Error::runtime("cpi-invoke-signed is_signer has no result"))?;
+                                    let acct_idx =
+                                        self.generate_expr(&triple[0])?.ok_or_else(|| {
+                                            Error::runtime(
+                                                "cpi-invoke-signed account idx has no result",
+                                            )
+                                        })?;
+                                    let is_writable =
+                                        self.generate_expr(&triple[1])?.ok_or_else(|| {
+                                            Error::runtime(
+                                                "cpi-invoke-signed is_writable has no result",
+                                            )
+                                        })?;
+                                    let is_signer =
+                                        self.generate_expr(&triple[2])?.ok_or_else(|| {
+                                            Error::runtime(
+                                                "cpi-invoke-signed is_signer has no result",
+                                            )
+                                        })?;
 
                                     // Calculate pubkey pointer using dynamic offset table
                                     let acct_pk_ptr = self.emit_get_account_pubkey_ptr(acct_idx);
 
                                     // Write SolAccountMeta at heap_base + i*16
                                     let meta_offset = (i * 16) as i64;
-                                    self.emit(IrInstruction::Store(heap_base, acct_pk_ptr, meta_offset));
+                                    self.emit(IrInstruction::Store(
+                                        heap_base,
+                                        acct_pk_ptr,
+                                        meta_offset,
+                                    ));
                                     let shift_8 = self.alloc_reg();
                                     self.emit(IrInstruction::ConstI64(shift_8, 256));
                                     let signer_shifted = self.alloc_reg();
-                                    self.emit(IrInstruction::Mul(signer_shifted, is_signer, shift_8));
+                                    self.emit(IrInstruction::Mul(
+                                        signer_shifted,
+                                        is_signer,
+                                        shift_8,
+                                    ));
                                     let flags_combined = self.alloc_reg();
-                                    self.emit(IrInstruction::Or(flags_combined, is_writable, signer_shifted));
-                                    self.emit(IrInstruction::Store(heap_base, flags_combined, meta_offset + 8));
+                                    self.emit(IrInstruction::Or(
+                                        flags_combined,
+                                        is_writable,
+                                        signer_shifted,
+                                    ));
+                                    self.emit(IrInstruction::Store(
+                                        heap_base,
+                                        flags_combined,
+                                        meta_offset + 8,
+                                    ));
                                 }
                             }
                         }
@@ -2259,7 +2793,8 @@ impl IrGenerator {
 
                     self.emit(IrInstruction::Store(instr_ptr, program_pk_ptr, 0)); // program_id
                     if num_accounts > 0 {
-                        self.emit(IrInstruction::Store(instr_ptr, heap_base, 8)); // accounts ptr
+                        self.emit(IrInstruction::Store(instr_ptr, heap_base, 8));
+                    // accounts ptr
                     } else {
                         let zero = self.alloc_reg();
                         self.emit(IrInstruction::ConstI64(zero, 0));
@@ -2309,29 +2844,66 @@ impl IrGenerator {
 
                                 // Calculate pointer to this signer's first SolSignerSeed entry
                                 let seeds_ptr_offset = self.alloc_reg();
-                                self.emit(IrInstruction::ConstI64(seeds_ptr_offset, (total_seed_entries * 16) as i64));
+                                self.emit(IrInstruction::ConstI64(
+                                    seeds_ptr_offset,
+                                    (total_seed_entries * 16) as i64,
+                                ));
                                 let seeds_ptr = self.alloc_reg();
-                                self.emit(IrInstruction::Add(seeds_ptr, seed_entries_base, seeds_ptr_offset));
+                                self.emit(IrInstruction::Add(
+                                    seeds_ptr,
+                                    seed_entries_base,
+                                    seeds_ptr_offset,
+                                ));
 
                                 // Store addr and len in SolSignerSeeds
-                                self.emit(IrInstruction::Store(signer_seeds_base, seeds_ptr, signer_entry_offset));
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    seeds_ptr,
+                                    signer_entry_offset,
+                                ));
                                 let num_seeds_reg = self.alloc_reg();
-                                self.emit(IrInstruction::ConstI64(num_seeds_reg, num_seeds_this_signer as i64));
-                                self.emit(IrInstruction::Store(signer_seeds_base, num_seeds_reg, signer_entry_offset + 8));
+                                self.emit(IrInstruction::ConstI64(
+                                    num_seeds_reg,
+                                    num_seeds_this_signer as i64,
+                                ));
+                                self.emit(IrInstruction::Store(
+                                    signer_seeds_base,
+                                    num_seeds_reg,
+                                    signer_entry_offset + 8,
+                                ));
 
                                 // Now write each SolSignerSeed entry
                                 for (seed_idx, seed) in seeds.iter().enumerate() {
                                     if let Expression::ArrayLiteral(seed_pair) = seed {
                                         if seed_pair.len() >= 2 {
-                                            let seed_addr = self.generate_expr(&seed_pair[0])?
-                                                .ok_or_else(|| Error::runtime("cpi-invoke-signed seed addr has no result"))?;
-                                            let seed_len = self.generate_expr(&seed_pair[1])?
-                                                .ok_or_else(|| Error::runtime("cpi-invoke-signed seed len has no result"))?;
+                                            let seed_addr = self
+                                                .generate_expr(&seed_pair[0])?
+                                                .ok_or_else(|| {
+                                                    Error::runtime(
+                                                        "cpi-invoke-signed seed addr has no result",
+                                                    )
+                                                })?;
+                                            let seed_len = self
+                                                .generate_expr(&seed_pair[1])?
+                                                .ok_or_else(|| {
+                                                    Error::runtime(
+                                                        "cpi-invoke-signed seed len has no result",
+                                                    )
+                                                })?;
 
                                             // Write at seed_entries_base + (total_seed_entries + seed_idx) * 16
-                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
-                                            self.emit(IrInstruction::Store(seed_entries_base, seed_addr, entry_offset));
-                                            self.emit(IrInstruction::Store(seed_entries_base, seed_len, entry_offset + 8));
+                                            let entry_offset =
+                                                ((total_seed_entries + seed_idx) * 16) as i64;
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_addr,
+                                                entry_offset,
+                                            ));
+                                            self.emit(IrInstruction::Store(
+                                                seed_entries_base,
+                                                seed_len,
+                                                entry_offset + 8,
+                                            ));
                                         }
                                     }
                                 }
@@ -2342,8 +2914,9 @@ impl IrGenerator {
                     }
 
                     // Get account_infos pointer from accounts
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for cpi-invoke-signed"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for cpi-invoke-signed")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -2361,7 +2934,13 @@ impl IrGenerator {
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
-                        vec![instr_ptr, account_infos_ptr, num_input_accounts, signer_seeds_base, num_signers_reg],
+                        vec![
+                            instr_ptr,
+                            account_infos_ptr,
+                            num_input_accounts,
+                            signer_seeds_base,
+                            num_signers_reg,
+                        ],
                     ));
 
                     return Ok(Some(dst));
@@ -2390,15 +2969,20 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000800_i64)); // Use different heap region
 
                     // Get arguments
-                    let token_prog_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer token-prog-idx has no result"))?;
-                    let source_idx = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer source-idx has no result"))?;
-                    let dest_idx = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer dest-idx has no result"))?;
-                    let authority_idx = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer authority-idx has no result"))?;
-                    let amount = self.generate_expr(&args[4].value)?
+                    let token_prog_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer token-prog-idx has no result")
+                    })?;
+                    let source_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer source-idx has no result")
+                    })?;
+                    let dest_idx = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer dest-idx has no result")
+                    })?;
+                    let authority_idx = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer authority-idx has no result")
+                    })?;
+                    let amount = self
+                        .generate_expr(&args[4].value)?
                         .ok_or_else(|| Error::runtime("spl-token-transfer amount has no result"))?;
 
                     // Build instruction data at heap: [3, amount (8 bytes)]
@@ -2411,14 +2995,14 @@ impl IrGenerator {
                     // We need to store discriminator as a single byte
                     let data_ptr = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(data_ptr, 0x300000850_i64)); // Data at offset 0x50 from heap_base
-                    // Store discriminator byte
+                                                                                   // Store discriminator byte
                     let disc_byte = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(disc_byte, 3));
                     self.emit(IrInstruction::Store(data_ptr, disc_byte, 0)); // Byte 0 = 3
-                    // Store amount starting at byte 1 (as little-endian u64)
-                    // For simplicity, store at offset 0 as u64 where low byte is discriminator
-                    // Actual SPL token expects: [3, amount_le_bytes...]
-                    // We'll build it properly:
+                                                                             // Store amount starting at byte 1 (as little-endian u64)
+                                                                             // For simplicity, store at offset 0 as u64 where low byte is discriminator
+                                                                             // Actual SPL token expects: [3, amount_le_bytes...]
+                                                                             // We'll build it properly:
                     let combined = self.alloc_reg();
                     let shift_multiplier = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(shift_multiplier, 256)); // 256 = 2^8, effectively shifts left by 8 bits
@@ -2466,8 +3050,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, nine, 32)); // data_len
 
                     // Get account_infos from accounts
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-transfer"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for spl-token-transfer")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -2510,16 +3095,21 @@ impl IrGenerator {
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000900_i64));
 
                     // Get arguments
-                    let token_prog_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer-signed token-prog-idx has no result"))?;
-                    let source_idx = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer-signed source-idx has no result"))?;
-                    let dest_idx = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer-signed dest-idx has no result"))?;
-                    let authority_idx = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer-signed authority-idx has no result"))?;
-                    let amount = self.generate_expr(&args[4].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-transfer-signed amount has no result"))?;
+                    let token_prog_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer-signed token-prog-idx has no result")
+                    })?;
+                    let source_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer-signed source-idx has no result")
+                    })?;
+                    let dest_idx = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer-signed dest-idx has no result")
+                    })?;
+                    let authority_idx = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer-signed authority-idx has no result")
+                    })?;
+                    let amount = self.generate_expr(&args[4].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-transfer-signed amount has no result")
+                    })?;
 
                     // Build instruction data: [3, amount_le_bytes (8)]
                     // SPL Token Transfer discriminator = 3
@@ -2635,12 +3225,17 @@ impl IrGenerator {
                                 for (seed_idx, seed_pair) in seeds.iter().enumerate() {
                                     if let Expression::ArrayLiteral(pair) = seed_pair {
                                         if pair.len() >= 2 {
-                                            let seed_addr = self.generate_expr(&pair[0])?
-                                                .ok_or_else(|| Error::runtime("seed addr has no result"))?;
-                                            let seed_len = self.generate_expr(&pair[1])?
-                                                .ok_or_else(|| Error::runtime("seed len has no result"))?;
+                                            let seed_addr =
+                                                self.generate_expr(&pair[0])?.ok_or_else(|| {
+                                                    Error::runtime("seed addr has no result")
+                                                })?;
+                                            let seed_len =
+                                                self.generate_expr(&pair[1])?.ok_or_else(|| {
+                                                    Error::runtime("seed len has no result")
+                                                })?;
 
-                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
+                                            let entry_offset =
+                                                ((total_seed_entries + seed_idx) * 16) as i64;
                                             self.emit(IrInstruction::Store(
                                                 seed_entries_base,
                                                 seed_addr,
@@ -2661,8 +3256,9 @@ impl IrGenerator {
                     }
 
                     // Get account_infos from accounts
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-transfer-signed"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for spl-token-transfer-signed")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -2678,7 +3274,13 @@ impl IrGenerator {
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
-                        vec![instr_ptr, account_infos_ptr, num_accounts, signer_seeds_base, num_signers_reg],
+                        vec![
+                            instr_ptr,
+                            account_infos_ptr,
+                            num_accounts,
+                            signer_seeds_base,
+                            num_signers_reg,
+                        ],
                     ));
 
                     return Ok(Some(dst));
@@ -2701,15 +3303,20 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000A00_i64));
 
-                    let token_prog_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-mint-to token-prog-idx has no result"))?;
-                    let mint_idx = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-mint-to mint-idx has no result"))?;
-                    let dest_idx = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-mint-to dest-idx has no result"))?;
-                    let authority_idx = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-mint-to authority-idx has no result"))?;
-                    let amount = self.generate_expr(&args[4].value)?
+                    let token_prog_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-mint-to token-prog-idx has no result")
+                    })?;
+                    let mint_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-mint-to mint-idx has no result")
+                    })?;
+                    let dest_idx = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-mint-to dest-idx has no result")
+                    })?;
+                    let authority_idx = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-mint-to authority-idx has no result")
+                    })?;
+                    let amount = self
+                        .generate_expr(&args[4].value)?
                         .ok_or_else(|| Error::runtime("spl-token-mint-to amount has no result"))?;
 
                     // Build instruction data: discriminator 7 (MintTo) + amount
@@ -2764,8 +3371,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, nine, 32));
 
                     // Invoke - get account_infos from accounts
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-mint-to"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for spl-token-mint-to")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -2800,15 +3408,20 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000B00_i64));
 
-                    let token_prog_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-burn token-prog-idx has no result"))?;
-                    let source_idx = self.generate_expr(&args[1].value)?
+                    let token_prog_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-burn token-prog-idx has no result")
+                    })?;
+                    let source_idx = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("spl-token-burn source-idx has no result"))?;
-                    let mint_idx = self.generate_expr(&args[2].value)?
+                    let mint_idx = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("spl-token-burn mint-idx has no result"))?;
-                    let authority_idx = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("spl-token-burn authority-idx has no result"))?;
-                    let amount = self.generate_expr(&args[4].value)?
+                    let authority_idx = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("spl-token-burn authority-idx has no result")
+                    })?;
+                    let amount = self
+                        .generate_expr(&args[4].value)?
                         .ok_or_else(|| Error::runtime("spl-token-burn amount has no result"))?;
 
                     // Build instruction data: discriminator 8 (Burn) + amount
@@ -2861,8 +3474,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, nine, 32));
 
                     // Get accounts_ptr from var_map
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for spl-token-burn"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for spl-token-burn")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -2898,16 +3512,21 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000C00_i64));
 
-                    let payer_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("system-create-account payer-idx has no result"))?;
-                    let new_acct_idx = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("system-create-account new-acct-idx has no result"))?;
-                    let lamports = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("system-create-account lamports has no result"))?;
-                    let space = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("system-create-account space has no result"))?;
-                    let owner_ptr = self.generate_expr(&args[4].value)?
-                        .ok_or_else(|| Error::runtime("system-create-account owner-pubkey-ptr has no result"))?;
+                    let payer_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("system-create-account payer-idx has no result")
+                    })?;
+                    let new_acct_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("system-create-account new-acct-idx has no result")
+                    })?;
+                    let lamports = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("system-create-account lamports has no result")
+                    })?;
+                    let space = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("system-create-account space has no result")
+                    })?;
+                    let owner_ptr = self.generate_expr(&args[4].value)?.ok_or_else(|| {
+                        Error::runtime("system-create-account owner-pubkey-ptr has no result")
+                    })?;
 
                     // Build System Program ID (all zeros) at heap_base
                     let zero = self.alloc_reg();
@@ -2981,8 +3600,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, data_len, 32)); // data_len
 
                     // Get account_infos from accounts (dynamic)
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for system-create-account"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for system-create-account")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -3019,14 +3639,18 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000E00_i64));
 
-                    let token_prog_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account token-prog-idx has no result"))?;
-                    let account_idx = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account account-idx has no result"))?;
-                    let destination_idx = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account destination-idx has no result"))?;
-                    let authority_idx = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account authority-idx has no result"))?;
+                    let token_prog_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account token-prog-idx has no result")
+                    })?;
+                    let account_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account account-idx has no result")
+                    })?;
+                    let destination_idx = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account destination-idx has no result")
+                    })?;
+                    let authority_idx = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account authority-idx has no result")
+                    })?;
 
                     // Build instruction data: discriminator 9 (CloseAccount)
                     let data_ptr = self.alloc_reg();
@@ -3072,8 +3696,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, one, 32)); // data_len = 1
 
                     // Get account_infos from accounts (dynamic)
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for spl-close-account"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for spl-close-account")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -3111,14 +3736,18 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000E00_i64));
 
-                    let token_prog_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account-signed token-prog-idx has no result"))?;
-                    let account_idx = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account-signed account-idx has no result"))?;
-                    let destination_idx = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account-signed destination-idx has no result"))?;
-                    let authority_idx = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("spl-close-account-signed authority-idx has no result"))?;
+                    let token_prog_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account-signed token-prog-idx has no result")
+                    })?;
+                    let account_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account-signed account-idx has no result")
+                    })?;
+                    let destination_idx = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account-signed destination-idx has no result")
+                    })?;
+                    let authority_idx = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("spl-close-account-signed authority-idx has no result")
+                    })?;
 
                     // Build instruction data: discriminator 9 (CloseAccount)
                     let data_ptr = self.alloc_reg();
@@ -3220,12 +3849,17 @@ impl IrGenerator {
                                 for (seed_idx, seed_pair) in seeds.iter().enumerate() {
                                     if let Expression::ArrayLiteral(pair) = seed_pair {
                                         if pair.len() >= 2 {
-                                            let seed_addr = self.generate_expr(&pair[0])?
-                                                .ok_or_else(|| Error::runtime("seed addr has no result"))?;
-                                            let seed_len = self.generate_expr(&pair[1])?
-                                                .ok_or_else(|| Error::runtime("seed len has no result"))?;
+                                            let seed_addr =
+                                                self.generate_expr(&pair[0])?.ok_or_else(|| {
+                                                    Error::runtime("seed addr has no result")
+                                                })?;
+                                            let seed_len =
+                                                self.generate_expr(&pair[1])?.ok_or_else(|| {
+                                                    Error::runtime("seed len has no result")
+                                                })?;
 
-                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
+                                            let entry_offset =
+                                                ((total_seed_entries + seed_idx) * 16) as i64;
                                             self.emit(IrInstruction::Store(
                                                 seed_entries_base,
                                                 seed_addr,
@@ -3246,8 +3880,9 @@ impl IrGenerator {
                     }
 
                     // Get account_infos from accounts (dynamic)
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for spl-close-account-signed"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for spl-close-account-signed")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -3262,7 +3897,13 @@ impl IrGenerator {
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
-                        vec![instr_ptr, account_infos_ptr, num_accounts, signer_seeds_base, num_signers_reg],
+                        vec![
+                            instr_ptr,
+                            account_infos_ptr,
+                            num_accounts,
+                            signer_seeds_base,
+                            num_signers_reg,
+                        ],
                     ));
 
                     return Ok(Some(dst));
@@ -3282,9 +3923,11 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000F00_i64));
 
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("system-allocate account-idx has no result"))?;
-                    let space = self.generate_expr(&args[1].value)?
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("system-allocate account-idx has no result")
+                    })?;
+                    let space = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("system-allocate space has no result"))?;
 
                     // Build System Program ID (all zeros)
@@ -3336,8 +3979,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, twelve, 32)); // data_len
 
                     // Get account_infos from accounts (dynamic)
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for system-allocate"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for system-allocate")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -3374,10 +4018,12 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000F00_i64));
 
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("system-allocate-signed account-idx has no result"))?;
-                    let space = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("system-allocate-signed space has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("system-allocate-signed account-idx has no result")
+                    })?;
+                    let space = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("system-allocate-signed space has no result")
+                    })?;
 
                     // Build System Program ID (all zeros)
                     let zero = self.alloc_reg();
@@ -3482,12 +4128,17 @@ impl IrGenerator {
                                 for (seed_idx, seed_pair) in seeds.iter().enumerate() {
                                     if let Expression::ArrayLiteral(pair) = seed_pair {
                                         if pair.len() >= 2 {
-                                            let seed_addr = self.generate_expr(&pair[0])?
-                                                .ok_or_else(|| Error::runtime("seed addr has no result"))?;
-                                            let seed_len = self.generate_expr(&pair[1])?
-                                                .ok_or_else(|| Error::runtime("seed len has no result"))?;
+                                            let seed_addr =
+                                                self.generate_expr(&pair[0])?.ok_or_else(|| {
+                                                    Error::runtime("seed addr has no result")
+                                                })?;
+                                            let seed_len =
+                                                self.generate_expr(&pair[1])?.ok_or_else(|| {
+                                                    Error::runtime("seed len has no result")
+                                                })?;
 
-                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
+                                            let entry_offset =
+                                                ((total_seed_entries + seed_idx) * 16) as i64;
                                             self.emit(IrInstruction::Store(
                                                 seed_entries_base,
                                                 seed_addr,
@@ -3508,8 +4159,9 @@ impl IrGenerator {
                     }
 
                     // Get account_infos from accounts (dynamic)
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for system-allocate-signed"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for system-allocate-signed")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -3524,7 +4176,13 @@ impl IrGenerator {
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
-                        vec![instr_ptr, account_infos_ptr, num_accounts, signer_seeds_base, num_signers_reg],
+                        vec![
+                            instr_ptr,
+                            account_infos_ptr,
+                            num_accounts,
+                            signer_seeds_base,
+                            num_signers_reg,
+                        ],
                     ));
 
                     return Ok(Some(dst));
@@ -3544,10 +4202,12 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300001000_i64));
 
-                    let account_idx = self.generate_expr(&args[0].value)?
+                    let account_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("system-assign account-idx has no result"))?;
-                    let owner_ptr = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("system-assign owner-pubkey-ptr has no result"))?;
+                    let owner_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("system-assign owner-pubkey-ptr has no result")
+                    })?;
 
                     // Build System Program ID (all zeros)
                     let zero = self.alloc_reg();
@@ -3612,8 +4272,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Store(instr_ptr, thirty_six, 32)); // data_len
 
                     // Get account_infos from accounts (dynamic)
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for system-assign"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for system-assign")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -3650,10 +4311,12 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300001000_i64));
 
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("system-assign-signed account-idx has no result"))?;
-                    let owner_ptr = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("system-assign-signed owner-pubkey-ptr has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("system-assign-signed account-idx has no result")
+                    })?;
+                    let owner_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("system-assign-signed owner-pubkey-ptr has no result")
+                    })?;
 
                     // Build System Program ID (all zeros)
                     let zero = self.alloc_reg();
@@ -3772,12 +4435,17 @@ impl IrGenerator {
                                 for (seed_idx, seed_pair) in seeds.iter().enumerate() {
                                     if let Expression::ArrayLiteral(pair) = seed_pair {
                                         if pair.len() >= 2 {
-                                            let seed_addr = self.generate_expr(&pair[0])?
-                                                .ok_or_else(|| Error::runtime("seed addr has no result"))?;
-                                            let seed_len = self.generate_expr(&pair[1])?
-                                                .ok_or_else(|| Error::runtime("seed len has no result"))?;
+                                            let seed_addr =
+                                                self.generate_expr(&pair[0])?.ok_or_else(|| {
+                                                    Error::runtime("seed addr has no result")
+                                                })?;
+                                            let seed_len =
+                                                self.generate_expr(&pair[1])?.ok_or_else(|| {
+                                                    Error::runtime("seed len has no result")
+                                                })?;
 
-                                            let entry_offset = ((total_seed_entries + seed_idx) * 16) as i64;
+                                            let entry_offset =
+                                                ((total_seed_entries + seed_idx) * 16) as i64;
                                             self.emit(IrInstruction::Store(
                                                 seed_entries_base,
                                                 seed_addr,
@@ -3798,8 +4466,9 @@ impl IrGenerator {
                     }
 
                     // Get account_infos from accounts (dynamic)
-                    let accounts_ptr = *self.var_map.get("accounts")
-                        .ok_or_else(|| Error::runtime("accounts not available for system-assign-signed"))?;
+                    let accounts_ptr = *self.var_map.get("accounts").ok_or_else(|| {
+                        Error::runtime("accounts not available for system-assign-signed")
+                    })?;
                     let eight = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(eight, 8));
                     let account_infos_ptr = self.alloc_reg();
@@ -3814,7 +4483,13 @@ impl IrGenerator {
                     self.emit(IrInstruction::Syscall(
                         Some(dst),
                         "sol_invoke_signed_c".to_string(),
-                        vec![instr_ptr, account_infos_ptr, num_accounts, signer_seeds_base, num_signers_reg],
+                        vec![
+                            instr_ptr,
+                            account_infos_ptr,
+                            num_accounts,
+                            signer_seeds_base,
+                            num_signers_reg,
+                        ],
                     ));
 
                     return Ok(Some(dst));
@@ -3829,7 +4504,8 @@ impl IrGenerator {
                 // Logs the error and returns the value (caller should abort)
                 // =================================================================
                 if name == "anchor-error" && args.len() == 1 {
-                    let error_code = self.generate_expr(&args[0].value)?
+                    let error_code = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("anchor-error error-code has no result"))?;
 
                     // Anchor errors start at 6000
@@ -3858,9 +4534,11 @@ impl IrGenerator {
                 // If condition is false, logs error and aborts with error code
                 // =================================================================
                 if name == "require" && args.len() == 2 {
-                    let condition = self.generate_expr(&args[0].value)?
+                    let condition = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("require condition has no result"))?;
-                    let error_code = self.generate_expr(&args[1].value)?
+                    let error_code = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("require error-code has no result"))?;
 
                     // If condition is true (non-zero), skip the abort
@@ -3902,7 +4580,8 @@ impl IrGenerator {
                 // Logs a message using sol_log_
                 // =================================================================
                 if name == "msg" && args.len() == 1 {
-                    let msg = self.generate_expr(&args[0].value)?
+                    let msg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("msg argument has no result"))?;
 
                     self.emit(IrInstruction::Syscall(
@@ -3931,11 +4610,14 @@ impl IrGenerator {
                 // For fully static PDAs, use a pre-computed constant instead.
                 // =================================================================
                 if name == "derive-pda" && args.len() == 3 {
-                    let program_pk_ptr = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("derive-pda program-pubkey-ptr has no result"))?;
-                    let seeds_ptr = self.generate_expr(&args[1].value)?
+                    let program_pk_ptr = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("derive-pda program-pubkey-ptr has no result")
+                    })?;
+                    let seeds_ptr = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("derive-pda seeds-ptr has no result"))?;
-                    let bump_ptr = self.generate_expr(&args[2].value)?
+                    let bump_ptr = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("derive-pda bump-ptr has no result"))?;
 
                     // sol_try_find_program_address(seeds_ptr, seeds_len, program_id, bump_seed_ptr)
@@ -3963,10 +4645,12 @@ impl IrGenerator {
                 // Returns the bump seed
                 // =================================================================
                 if name == "create-pda" && args.len() == 3 {
-                    let dest_ptr = self.generate_expr(&args[0].value)?
+                    let dest_ptr = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("create-pda dest-ptr has no result"))?;
-                    let program_pk_ptr = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("create-pda program-pubkey-ptr has no result"))?;
+                    let program_pk_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("create-pda program-pubkey-ptr has no result")
+                    })?;
 
                     // Build seeds array in heap
                     let heap_base = self.alloc_reg();
@@ -3979,14 +4663,22 @@ impl IrGenerator {
                         for (i, seed) in seeds.iter().enumerate() {
                             if let Expression::ArrayLiteral(pair) = seed {
                                 if pair.len() >= 2 {
-                                    let seed_addr = self.generate_expr(&pair[0])?
-                                        .ok_or_else(|| Error::runtime("create-pda seed addr has no result"))?;
-                                    let seed_len = self.generate_expr(&pair[1])?
-                                        .ok_or_else(|| Error::runtime("create-pda seed len has no result"))?;
+                                    let seed_addr =
+                                        self.generate_expr(&pair[0])?.ok_or_else(|| {
+                                            Error::runtime("create-pda seed addr has no result")
+                                        })?;
+                                    let seed_len =
+                                        self.generate_expr(&pair[1])?.ok_or_else(|| {
+                                            Error::runtime("create-pda seed len has no result")
+                                        })?;
 
                                     let offset = (i * 16) as i64;
                                     self.emit(IrInstruction::Store(heap_base, seed_addr, offset));
-                                    self.emit(IrInstruction::Store(heap_base, seed_len, offset + 8));
+                                    self.emit(IrInstruction::Store(
+                                        heap_base,
+                                        seed_len,
+                                        offset + 8,
+                                    ));
                                 }
                             }
                         }
@@ -4030,11 +4722,14 @@ impl IrGenerator {
                 // The result is written to dest-ptr (32 bytes)
                 // =================================================================
                 if name == "get-ata" && args.len() == 3 {
-                    let dest_ptr = self.generate_expr(&args[0].value)?
+                    let dest_ptr = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("get-ata dest-ptr has no result"))?;
-                    let wallet_ptr = self.generate_expr(&args[1].value)?
+                    let wallet_ptr = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("get-ata wallet-pubkey-ptr has no result"))?;
-                    let mint_ptr = self.generate_expr(&args[2].value)?
+                    let mint_ptr = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("get-ata mint-pubkey-ptr has no result"))?;
 
                     // Build seeds array in heap at 0x300000E00
@@ -4063,16 +4758,28 @@ impl IrGenerator {
                     // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
                     // = [6, 221, 246, ...] - first 8 bytes as u64
                     let token_prog_bytes_0 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(token_prog_bytes_0, 0x8c97258f4e2489f1_u64 as i64));
+                    self.emit(IrInstruction::ConstI64(
+                        token_prog_bytes_0,
+                        0x8c97258f4e2489f1_u64 as i64,
+                    ));
                     self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_0, 0));
                     let token_prog_bytes_1 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(token_prog_bytes_1, 0x39d0a8d9b3b71f14_u64 as i64));
+                    self.emit(IrInstruction::ConstI64(
+                        token_prog_bytes_1,
+                        0x39d0a8d9b3b71f14_u64 as i64,
+                    ));
                     self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_1, 8));
                     let token_prog_bytes_2 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(token_prog_bytes_2, 0x9d5bce6b0c6a1de5_u64 as i64));
+                    self.emit(IrInstruction::ConstI64(
+                        token_prog_bytes_2,
+                        0x9d5bce6b0c6a1de5_u64 as i64,
+                    ));
                     self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_2, 16));
                     let token_prog_bytes_3 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(token_prog_bytes_3, 0x06ddf6e1d765a193_u64 as i64));
+                    self.emit(IrInstruction::ConstI64(
+                        token_prog_bytes_3,
+                        0x06ddf6e1d765a193_u64 as i64,
+                    ));
                     self.emit(IrInstruction::Store(token_prog_ptr, token_prog_bytes_3, 24));
 
                     // Seed 1 structure at heap_base + 16
@@ -4091,16 +4798,28 @@ impl IrGenerator {
                     self.emit(IrInstruction::Add(ata_prog_ptr, heap_base, const_128));
 
                     let ata_bytes_0 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(ata_bytes_0, 0x8c97258f4e2489f1_u64 as i64)); // placeholder
+                    self.emit(IrInstruction::ConstI64(
+                        ata_bytes_0,
+                        0x8c97258f4e2489f1_u64 as i64,
+                    )); // placeholder
                     self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_0, 0));
                     let ata_bytes_1 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(ata_bytes_1, 0x39d0a8d9b3b71f14_u64 as i64));
+                    self.emit(IrInstruction::ConstI64(
+                        ata_bytes_1,
+                        0x39d0a8d9b3b71f14_u64 as i64,
+                    ));
                     self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_1, 8));
                     let ata_bytes_2 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(ata_bytes_2, 0x9d5bce6b0c6a1de5_u64 as i64));
+                    self.emit(IrInstruction::ConstI64(
+                        ata_bytes_2,
+                        0x9d5bce6b0c6a1de5_u64 as i64,
+                    ));
                     self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_2, 16));
                     let ata_bytes_3 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(ata_bytes_3, 0x06ddf6e1d765a193_u64 as i64));
+                    self.emit(IrInstruction::ConstI64(
+                        ata_bytes_3,
+                        0x06ddf6e1d765a193_u64 as i64,
+                    ));
                     self.emit(IrInstruction::Store(ata_prog_ptr, ata_bytes_3, 24));
 
                     // Call sol_create_program_address(seeds, num_seeds, program_id, result)
@@ -4127,7 +4846,8 @@ impl IrGenerator {
                 // (assert-signer account-idx) - Abort if account is not a signer
                 // Returns 0 on success, aborts on failure
                 if name == "assert-signer" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
+                    let account_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("assert-signer account-idx has no result"))?;
 
                     // Get pointer to is_signer field (offset +1 from account base) using dynamic offset
@@ -4146,7 +4866,11 @@ impl IrGenerator {
                     // Abort: sol_log_ "Missing signer" then return error
                     let error_code = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(error_code, 0x1000000)); // Custom error
-                    self.emit(IrInstruction::Syscall(None, "sol_panic_".to_string(), vec![error_code, error_code, error_code, error_code, error_code]));
+                    self.emit(IrInstruction::Syscall(
+                        None,
+                        "sol_panic_".to_string(),
+                        vec![error_code, error_code, error_code, error_code, error_code],
+                    ));
 
                     self.emit(IrInstruction::Label(label_ok));
                     let zero = self.alloc_reg();
@@ -4157,8 +4881,9 @@ impl IrGenerator {
 
                 // (assert-writable account-idx) - Abort if account is not writable
                 if name == "assert-writable" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("assert-writable account-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("assert-writable account-idx has no result")
+                    })?;
 
                     // Get pointer to is_writable field (offset +2 from account base) using dynamic offset
                     let is_writable_ptr = self.emit_get_account_field_ptr(account_idx, 2);
@@ -4170,7 +4895,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::JumpIf(is_writable, label_ok.clone()));
                     let error_code = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(error_code, 0x2000000));
-                    self.emit(IrInstruction::Syscall(None, "sol_panic_".to_string(), vec![error_code, error_code, error_code, error_code, error_code]));
+                    self.emit(IrInstruction::Syscall(
+                        None,
+                        "sol_panic_".to_string(),
+                        vec![error_code, error_code, error_code, error_code, error_code],
+                    ));
 
                     self.emit(IrInstruction::Label(label_ok));
                     let zero = self.alloc_reg();
@@ -4181,10 +4910,12 @@ impl IrGenerator {
 
                 // (assert-owner account-idx expected-owner-ptr) - Abort if account owner doesn't match
                 if name == "assert-owner" && args.len() == 2 {
-                    let account_idx = self.generate_expr(&args[0].value)?
+                    let account_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("assert-owner account-idx has no result"))?;
-                    let expected_owner = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("assert-owner expected-owner-ptr has no result"))?;
+                    let expected_owner = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("assert-owner expected-owner-ptr has no result")
+                    })?;
 
                     // Get pointer to owner field (offset +40 from account base) using dynamic offset
                     let owner_ptr = self.emit_get_account_field_ptr(account_idx, 40);
@@ -4209,7 +4940,11 @@ impl IrGenerator {
 
                     let error_code = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(error_code, 0x3000000));
-                    self.emit(IrInstruction::Syscall(None, "sol_panic_".to_string(), vec![error_code, error_code, error_code, error_code, error_code]));
+                    self.emit(IrInstruction::Syscall(
+                        None,
+                        "sol_panic_".to_string(),
+                        vec![error_code, error_code, error_code, error_code, error_code],
+                    ));
 
                     self.emit(IrInstruction::Label(label_ok));
 
@@ -4219,10 +4954,13 @@ impl IrGenerator {
                 // (is-signer account-idx) - Returns 1 if signer, 0 if not (no abort)
                 // Uses precomputed account offset table for dynamic account sizes
                 if name == "is-signer" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
+                    let account_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("is-signer account-idx has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -4235,7 +4973,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::Add(total_offset, acct_offset, one));
 
                     let is_signer_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(is_signer_ptr, accounts_ptr, total_offset));
+                    self.emit(IrInstruction::Add(
+                        is_signer_ptr,
+                        accounts_ptr,
+                        total_offset,
+                    ));
 
                     let is_signer = self.alloc_reg();
                     self.emit(IrInstruction::Load1(is_signer, is_signer_ptr, 0));
@@ -4246,10 +4988,13 @@ impl IrGenerator {
                 // (is-writable account-idx) - Returns 1 if writable, 0 if not
                 // Uses precomputed account offset table for dynamic account sizes
                 if name == "is-writable" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
+                    let account_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("is-writable account-idx has no result"))?;
 
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get precomputed account base offset from table
@@ -4262,7 +5007,11 @@ impl IrGenerator {
                     self.emit(IrInstruction::Add(total_offset, acct_offset, two));
 
                     let is_writable_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(is_writable_ptr, accounts_ptr, total_offset));
+                    self.emit(IrInstruction::Add(
+                        is_writable_ptr,
+                        accounts_ptr,
+                        total_offset,
+                    ));
 
                     let is_writable = self.alloc_reg();
                     self.emit(IrInstruction::Load1(is_writable, is_writable_ptr, 0));
@@ -4285,8 +5034,9 @@ impl IrGenerator {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
                     {
-                        let account_idx = self.generate_expr(&args[1].value)?
-                            .ok_or_else(|| Error::runtime("zerocopy-load account-idx has no result"))?;
+                        let account_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                            Error::runtime("zerocopy-load account-idx has no result")
+                        })?;
 
                         // MEMORY MODEL: Try to extract constant account index for type tracking
                         let account_idx_const: Option<u8> = match &args[1].value {
@@ -4294,18 +5044,29 @@ impl IrGenerator {
                             _ => None,
                         };
 
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let field = struct_def.fields.iter()
+                        let field = struct_def
+                            .fields
+                            .iter()
                             .find(|f| &f.name == field_name)
-                            .ok_or_else(|| Error::runtime(format!(
-                                "Unknown field '{}' in struct '{}'", field_name, struct_name
-                            )))?;
+                            .ok_or_else(|| {
+                                Error::runtime(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, struct_name
+                                ))
+                            })?;
 
                         // Calculate account data pointer using dynamic offset table
-                        let accounts_ptr = *self.var_map.get("accounts")
+                        let accounts_ptr = *self
+                            .var_map
+                            .get("accounts")
                             .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                         let acct_offset = self.emit_get_account_offset(account_idx);
@@ -4322,9 +5083,15 @@ impl IrGenerator {
 
                         // MEMORY MODEL: Register data_ptr as typed account data pointer
                         if let Some(idx) = account_idx_const {
-                            self.type_env.set_type(data_ptr, RegType::Pointer(
-                                PointerType::struct_ptr(idx, struct_name.clone(), struct_def.total_size, None)
-                            ));
+                            self.type_env.set_type(
+                                data_ptr,
+                                RegType::Pointer(PointerType::struct_ptr(
+                                    idx,
+                                    struct_name.clone(),
+                                    struct_def.total_size,
+                                    None,
+                                )),
+                            );
                         }
 
                         // Load field at offset
@@ -4333,25 +5100,45 @@ impl IrGenerator {
                         let field_type_clone = field.field_type.clone();
 
                         match &field.field_type {
-                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                            FieldType::Primitive(PrimitiveType::U8)
+                            | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Load1(dst, data_ptr, field_offset));
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I8));
-                                self.type_env.set_type(dst, RegType::Value { size: 1, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I8)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 1, signed });
                             }
-                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                            FieldType::Primitive(PrimitiveType::U16)
+                            | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Load2(dst, data_ptr, field_offset));
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I16));
-                                self.type_env.set_type(dst, RegType::Value { size: 2, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I16)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 2, signed });
                             }
-                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                            FieldType::Primitive(PrimitiveType::U32)
+                            | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Load4(dst, data_ptr, field_offset));
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I32));
-                                self.type_env.set_type(dst, RegType::Value { size: 4, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I32)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 4, signed });
                             }
-                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                            FieldType::Primitive(PrimitiveType::U64)
+                            | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Load(dst, data_ptr, field_offset));
-                                let signed = matches!(field.field_type, FieldType::Primitive(PrimitiveType::I64));
-                                self.type_env.set_type(dst, RegType::Value { size: 8, signed });
+                                let signed = matches!(
+                                    field.field_type,
+                                    FieldType::Primitive(PrimitiveType::I64)
+                                );
+                                self.type_env
+                                    .set_type(dst, RegType::Value { size: 8, signed });
                             }
                             FieldType::Pubkey | FieldType::Array { .. } | FieldType::Struct(_) => {
                                 // Return pointer to field for complex types
@@ -4362,25 +5149,32 @@ impl IrGenerator {
                                 // Register result as pointer
                                 let field_size = match &field_type_clone {
                                     FieldType::Pubkey => 32,
-                                    FieldType::Array { element_type, count } => {
-                                        element_type.size() * (*count as i64)
-                                    }
-                                    FieldType::Struct(nested_name) => {
-                                        self.struct_defs.get(nested_name)
-                                            .map(|s| s.total_size)
-                                            .unwrap_or(0)
-                                    }
+                                    FieldType::Array {
+                                        element_type,
+                                        count,
+                                    } => element_type.size() * (*count as i64),
+                                    FieldType::Struct(nested_name) => self
+                                        .struct_defs
+                                        .get(nested_name)
+                                        .map(|s| s.total_size)
+                                        .unwrap_or(0),
                                     _ => 0,
                                 };
                                 if let Some(idx) = account_idx_const {
-                                    self.type_env.set_type(dst, RegType::Pointer(PointerType {
-                                        region: MemoryRegion::AccountData(idx),
-                                        bounds: Some((field_offset, field_size)),
-                                        struct_type: Some(format!("{}.{}", struct_name, field_name)),
-                                        offset: field_offset,
-                                        alignment: Alignment::Byte1,
-                                        writable: true,
-                                    }));
+                                    self.type_env.set_type(
+                                        dst,
+                                        RegType::Pointer(PointerType {
+                                            region: MemoryRegion::AccountData(idx),
+                                            bounds: Some((field_offset, field_size)),
+                                            struct_type: Some(format!(
+                                                "{}.{}",
+                                                struct_name, field_name
+                                            )),
+                                            offset: field_offset,
+                                            alignment: Alignment::Byte1,
+                                            writable: true,
+                                        }),
+                                    );
                                 }
                             }
                         }
@@ -4396,8 +5190,9 @@ impl IrGenerator {
                     if let (Expression::Variable(struct_name), Expression::Variable(field_name)) =
                         (&args[0].value, &args[2].value)
                     {
-                        let account_idx = self.generate_expr(&args[1].value)?
-                            .ok_or_else(|| Error::runtime("zerocopy-store account-idx has no result"))?;
+                        let account_idx = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                            Error::runtime("zerocopy-store account-idx has no result")
+                        })?;
 
                         // MEMORY MODEL: Try to extract constant account index for validation
                         let account_idx_const: Option<u8> = match &args[1].value {
@@ -4412,21 +5207,33 @@ impl IrGenerator {
                             }
                         }
 
-                        let value = self.generate_expr(&args[3].value)?
+                        let value = self
+                            .generate_expr(&args[3].value)?
                             .ok_or_else(|| Error::runtime("zerocopy-store value has no result"))?;
 
-                        let struct_def = self.struct_defs.get(struct_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown struct '{}'", struct_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(struct_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown struct '{}'", struct_name))
+                            })?
                             .clone();
 
-                        let field = struct_def.fields.iter()
+                        let field = struct_def
+                            .fields
+                            .iter()
                             .find(|f| &f.name == field_name)
-                            .ok_or_else(|| Error::runtime(format!(
-                                "Unknown field '{}' in struct '{}'", field_name, struct_name
-                            )))?;
+                            .ok_or_else(|| {
+                                Error::runtime(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, struct_name
+                                ))
+                            })?;
 
                         // Calculate account data pointer using dynamic offset table
-                        let accounts_ptr = *self.var_map.get("accounts")
+                        let accounts_ptr = *self
+                            .var_map
+                            .get("accounts")
                             .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                         let acct_offset = self.emit_get_account_offset(account_idx);
@@ -4443,24 +5250,34 @@ impl IrGenerator {
 
                         // MEMORY MODEL: Register data_ptr as typed account data pointer
                         if let Some(idx) = account_idx_const {
-                            self.type_env.set_type(data_ptr, RegType::Pointer(
-                                PointerType::struct_ptr(idx, struct_name.clone(), struct_def.total_size, None)
-                            ));
+                            self.type_env.set_type(
+                                data_ptr,
+                                RegType::Pointer(PointerType::struct_ptr(
+                                    idx,
+                                    struct_name.clone(),
+                                    struct_def.total_size,
+                                    None,
+                                )),
+                            );
                         }
 
                         let field_offset = field.offset;
 
                         match &field.field_type {
-                            FieldType::Primitive(PrimitiveType::U8) | FieldType::Primitive(PrimitiveType::I8) => {
+                            FieldType::Primitive(PrimitiveType::U8)
+                            | FieldType::Primitive(PrimitiveType::I8) => {
                                 self.emit(IrInstruction::Store1(data_ptr, value, field_offset));
                             }
-                            FieldType::Primitive(PrimitiveType::U16) | FieldType::Primitive(PrimitiveType::I16) => {
+                            FieldType::Primitive(PrimitiveType::U16)
+                            | FieldType::Primitive(PrimitiveType::I16) => {
                                 self.emit(IrInstruction::Store2(data_ptr, value, field_offset));
                             }
-                            FieldType::Primitive(PrimitiveType::U32) | FieldType::Primitive(PrimitiveType::I32) => {
+                            FieldType::Primitive(PrimitiveType::U32)
+                            | FieldType::Primitive(PrimitiveType::I32) => {
                                 self.emit(IrInstruction::Store4(data_ptr, value, field_offset));
                             }
-                            FieldType::Primitive(PrimitiveType::U64) | FieldType::Primitive(PrimitiveType::I64) => {
+                            FieldType::Primitive(PrimitiveType::U64)
+                            | FieldType::Primitive(PrimitiveType::I64) => {
                                 self.emit(IrInstruction::Store(data_ptr, value, field_offset));
                             }
                             _ => {
@@ -4479,8 +5296,9 @@ impl IrGenerator {
 
                 // (account-data-len account-idx) -> length of account data
                 if name == "account-data-len" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("account-data-len account-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("account-data-len account-idx has no result")
+                    })?;
 
                     // Get pointer to data_len field (offset +80 from account base) using dynamic offset
                     let len_ptr = self.emit_get_account_field_ptr(account_idx, 80);
@@ -4493,8 +5311,9 @@ impl IrGenerator {
 
                 // (account-lamports account-idx) -> lamports balance
                 if name == "account-lamports" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("account-lamports account-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("account-lamports account-idx has no result")
+                    })?;
 
                     // Get pointer to lamports field (offset +72 from account base) using dynamic offset
                     let lamports_ptr = self.emit_get_account_field_ptr(account_idx, 72);
@@ -4517,12 +5336,17 @@ impl IrGenerator {
                 // Discriminator is first 8 bytes of sha256("event:EventName")
                 if name == "emit-event" && args.len() == 2 {
                     if let Expression::Variable(event_name) = &args[0].value {
-                        let data_ptr = self.generate_expr(&args[1].value)?
+                        let data_ptr = self
+                            .generate_expr(&args[1].value)?
                             .ok_or_else(|| Error::runtime("emit-event data-ptr has no result"))?;
 
                         // Get struct definition for size
-                        let struct_def = self.struct_defs.get(event_name)
-                            .ok_or_else(|| Error::runtime(format!("Unknown event struct '{}'", event_name)))?
+                        let struct_def = self
+                            .struct_defs
+                            .get(event_name)
+                            .ok_or_else(|| {
+                                Error::runtime(format!("Unknown event struct '{}'", event_name))
+                            })?
                             .clone();
 
                         // Build event buffer in heap: 8-byte discriminator + data
@@ -4532,16 +5356,17 @@ impl IrGenerator {
                         // Generate simple discriminator based on event name hash
                         // In production, this would be sha256("event:EventName")[0..8]
                         // For now, use a simple hash of the event name
-                        let discriminator: i64 = event_name.bytes()
-                            .enumerate()
-                            .fold(0i64, |acc, (i, b)| acc.wrapping_add((b as i64) << ((i % 8) * 8)));
+                        let discriminator: i64 =
+                            event_name.bytes().enumerate().fold(0i64, |acc, (i, b)| {
+                                acc.wrapping_add((b as i64) << ((i % 8) * 8))
+                            });
 
                         let disc_reg = self.alloc_reg();
                         self.emit(IrInstruction::ConstI64(disc_reg, discriminator));
                         self.emit(IrInstruction::Store(event_buffer, disc_reg, 0));
 
                         // Copy struct data after discriminator
-                        let data_size = struct_def.total_size as i64;
+                        let data_size = struct_def.total_size;
                         let size_reg = self.alloc_reg();
                         self.emit(IrInstruction::ConstI64(size_reg, data_size));
 
@@ -4575,11 +5400,12 @@ impl IrGenerator {
 
                 // (emit-log "message" value1 value2 ...)
                 // Simple event logging with up to 5 u64 values (uses sol_log_64_)
-                if name == "emit-log" && args.len() >= 1 {
+                if name == "emit-log" && !args.is_empty() {
                     // First arg is message string
                     if let Expression::StringLiteral(ref msg) = args[0].value {
                         // Generate message pointer (same as sol_log_)
-                        let msg_ptr = self.generate_expr(&args[0].value)?
+                        let msg_ptr = self
+                            .generate_expr(&args[0].value)?
                             .ok_or_else(|| Error::runtime("emit-log message has no result"))?;
                         let msg_len = self.alloc_reg();
                         self.emit(IrInstruction::ConstI64(msg_len, msg.len() as i64));
@@ -4594,8 +5420,10 @@ impl IrGenerator {
                             let mut values = Vec::new();
                             for i in 1..=5 {
                                 if i < args.len() {
-                                    let val = self.generate_expr(&args[i].value)?
-                                        .ok_or_else(|| Error::runtime("emit-log value has no result"))?;
+                                    let val =
+                                        self.generate_expr(&args[i].value)?.ok_or_else(|| {
+                                            Error::runtime("emit-log value has no result")
+                                        })?;
                                     values.push(val);
                                 } else {
                                     let zero = self.alloc_reg();
@@ -4641,8 +5469,9 @@ impl IrGenerator {
                 // (clock-unix-timestamp sysvar-account-idx) -> unix timestamp
                 // Reads from Clock sysvar account data
                 if name == "clock-unix-timestamp" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("clock-unix-timestamp account-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("clock-unix-timestamp account-idx has no result")
+                    })?;
 
                     // Data starts at +88, unix_timestamp is at offset 32 in Clock struct
                     // Total offset = 88 + 32 = 120
@@ -4656,7 +5485,8 @@ impl IrGenerator {
 
                 // (clock-epoch sysvar-account-idx) -> current epoch
                 if name == "clock-epoch" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
+                    let account_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("clock-epoch account-idx has no result"))?;
 
                     // epoch is at offset 16 in Clock struct (after slot and epoch_start_timestamp)
@@ -4672,10 +5502,12 @@ impl IrGenerator {
                 // (rent-minimum-balance sysvar-account-idx data-size) -> minimum lamports for rent exemption
                 // Rent sysvar layout: lamports_per_byte_year(u64), exemption_threshold(f64), burn_percent(u8)
                 if name == "rent-minimum-balance" && args.len() == 2 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("rent-minimum-balance account-idx has no result"))?;
-                    let data_size = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("rent-minimum-balance data-size has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("rent-minimum-balance account-idx has no result")
+                    })?;
+                    let data_size = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("rent-minimum-balance data-size has no result")
+                    })?;
 
                     // lamports_per_byte_year at offset 0 in Rent struct
                     // Data starts at +88, so total offset = 88
@@ -4712,8 +5544,9 @@ impl IrGenerator {
                 // (instruction-count sysvar-account-idx) -> number of instructions in transaction
                 // Instructions sysvar: first 2 bytes are u16 count, then serialized instructions
                 if name == "instruction-count" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("instruction-count account-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("instruction-count account-idx has no result")
+                    })?;
 
                     // Data starts at +88, instruction count is first 2 bytes
                     let count_ptr = self.emit_get_account_field_ptr(account_idx, 88);
@@ -4728,8 +5561,9 @@ impl IrGenerator {
                 // (current-instruction-index sysvar-account-idx) -> index of current instruction
                 // Uses sol_get_processed_sibling_instruction or reads from sysvar directly
                 if name == "current-instruction-index" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("current-instruction-index account-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("current-instruction-index account-idx has no result")
+                    })?;
 
                     // The current instruction index is typically passed by the runtime
                     // For now, use a syscall to get it
@@ -4746,7 +5580,8 @@ impl IrGenerator {
                 // (assert-not-cpi) -> Abort if called via CPI (instruction index > 0)
                 // Used to prevent re-entrancy attacks
                 if name == "assert-not-cpi" && args.len() == 1 {
-                    let sysvar_idx = self.generate_expr(&args[0].value)?
+                    let sysvar_idx = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("assert-not-cpi sysvar-idx has no result"))?;
 
                     // Get pointer to instruction data (skip count at offset +88, check first instruction at +90)
@@ -4775,8 +5610,9 @@ impl IrGenerator {
                 // (pda-cache-init cache-account-idx) -> Initialize a bump cache in account data
                 // Cache layout: [magic: u32][count: u32][entries: (hash: [u8; 8], bump: u8)*]
                 if name == "pda-cache-init" && args.len() == 1 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("pda-cache-init account-idx has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("pda-cache-init account-idx has no result")
+                    })?;
 
                     // Get data pointer (offset +88)
                     let cache_ptr = self.emit_get_account_field_ptr(account_idx, 88);
@@ -4797,10 +5633,12 @@ impl IrGenerator {
                 // (pda-cache-lookup cache-account-idx seed-hash-ptr) -> bump or 0 if not found
                 // seed-hash-ptr points to 8-byte hash of seeds
                 if name == "pda-cache-lookup" && args.len() == 2 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("pda-cache-lookup account-idx has no result"))?;
-                    let _seed_hash = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("pda-cache-lookup seed-hash has no result"))?;
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("pda-cache-lookup account-idx has no result")
+                    })?;
+                    let _seed_hash = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("pda-cache-lookup seed-hash has no result")
+                    })?;
 
                     // Get cache pointer (offset +88)
                     let cache_ptr = self.emit_get_account_field_ptr(account_idx, 88);
@@ -4828,11 +5666,14 @@ impl IrGenerator {
                 // (pda-cache-store cache-account-idx seed-hash bump) -> success (0)
                 // Stores a bump for the given seed hash
                 if name == "pda-cache-store" && args.len() == 3 {
-                    let account_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("pda-cache-store account-idx has no result"))?;
-                    let seed_hash = self.generate_expr(&args[1].value)?
+                    let account_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("pda-cache-store account-idx has no result")
+                    })?;
+                    let seed_hash = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("pda-cache-store seed-hash has no result"))?;
-                    let bump = self.generate_expr(&args[2].value)?
+                    let bump = self
+                        .generate_expr(&args[2].value)?
                         .ok_or_else(|| Error::runtime("pda-cache-store bump has no result"))?;
 
                     // Get cache pointer (offset +88)
@@ -4880,16 +5721,21 @@ impl IrGenerator {
                 // (derive-pda-cached cache-account-idx program-ptr seeds-ptr bump-ptr dest-ptr) -> success
                 // First checks cache, then derives if not found and stores in cache
                 if name == "derive-pda-cached" && args.len() == 5 {
-                    let cache_idx = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("derive-pda-cached cache-idx has no result"))?;
-                    let program_ptr = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("derive-pda-cached program-ptr has no result"))?;
-                    let seeds_ptr = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("derive-pda-cached seeds-ptr has no result"))?;
-                    let bump_ptr = self.generate_expr(&args[3].value)?
-                        .ok_or_else(|| Error::runtime("derive-pda-cached bump-ptr has no result"))?;
-                    let dest_ptr = self.generate_expr(&args[4].value)?
-                        .ok_or_else(|| Error::runtime("derive-pda-cached dest-ptr has no result"))?;
+                    let cache_idx = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("derive-pda-cached cache-idx has no result")
+                    })?;
+                    let program_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("derive-pda-cached program-ptr has no result")
+                    })?;
+                    let seeds_ptr = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("derive-pda-cached seeds-ptr has no result")
+                    })?;
+                    let bump_ptr = self.generate_expr(&args[3].value)?.ok_or_else(|| {
+                        Error::runtime("derive-pda-cached bump-ptr has no result")
+                    })?;
+                    let dest_ptr = self.generate_expr(&args[4].value)?.ok_or_else(|| {
+                        Error::runtime("derive-pda-cached dest-ptr has no result")
+                    })?;
 
                     // For now, just call the underlying PDA derivation
                     // Full implementation would check cache first
@@ -4906,12 +5752,15 @@ impl IrGenerator {
                 // Handle (build-instruction program-ptr data-ptr data-len) -> instruction ptr
                 // Returns pointer to a SolInstruction struct built in heap memory
                 if name == "build-instruction" && args.len() == 3 {
-                    let program_ptr = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("build-instruction program-ptr has no result"))?;
-                    let data_ptr = self.generate_expr(&args[1].value)?
-                        .ok_or_else(|| Error::runtime("build-instruction data-ptr has no result"))?;
-                    let data_len = self.generate_expr(&args[2].value)?
-                        .ok_or_else(|| Error::runtime("build-instruction data-len has no result"))?;
+                    let program_ptr = self.generate_expr(&args[0].value)?.ok_or_else(|| {
+                        Error::runtime("build-instruction program-ptr has no result")
+                    })?;
+                    let data_ptr = self.generate_expr(&args[1].value)?.ok_or_else(|| {
+                        Error::runtime("build-instruction data-ptr has no result")
+                    })?;
+                    let data_len = self.generate_expr(&args[2].value)?.ok_or_else(|| {
+                        Error::runtime("build-instruction data-len has no result")
+                    })?;
 
                     // Use heap region 0x300000600 for instruction structure
                     let instr_ptr = self.alloc_reg();
@@ -4948,7 +5797,10 @@ impl IrGenerator {
                 if name == "log" {
                     eprintln!("🔍 IR DEBUG: log handler called with {} args", args.len());
                     for (i, arg) in args.iter().enumerate() {
-                        eprintln!("  arg[{}]: name={:?}, value type={:?}", i, arg.name, arg.value);
+                        eprintln!(
+                            "  arg[{}]: name={:?}, value type={:?}",
+                            i, arg.name, arg.value
+                        );
                     }
                     // Parse keyword arguments
                     let mut message_expr: Option<&Expression> = None;
@@ -4978,7 +5830,7 @@ impl IrGenerator {
                                 // For now, we'll just skip non-string literals
                                 // TODO: Add runtime string formatting
                                 return Err(Error::runtime(
-                                    "log :message must be a string literal for compilation"
+                                    "log :message must be a string literal for compilation",
                                 ));
                             }
                         }
@@ -5002,7 +5854,8 @@ impl IrGenerator {
                             _ => {
                                 // For dynamic values, use sol_log_64_ syscall instead
                                 // Evaluate the value expression
-                                let val_reg = self.generate_expr(val_expr)?
+                                let val_reg = self
+                                    .generate_expr(val_expr)?
                                     .ok_or_else(|| Error::runtime("log value has no result"))?;
 
                                 // If we have a message, log it first with sol_log_
@@ -5067,7 +5920,8 @@ impl IrGenerator {
                     self.emit(IrInstruction::Label(loop_label.clone()));
 
                     // Evaluate condition
-                    let cond_reg = self.generate_expr(&args[0].value)?
+                    let cond_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("While condition has no result"))?;
 
                     // Jump to end if condition is false
@@ -5194,11 +6048,14 @@ impl IrGenerator {
                 // seeds: one or more seed values (strings or integers)
                 // Returns: pointer to 32-byte derived address, bump stored at +32
                 if name == "find-pda" && args.len() >= 2 {
-                    let accounts_ptr = *self.var_map.get("accounts")
+                    let accounts_ptr = *self
+                        .var_map
+                        .get("accounts")
                         .ok_or_else(|| Error::runtime("accounts not available"))?;
 
                     // Get program_id account index
-                    let prog_idx_reg = self.generate_expr(&args[0].value)?
+                    let prog_idx_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("find-pda program_id_idx has no result"))?;
 
                     // Calculate program_id pubkey pointer using dynamic offset table
@@ -5206,9 +6063,17 @@ impl IrGenerator {
                     let pubkey_field_offset = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(pubkey_field_offset, 8));
                     let prog_pubkey_offset = self.alloc_reg();
-                    self.emit(IrInstruction::Add(prog_pubkey_offset, prog_base, pubkey_field_offset));
+                    self.emit(IrInstruction::Add(
+                        prog_pubkey_offset,
+                        prog_base,
+                        pubkey_field_offset,
+                    ));
                     let program_id_ptr = self.alloc_reg();
-                    self.emit(IrInstruction::Add(program_id_ptr, accounts_ptr, prog_pubkey_offset));
+                    self.emit(IrInstruction::Add(
+                        program_id_ptr,
+                        accounts_ptr,
+                        prog_pubkey_offset,
+                    ));
 
                     // Use heap for structures
                     // Layout at 0x300000300:
@@ -5223,9 +6088,9 @@ impl IrGenerator {
                     self.emit(IrInstruction::Move(seeds_array_ptr, heap_base));
 
                     let seed_data_base = self.alloc_reg();
-                    let _256 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(_256, 256));
-                    self.emit(IrInstruction::Add(seed_data_base, heap_base, _256));
+                    let offset_256 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(offset_256, 256));
+                    self.emit(IrInstruction::Add(seed_data_base, heap_base, offset_256));
 
                     let num_seeds = args.len() - 1; // First arg is program_id_idx
                     let mut seed_data_offset = 0i64;
@@ -5259,7 +6124,11 @@ impl IrGenerator {
                                 let sol_bytes_ptr = self.alloc_reg();
                                 let sb_offset = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(sb_offset, sol_bytes_offset));
-                                self.emit(IrInstruction::Add(sol_bytes_ptr, seeds_array_ptr, sb_offset));
+                                self.emit(IrInstruction::Add(
+                                    sol_bytes_ptr,
+                                    seeds_array_ptr,
+                                    sb_offset,
+                                ));
                                 self.emit(IrInstruction::Store(sol_bytes_ptr, str_ptr_reg, 0));
                                 let len_reg = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(len_reg, str_len));
@@ -5283,7 +6152,11 @@ impl IrGenerator {
                                 let sol_bytes_ptr = self.alloc_reg();
                                 let sb_offset = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(sb_offset, sol_bytes_offset));
-                                self.emit(IrInstruction::Add(sol_bytes_ptr, seeds_array_ptr, sb_offset));
+                                self.emit(IrInstruction::Add(
+                                    sol_bytes_ptr,
+                                    seeds_array_ptr,
+                                    sb_offset,
+                                ));
                                 self.emit(IrInstruction::Store(sol_bytes_ptr, data_ptr, 0));
                                 let eight = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(eight, 8));
@@ -5293,7 +6166,8 @@ impl IrGenerator {
                             }
                             _ => {
                                 // Dynamic value: evaluate and store as 8-byte value
-                                let val_reg = self.generate_expr(&arg.value)?
+                                let val_reg = self
+                                    .generate_expr(&arg.value)?
                                     .ok_or_else(|| Error::runtime("find-pda seed has no result"))?;
 
                                 let data_ptr = self.alloc_reg();
@@ -5305,7 +6179,11 @@ impl IrGenerator {
                                 let sol_bytes_ptr = self.alloc_reg();
                                 let sb_offset = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(sb_offset, sol_bytes_offset));
-                                self.emit(IrInstruction::Add(sol_bytes_ptr, seeds_array_ptr, sb_offset));
+                                self.emit(IrInstruction::Add(
+                                    sol_bytes_ptr,
+                                    seeds_array_ptr,
+                                    sb_offset,
+                                ));
                                 self.emit(IrInstruction::Store(sol_bytes_ptr, data_ptr, 0));
                                 let eight = self.alloc_reg();
                                 self.emit(IrInstruction::ConstI64(eight, 8));
@@ -5318,15 +6196,15 @@ impl IrGenerator {
 
                     // Output address at +768
                     let address_out = self.alloc_reg();
-                    let _768 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(_768, 768));
-                    self.emit(IrInstruction::Add(address_out, heap_base, _768));
+                    let offset_768 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(offset_768, 768));
+                    self.emit(IrInstruction::Add(address_out, heap_base, offset_768));
 
                     // Bump seed at +800
                     let bump_out = self.alloc_reg();
-                    let _800 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(_800, 800));
-                    self.emit(IrInstruction::Add(bump_out, heap_base, _800));
+                    let offset_800 = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(offset_800, 800));
+                    self.emit(IrInstruction::Add(bump_out, heap_base, offset_800));
 
                     // Number of seeds
                     let num_seeds_reg = self.alloc_reg();
@@ -5337,7 +6215,13 @@ impl IrGenerator {
                     self.emit(IrInstruction::Syscall(
                         Some(result),
                         "sol_try_find_program_address".to_string(),
-                        vec![seeds_array_ptr, num_seeds_reg, program_id_ptr, address_out, bump_out],
+                        vec![
+                            seeds_array_ptr,
+                            num_seeds_reg,
+                            program_id_ptr,
+                            address_out,
+                            bump_out,
+                        ],
                     ));
 
                     // Return pointer to derived address
@@ -5352,9 +6236,9 @@ impl IrGenerator {
                     let heap_base = self.alloc_reg();
                     self.emit(IrInstruction::ConstI64(heap_base, 0x300000300_i64));
                     let bump_ptr = self.alloc_reg();
-                    let _800 = self.alloc_reg();
-                    self.emit(IrInstruction::ConstI64(_800, 800));
-                    self.emit(IrInstruction::Add(bump_ptr, heap_base, _800));
+                    let bump_offset = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(bump_offset, 800));
+                    self.emit(IrInstruction::Add(bump_ptr, heap_base, bump_offset));
 
                     // Load bump byte (as u64, masked to u8)
                     let raw = self.alloc_reg();
@@ -5372,9 +6256,11 @@ impl IrGenerator {
                 // =================================================================
                 // Handle (and expr1 expr2) - logical AND
                 if name == "and" && args.len() == 2 {
-                    let left_reg = self.generate_expr(&args[0].value)?
+                    let left_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("and left operand has no result"))?;
-                    let right_reg = self.generate_expr(&args[1].value)?
+                    let right_reg = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("and right operand has no result"))?;
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::And(dst, left_reg, right_reg));
@@ -5383,9 +6269,11 @@ impl IrGenerator {
 
                 // Handle (or expr1 expr2) - logical OR
                 if name == "or" && args.len() == 2 {
-                    let left_reg = self.generate_expr(&args[0].value)?
+                    let left_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("or left operand has no result"))?;
-                    let right_reg = self.generate_expr(&args[1].value)?
+                    let right_reg = self
+                        .generate_expr(&args[1].value)?
                         .ok_or_else(|| Error::runtime("or right operand has no result"))?;
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Or(dst, left_reg, right_reg));
@@ -5394,7 +6282,8 @@ impl IrGenerator {
 
                 // Handle (not expr) - logical NOT
                 if name == "not" && args.len() == 1 {
-                    let operand_reg = self.generate_expr(&args[0].value)?
+                    let operand_reg = self
+                        .generate_expr(&args[0].value)?
                         .ok_or_else(|| Error::runtime("not operand has no result"))?;
                     let dst = self.alloc_reg();
                     self.emit(IrInstruction::Not(dst, operand_reg));
@@ -5415,8 +6304,13 @@ impl IrGenerator {
 
             Expression::Grouping(inner) => self.generate_expr(inner),
 
-            Expression::Ternary { condition, then_expr, else_expr } => {
-                let cond_reg = self.generate_expr(condition)?
+            Expression::Ternary {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                let cond_reg = self
+                    .generate_expr(condition)?
                     .ok_or_else(|| Error::runtime("Ternary condition has no result"))?;
 
                 let then_label = self.new_label("tern_then");
@@ -5477,7 +6371,11 @@ impl IrGenerator {
 
             // Handle {x : T | predicate} - refinement type expression
             // These are type-level expressions, not value-level, so return the base type
-            Expression::RefinedTypeExpr { var: _, base_type, predicate: _ } => {
+            Expression::RefinedTypeExpr {
+                var: _,
+                base_type,
+                predicate: _,
+            } => {
                 // In an expression context, a refinement type is treated as its base type.
                 // The predicate is for verification purposes only.
                 // Generate a type reference to the base type (this is unusual - typically
@@ -5488,7 +6386,11 @@ impl IrGenerator {
             // Handle typed lambda: (lambda ((x : T) (y : U)) -> R body)
             // For now, lambdas/closures are not fully supported in sBPF codegen.
             // We parse and record the type annotations but can't return a first-class function.
-            Expression::TypedLambda { typed_params, return_type: _, body: _ } => {
+            Expression::TypedLambda {
+                typed_params,
+                return_type: _,
+                body: _,
+            } => {
                 // Just record the parameter types in the source type context for future use
                 for (param_name, type_annotation) in typed_params.iter() {
                     if let Some(type_expr) = type_annotation {
@@ -5533,7 +6435,10 @@ impl IrGenerator {
                 } else {
                     0
                 };
-                Some(Type::Array { element: Box::new(elem_type), size })
+                Some(Type::Array {
+                    element: Box::new(elem_type),
+                    size,
+                })
             }
 
             // Pointer type: (Ptr T)
@@ -5564,13 +6469,13 @@ impl IrGenerator {
             }
 
             // Refinement type: {x : T | predicate}
-            Expression::RefinedTypeExpr { var, base_type, predicate } => {
+            Expression::RefinedTypeExpr {
+                var,
+                base_type,
+                predicate,
+            } => {
                 let base = self.parse_type_expression(base_type)?;
-                let refined = crate::types::RefinementType::from_expr(
-                    var.clone(),
-                    base,
-                    predicate,
-                );
+                let refined = crate::types::RefinementType::from_expr(var.clone(), base, predicate);
                 Some(Type::Refined(Box::new(refined)))
             }
 
@@ -5619,8 +6524,17 @@ impl IrGenerator {
     }
 
     /// Allocate a register for a pointer to an account field (is_signer, lamports, etc.)
-    fn alloc_account_field_ptr(&mut self, account_idx: u8, field_offset: i64, field_size: i64) -> TypedReg {
-        self.alloc_pointer_reg(PointerType::account_field(account_idx, field_offset, field_size))
+    fn alloc_account_field_ptr(
+        &mut self,
+        account_idx: u8,
+        field_offset: i64,
+        field_size: i64,
+    ) -> TypedReg {
+        self.alloc_pointer_reg(PointerType::account_field(
+            account_idx,
+            field_offset,
+            field_size,
+        ))
     }
 
     /// Record that a register holds an unknown type (from external sources)
@@ -5642,7 +6556,9 @@ impl IrGenerator {
     /// the predicate is tracked for verification.
     fn alloc_typed_reg(&mut self, source_type: &Type) -> TypedReg {
         let reg = self.alloc_reg();
-        let ir_type = self.type_bridge.source_to_ir(source_type, &self.source_type_ctx);
+        let ir_type = self
+            .type_bridge
+            .source_to_ir(source_type, &self.source_type_ctx);
         self.type_env.set_type(reg, ir_type.clone());
         TypedReg { reg, ty: ir_type }
     }
@@ -5652,7 +6568,9 @@ impl IrGenerator {
     /// Use this when the register is already allocated but you want to
     /// record its type based on source annotations.
     fn set_reg_from_source(&mut self, reg: IrReg, source_type: &Type) {
-        let ir_type = self.type_bridge.source_to_ir(source_type, &self.source_type_ctx);
+        let ir_type = self
+            .type_bridge
+            .source_to_ir(source_type, &self.source_type_ctx);
         self.type_env.set_type(reg, ir_type);
     }
 
@@ -5660,7 +6578,8 @@ impl IrGenerator {
     ///
     /// This is a convenience wrapper around the TypeBridge.
     fn source_to_ir_type(&self, source_type: &Type) -> RegType {
-        self.type_bridge.source_to_ir(source_type, &self.source_type_ctx)
+        self.type_bridge
+            .source_to_ir(source_type, &self.source_type_ctx)
     }
 
     /// Allocate a pointer register with account data provenance from source type.
@@ -5708,7 +6627,13 @@ impl IrGenerator {
         match &instr {
             // Track types for constant loads
             IrInstruction::ConstI64(dst, _) => {
-                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: true });
+                self.type_env.set_type(
+                    *dst,
+                    RegType::Value {
+                        size: 8,
+                        signed: true,
+                    },
+                );
             }
             IrInstruction::ConstBool(dst, _) => {
                 self.type_env.set_type(*dst, RegType::Bool);
@@ -5720,25 +6645,49 @@ impl IrGenerator {
                     self.type_env.record_error(e);
                 }
                 // Result is a value (could be pointer, but we don't know without more context)
-                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: false });
+                self.type_env.set_type(
+                    *dst,
+                    RegType::Value {
+                        size: 8,
+                        signed: false,
+                    },
+                );
             }
             IrInstruction::Load4(dst, base, offset) => {
                 if let Err(e) = self.type_env.validate_load(*base, *offset, 4) {
                     self.type_env.record_error(e);
                 }
-                self.type_env.set_type(*dst, RegType::Value { size: 4, signed: false });
+                self.type_env.set_type(
+                    *dst,
+                    RegType::Value {
+                        size: 4,
+                        signed: false,
+                    },
+                );
             }
             IrInstruction::Load2(dst, base, offset) => {
                 if let Err(e) = self.type_env.validate_load(*base, *offset, 2) {
                     self.type_env.record_error(e);
                 }
-                self.type_env.set_type(*dst, RegType::Value { size: 2, signed: false });
+                self.type_env.set_type(
+                    *dst,
+                    RegType::Value {
+                        size: 2,
+                        signed: false,
+                    },
+                );
             }
             IrInstruction::Load1(dst, base, offset) => {
                 if let Err(e) = self.type_env.validate_load(*base, *offset, 1) {
                     self.type_env.record_error(e);
                 }
-                self.type_env.set_type(*dst, RegType::Value { size: 1, signed: false });
+                self.type_env.set_type(
+                    *dst,
+                    RegType::Value {
+                        size: 1,
+                        signed: false,
+                    },
+                );
             }
 
             // Validate Store operations (also check writability)
@@ -5782,12 +6731,24 @@ impl IrGenerator {
                         new_ptr.bounds = None;
                         self.type_env.set_type(*dst, RegType::Pointer(new_ptr));
                     }
-                    (Some(RegType::Value { size: s1, signed: sg1 }), Some(RegType::Value { size: s2, signed: sg2 })) => {
+                    (
+                        Some(RegType::Value {
+                            size: s1,
+                            signed: sg1,
+                        }),
+                        Some(RegType::Value {
+                            size: s2,
+                            signed: sg2,
+                        }),
+                    ) => {
                         // Value + value = value (max size)
-                        self.type_env.set_type(*dst, RegType::Value {
-                            size: s1.max(s2),
-                            signed: sg1 || sg2
-                        });
+                        self.type_env.set_type(
+                            *dst,
+                            RegType::Value {
+                                size: s1.max(s2),
+                                signed: sg1 || sg2,
+                            },
+                        );
                     }
                     _ => {
                         // Unknown operand types, result is unknown
@@ -5797,27 +6758,38 @@ impl IrGenerator {
             }
 
             // Multiplication always produces a value
-            IrInstruction::Mul(dst, _, _) |
-            IrInstruction::Div(dst, _, _) |
-            IrInstruction::Mod(dst, _, _) |
-            IrInstruction::Sub(dst, _, _) => {
-                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: false });
+            IrInstruction::Mul(dst, _, _)
+            | IrInstruction::Div(dst, _, _)
+            | IrInstruction::Mod(dst, _, _)
+            | IrInstruction::Sub(dst, _, _) => {
+                self.type_env.set_type(
+                    *dst,
+                    RegType::Value {
+                        size: 8,
+                        signed: false,
+                    },
+                );
             }
 
             // Comparisons produce booleans
-            IrInstruction::Eq(dst, _, _) |
-            IrInstruction::Ne(dst, _, _) |
-            IrInstruction::Lt(dst, _, _) |
-            IrInstruction::Le(dst, _, _) |
-            IrInstruction::Gt(dst, _, _) |
-            IrInstruction::Ge(dst, _, _) => {
+            IrInstruction::Eq(dst, _, _)
+            | IrInstruction::Ne(dst, _, _)
+            | IrInstruction::Lt(dst, _, _)
+            | IrInstruction::Le(dst, _, _)
+            | IrInstruction::Gt(dst, _, _)
+            | IrInstruction::Ge(dst, _, _) => {
                 self.type_env.set_type(*dst, RegType::Bool);
             }
 
             // Logical operations on values
-            IrInstruction::And(dst, _, _) |
-            IrInstruction::Or(dst, _, _) => {
-                self.type_env.set_type(*dst, RegType::Value { size: 8, signed: false });
+            IrInstruction::And(dst, _, _) | IrInstruction::Or(dst, _, _) => {
+                self.type_env.set_type(
+                    *dst,
+                    RegType::Value {
+                        size: 8,
+                        signed: false,
+                    },
+                );
             }
             IrInstruction::Not(dst, _) => {
                 self.type_env.set_type(*dst, RegType::Bool);
@@ -5854,7 +6826,12 @@ impl IrGenerator {
     ///
     /// The check is: `if (offset + access_size > max_len) abort(5);`
     #[allow(dead_code)]
-    fn emit_runtime_bounds_check(&mut self, offset_reg: IrReg, access_size: i64, max_len_reg: IrReg) {
+    fn emit_runtime_bounds_check(
+        &mut self,
+        offset_reg: IrReg,
+        access_size: i64,
+        max_len_reg: IrReg,
+    ) {
         // Calculate end of access: offset + access_size
         let access_size_reg = self.alloc_reg();
         self.emit(IrInstruction::ConstI64(access_size_reg, access_size));
@@ -5930,7 +6907,9 @@ impl IrGenerator {
     /// Instruction data starts right after the last account's data.
     /// We store this at index [num_accounts] in the offset table during init.
     fn emit_get_instruction_data_offset(&mut self) -> IrReg {
-        let accounts_ptr = *self.var_map.get("accounts")
+        let accounts_ptr = *self
+            .var_map
+            .get("accounts")
             .expect("accounts not available");
 
         // Read num_accounts from offset 0
@@ -5950,7 +6929,9 @@ impl IrGenerator {
     /// Emit code to get a pointer to any field within an account.
     /// field_offset: offset from account base (0=dup, 1=is_signer, 2=is_writable, etc.)
     fn emit_get_account_field_ptr(&mut self, idx_reg: IrReg, field_offset: i64) -> IrReg {
-        let accounts_ptr = *self.var_map.get("accounts")
+        let accounts_ptr = *self
+            .var_map
+            .get("accounts")
             .expect("accounts not available for field ptr");
 
         // Get the base offset for this account
@@ -5961,7 +6942,11 @@ impl IrGenerator {
         self.emit(IrInstruction::ConstI64(field_off_reg, field_offset));
 
         let total_offset = self.alloc_reg();
-        self.emit(IrInstruction::Add(total_offset, account_offset, field_off_reg));
+        self.emit(IrInstruction::Add(
+            total_offset,
+            account_offset,
+            field_off_reg,
+        ));
 
         let field_ptr = self.alloc_reg();
         self.emit(IrInstruction::Add(field_ptr, accounts_ptr, total_offset));
@@ -6029,8 +7014,16 @@ impl IrGenerator {
         let data_len_offset_const = self.alloc_reg();
         self.emit(IrInstruction::ConstI64(data_len_offset_const, 80));
         let data_len_addr = self.alloc_reg();
-        self.emit(IrInstruction::Add(data_len_addr, accounts_ptr, current_offset));
-        self.emit(IrInstruction::Add(data_len_addr, data_len_addr, data_len_offset_const));
+        self.emit(IrInstruction::Add(
+            data_len_addr,
+            accounts_ptr,
+            current_offset,
+        ));
+        self.emit(IrInstruction::Add(
+            data_len_addr,
+            data_len_addr,
+            data_len_offset_const,
+        ));
         let data_len = self.alloc_reg();
         self.emit(IrInstruction::Load(data_len, data_len_addr, 0));
 
@@ -6040,7 +7033,11 @@ impl IrGenerator {
         let next_offset = self.alloc_reg();
         self.emit(IrInstruction::Add(next_offset, current_offset, header_size));
         self.emit(IrInstruction::Add(next_offset, next_offset, data_len));
-        self.emit(IrInstruction::Add(next_offset, next_offset, realloc_padding));
+        self.emit(IrInstruction::Add(
+            next_offset,
+            next_offset,
+            realloc_padding,
+        ));
 
         // Align to 8 bytes: (next + 7) & ~7
         let seven = self.alloc_reg();
@@ -6070,12 +7067,18 @@ impl IrGenerator {
         let final_table_offset = self.alloc_reg();
         self.emit(IrInstruction::Mul(final_table_offset, num_accounts, eight));
         let final_table_addr = self.alloc_reg();
-        self.emit(IrInstruction::Add(final_table_addr, heap_base, final_table_offset));
+        self.emit(IrInstruction::Add(
+            final_table_addr,
+            heap_base,
+            final_table_offset,
+        ));
         self.emit(IrInstruction::Store(final_table_addr, current_offset, 0));
 
         // Store the number of accounts in a reserved variable for later use
-        self.var_map.insert("__num_accounts".to_string(), num_accounts);
-        self.var_map.insert("__acct_table_base".to_string(), heap_base);
+        self.var_map
+            .insert("__num_accounts".to_string(), num_accounts);
+        self.var_map
+            .insert("__acct_table_base".to_string(), heap_base);
     }
 }
 

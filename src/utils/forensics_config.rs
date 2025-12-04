@@ -1,9 +1,9 @@
 //! Forensics configuration for customizable thresholds and detection sensitivity
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use anyhow::{Result, Context};
 
 /// Forensic analysis configuration with adjustable thresholds
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,11 +125,10 @@ impl ForensicsConfig {
         let config_path = Self::config_path()?;
 
         if config_path.exists() {
-            let content = fs::read_to_string(&config_path)
-                .context("Failed to read forensics config file")?;
+            let content =
+                fs::read_to_string(&config_path).context("Failed to read forensics config file")?;
 
-            toml::from_str(&content)
-                .context("Failed to parse forensics config TOML")
+            toml::from_str(&content).context("Failed to parse forensics config TOML")
         } else {
             // Create default config
             let config = Self::default();
@@ -144,23 +143,20 @@ impl ForensicsConfig {
 
         // Ensure parent directory exists
         if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)
-                .context("Failed to create config directory")?;
+            fs::create_dir_all(parent).context("Failed to create config directory")?;
         }
 
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize forensics config")?;
+        let content =
+            toml::to_string_pretty(self).context("Failed to serialize forensics config")?;
 
-        fs::write(&config_path, content)
-            .context("Failed to write forensics config file")?;
+        fs::write(&config_path, content).context("Failed to write forensics config file")?;
 
         Ok(())
     }
 
     /// Get the config file path
     fn config_path() -> Result<PathBuf> {
-        let home = dirs::home_dir()
-            .context("Failed to get home directory")?;
+        let home = dirs::home_dir().context("Failed to get home directory")?;
 
         Ok(home.join(".osvm").join("forensics_config.toml"))
     }
@@ -197,6 +193,9 @@ mod tests {
         let config = ForensicsConfig::default();
         let toml = toml::to_string(&config).unwrap();
         let deserialized: ForensicsConfig = toml::from_str(&toml).unwrap();
-        assert_eq!(config.thresholds.whale_amount_sol, deserialized.thresholds.whale_amount_sol);
+        assert_eq!(
+            config.thresholds.whale_amount_sol,
+            deserialized.thresholds.whale_amount_sol
+        );
     }
 }

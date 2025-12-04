@@ -2,7 +2,7 @@
 //!
 //! Parses sBPF ELF binaries and disassembles bytecode into readable instructions.
 
-use crate::{Result, Error};
+use crate::{Error, Result};
 
 /// Disassembled instruction with metadata
 #[derive(Debug, Clone)]
@@ -37,9 +37,21 @@ impl DisassembledInstr {
 
     /// Check if this is a jump instruction
     pub fn is_jump(&self) -> bool {
-        matches!(self.opcode,
-            0x05 | 0x15 | 0x1d | 0x25 | 0x2d | 0x35 | 0x3d |
-            0x45 | 0x55 | 0x5d | 0xa5 | 0xad | 0xb5 | 0xbd
+        matches!(
+            self.opcode,
+            0x05 | 0x15
+                | 0x1d
+                | 0x25
+                | 0x2d
+                | 0x35
+                | 0x3d
+                | 0x45
+                | 0x55
+                | 0x5d
+                | 0xa5
+                | 0xad
+                | 0xb5
+                | 0xbd
         )
     }
 
@@ -121,10 +133,14 @@ impl Disassembler {
         }
 
         let strtab_off = u64::from_le_bytes(
-            elf[strtab_hdr_off + 24..strtab_hdr_off + 32].try_into().unwrap()
+            elf[strtab_hdr_off + 24..strtab_hdr_off + 32]
+                .try_into()
+                .unwrap(),
         ) as usize;
         let strtab_size = u64::from_le_bytes(
-            elf[strtab_hdr_off + 32..strtab_hdr_off + 40].try_into().unwrap()
+            elf[strtab_hdr_off + 32..strtab_hdr_off + 40]
+                .try_into()
+                .unwrap(),
         ) as usize;
 
         if strtab_off + strtab_size > elf.len() {
@@ -138,9 +154,8 @@ impl Disassembler {
                 continue;
             }
 
-            let name_idx = u32::from_le_bytes(
-                elf[hdr_off..hdr_off + 4].try_into().unwrap()
-            ) as usize;
+            let name_idx =
+                u32::from_le_bytes(elf[hdr_off..hdr_off + 4].try_into().unwrap()) as usize;
 
             // Get section name
             if strtab_off + name_idx < elf.len() {
@@ -149,16 +164,17 @@ impl Disassembler {
                     .position(|&b| b == 0)
                     .unwrap_or(0);
                 let name = std::str::from_utf8(
-                    &elf[strtab_off + name_idx..strtab_off + name_idx + name_end]
-                ).unwrap_or("");
+                    &elf[strtab_off + name_idx..strtab_off + name_idx + name_end],
+                )
+                .unwrap_or("");
 
                 if name == ".text" {
-                    let sec_off = u64::from_le_bytes(
-                        elf[hdr_off + 24..hdr_off + 32].try_into().unwrap()
-                    ) as usize;
-                    let sec_size = u64::from_le_bytes(
-                        elf[hdr_off + 32..hdr_off + 40].try_into().unwrap()
-                    ) as usize;
+                    let sec_off =
+                        u64::from_le_bytes(elf[hdr_off + 24..hdr_off + 32].try_into().unwrap())
+                            as usize;
+                    let sec_size =
+                        u64::from_le_bytes(elf[hdr_off + 32..hdr_off + 40].try_into().unwrap())
+                            as usize;
 
                     if sec_off + sec_size <= elf.len() {
                         return Ok(&elf[sec_off..sec_off + sec_size]);
@@ -199,7 +215,14 @@ impl Disassembler {
     }
 
     /// Format instruction as mnemonic and operands
-    fn format_instruction(&self, opcode: u8, dst: u8, src: u8, off: i16, imm: i32) -> (String, String) {
+    fn format_instruction(
+        &self,
+        opcode: u8,
+        dst: u8,
+        src: u8,
+        off: i16,
+        imm: i32,
+    ) -> (String, String) {
         let reg_name = |r: u8| format!("r{}", r);
 
         match opcode {
@@ -215,48 +238,123 @@ impl Disassembler {
             0xb7 => ("mov64".into(), format!("{}, {}", reg_name(dst), imm)),
 
             // ALU64 register
-            0x0f => ("add64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0x1f => ("sub64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0x2f => ("mul64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0x3f => ("div64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0x4f => ("or64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0x5f => ("and64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0x9f => ("mod64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0xaf => ("xor64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
-            0xbf => ("mov64".into(), format!("{}, {}", reg_name(dst), reg_name(src))),
+            0x0f => (
+                "add64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0x1f => (
+                "sub64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0x2f => (
+                "mul64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0x3f => (
+                "div64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0x4f => (
+                "or64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0x5f => (
+                "and64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0x9f => (
+                "mod64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0xaf => (
+                "xor64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
+            0xbf => (
+                "mov64".into(),
+                format!("{}, {}", reg_name(dst), reg_name(src)),
+            ),
             0x87 => ("neg64".into(), reg_name(dst)),
 
             // Memory
-            0x79 => ("ldxdw".into(), format!("{}, [{}+{}]", reg_name(dst), reg_name(src), off)),
-            0x7b => ("stxdw".into(), format!("[{}+{}], {}", reg_name(dst), off, reg_name(src))),
+            0x79 => (
+                "ldxdw".into(),
+                format!("{}, [{}+{}]", reg_name(dst), reg_name(src), off),
+            ),
+            0x7b => (
+                "stxdw".into(),
+                format!("[{}+{}], {}", reg_name(dst), off, reg_name(src)),
+            ),
             0x18 => ("lddw".into(), format!("{}, {}", reg_name(dst), imm as u64)),
 
             // Jump unconditional
             0x05 => ("ja".into(), format!("+{}", off)),
 
             // Jump conditional immediate
-            0x15 => ("jeq".into(), format!("{}, {}, +{}", reg_name(dst), imm, off)),
-            0x25 => ("jgt".into(), format!("{}, {}, +{}", reg_name(dst), imm, off)),
-            0x35 => ("jge".into(), format!("{}, {}, +{}", reg_name(dst), imm, off)),
-            0x45 => ("jset".into(), format!("{}, {}, +{}", reg_name(dst), imm, off)),
-            0x55 => ("jne".into(), format!("{}, {}, +{}", reg_name(dst), imm, off)),
-            0xa5 => ("jlt".into(), format!("{}, {}, +{}", reg_name(dst), imm, off)),
-            0xb5 => ("jle".into(), format!("{}, {}, +{}", reg_name(dst), imm, off)),
+            0x15 => (
+                "jeq".into(),
+                format!("{}, {}, +{}", reg_name(dst), imm, off),
+            ),
+            0x25 => (
+                "jgt".into(),
+                format!("{}, {}, +{}", reg_name(dst), imm, off),
+            ),
+            0x35 => (
+                "jge".into(),
+                format!("{}, {}, +{}", reg_name(dst), imm, off),
+            ),
+            0x45 => (
+                "jset".into(),
+                format!("{}, {}, +{}", reg_name(dst), imm, off),
+            ),
+            0x55 => (
+                "jne".into(),
+                format!("{}, {}, +{}", reg_name(dst), imm, off),
+            ),
+            0xa5 => (
+                "jlt".into(),
+                format!("{}, {}, +{}", reg_name(dst), imm, off),
+            ),
+            0xb5 => (
+                "jle".into(),
+                format!("{}, {}, +{}", reg_name(dst), imm, off),
+            ),
 
             // Jump conditional register
-            0x1d => ("jeq".into(), format!("{}, {}, +{}", reg_name(dst), reg_name(src), off)),
-            0x2d => ("jgt".into(), format!("{}, {}, +{}", reg_name(dst), reg_name(src), off)),
-            0x3d => ("jge".into(), format!("{}, {}, +{}", reg_name(dst), reg_name(src), off)),
-            0x5d => ("jne".into(), format!("{}, {}, +{}", reg_name(dst), reg_name(src), off)),
-            0xad => ("jlt".into(), format!("{}, {}, +{}", reg_name(dst), reg_name(src), off)),
-            0xbd => ("jle".into(), format!("{}, {}, +{}", reg_name(dst), reg_name(src), off)),
+            0x1d => (
+                "jeq".into(),
+                format!("{}, {}, +{}", reg_name(dst), reg_name(src), off),
+            ),
+            0x2d => (
+                "jgt".into(),
+                format!("{}, {}, +{}", reg_name(dst), reg_name(src), off),
+            ),
+            0x3d => (
+                "jge".into(),
+                format!("{}, {}, +{}", reg_name(dst), reg_name(src), off),
+            ),
+            0x5d => (
+                "jne".into(),
+                format!("{}, {}, +{}", reg_name(dst), reg_name(src), off),
+            ),
+            0xad => (
+                "jlt".into(),
+                format!("{}, {}, +{}", reg_name(dst), reg_name(src), off),
+            ),
+            0xbd => (
+                "jle".into(),
+                format!("{}, {}, +{}", reg_name(dst), reg_name(src), off),
+            ),
 
             // Call/Exit
             0x85 => ("call".into(), format!("{}", imm)),
             0x95 => ("exit".into(), String::new()),
 
             // Unknown
-            _ => (format!("unknown_{:02x}", opcode), format!("{} {} {} {}", dst, src, off, imm)),
+            _ => (
+                format!("unknown_{:02x}", opcode),
+                format!("{} {} {} {}", dst, src, off, imm),
+            ),
         }
     }
 }

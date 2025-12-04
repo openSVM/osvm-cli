@@ -196,13 +196,19 @@ fn install_solana_cli(
             client.execute_command("sudo cp /tmp/agave-release/bin/* /opt/agave/bin/")?;
 
             // Create symlinks for compatibility
-            client.execute_command("sudo ln -sf /opt/agave/bin/agave-validator /usr/local/bin/agave-validator")?;
-            client.execute_command("sudo ln -sf /opt/agave/bin/solana-keygen /usr/local/bin/solana-keygen")?;
+            client.execute_command(
+                "sudo ln -sf /opt/agave/bin/agave-validator /usr/local/bin/agave-validator",
+            )?;
+            client.execute_command(
+                "sudo ln -sf /opt/agave/bin/solana-keygen /usr/local/bin/solana-keygen",
+            )?;
             client.execute_command("sudo ln -sf /opt/agave/bin/solana /usr/local/bin/solana")?;
 
             // Also update the Solana install location to point to Agave
             client.execute_command("mkdir -p ~/.local/share/solana/install/active_release")?;
-            client.execute_command("ln -sf /opt/agave/bin ~/.local/share/solana/install/active_release/")?;
+            client.execute_command(
+                "ln -sf /opt/agave/bin ~/.local/share/solana/install/active_release/",
+            )?;
 
             // Cleanup
             client.execute_command("rm -rf /tmp/agave-release")?;
@@ -380,7 +386,10 @@ async fn create_solana_service(
     let home_output = client.execute_command("echo $HOME")?;
     let home_dir = home_output.trim();
     // Modern Solana installations use agave-validator, not solana-validator
-    let validator_bin = format!("{}/.local/share/solana/install/active_release/bin/agave-validator", home_dir);
+    let validator_bin = format!(
+        "{}/.local/share/solana/install/active_release/bin/agave-validator",
+        home_dir
+    );
 
     // Create service content
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();

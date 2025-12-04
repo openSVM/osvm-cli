@@ -41,16 +41,22 @@ pub async fn http_get(args: &[Value]) -> Result<Value> {
         }
     }
 
-    let response = request.send().await.map_err(|e| Error::ToolExecutionError {
-        tool: "http-get".to_string(),
-        reason: format!("HTTP request failed: {}", e),
-    })?;
+    let response = request
+        .send()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "http-get".to_string(),
+            reason: format!("HTTP request failed: {}", e),
+        })?;
 
     let status = response.status().as_u16() as i64;
-    let body = response.text().await.map_err(|e| Error::ToolExecutionError {
-        tool: "http-get".to_string(),
-        reason: format!("Failed to read response: {}", e),
-    })?;
+    let body = response
+        .text()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "http-get".to_string(),
+            reason: format!("Failed to read response: {}", e),
+        })?;
 
     Ok(Value::Object(Arc::new(
         [
@@ -97,7 +103,10 @@ pub async fn http_post(args: &[Value]) -> Result<Value> {
         _ => {
             return Err(Error::InvalidArguments {
                 tool: "http-post".to_string(),
-                reason: format!("Expected string or object body, got {}", args[1].type_name()),
+                reason: format!(
+                    "Expected string or object body, got {}",
+                    args[1].type_name()
+                ),
             })
         }
     }
@@ -113,16 +122,22 @@ pub async fn http_post(args: &[Value]) -> Result<Value> {
         }
     }
 
-    let response = request.send().await.map_err(|e| Error::ToolExecutionError {
-        tool: "http-post".to_string(),
-        reason: format!("HTTP POST failed: {}", e),
-    })?;
+    let response = request
+        .send()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "http-post".to_string(),
+            reason: format!("HTTP POST failed: {}", e),
+        })?;
 
     let status = response.status().as_u16() as i64;
-    let body = response.text().await.map_err(|e| Error::ToolExecutionError {
-        tool: "http-post".to_string(),
-        reason: format!("Failed to read response: {}", e),
-    })?;
+    let body = response
+        .text()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "http-post".to_string(),
+            reason: format!("Failed to read response: {}", e),
+        })?;
 
     Ok(Value::Object(Arc::new(
         [
@@ -205,10 +220,13 @@ pub async fn json_rpc(args: &[Value]) -> Result<Value> {
             reason: format!("JSON-RPC request failed: {}", e),
         })?;
 
-    let body_text = response.text().await.map_err(|e| Error::ToolExecutionError {
-        tool: "json-rpc".to_string(),
-        reason: format!("Failed to read response: {}", e),
-    })?;
+    let body_text = response
+        .text()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "json-rpc".to_string(),
+            reason: format!("Failed to read response: {}", e),
+        })?;
 
     // Parse JSON response
     let json_response: serde_json::Value =
@@ -243,14 +261,12 @@ fn value_to_json(value: &Value) -> Result<serde_json::Value> {
         Value::Null => Ok(serde_json::Value::Null),
         Value::Bool(b) => Ok(serde_json::Value::Bool(*b)),
         Value::Int(i) => Ok(serde_json::Value::Number((*i).into())),
-        Value::Float(f) => {
-            serde_json::Number::from_f64(*f)
-                .map(serde_json::Value::Number)
-                .ok_or_else(|| Error::ToolExecutionError {
-                    tool: "json-conversion".to_string(),
-                    reason: "Invalid float value for JSON".to_string(),
-                })
-        }
+        Value::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .ok_or_else(|| Error::ToolExecutionError {
+                tool: "json-conversion".to_string(),
+                reason: "Invalid float value for JSON".to_string(),
+            }),
         Value::String(s) => Ok(serde_json::Value::String(s.to_string())),
         Value::Array(arr) => {
             let mut json_arr = Vec::new();

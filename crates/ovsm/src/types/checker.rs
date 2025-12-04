@@ -4,11 +4,11 @@
 //! It supports gradual typing - untyped code works unchanged while typed code
 //! gets full type checking.
 
-use std::collections::HashMap;
-use super::{Type, TypeContext, TypedStructDef, TypedField, TypeError, RefinementType};
 use super::verify::{RefinementVerifier, VerificationResult};
-use crate::parser::{Program, Statement, Expression, Argument, BinaryOp, UnaryOp};
-use crate::compiler::ir::{StructDef, FieldType, PrimitiveType};
+use super::{RefinementType, Type, TypeContext, TypeError, TypedField, TypedStructDef};
+use crate::compiler::ir::{FieldType, PrimitiveType, StructDef};
+use crate::parser::{Argument, BinaryOp, Expression, Program, Statement, UnaryOp};
+use std::collections::HashMap;
 
 /// Type checker for OVSM programs
 pub struct TypeChecker {
@@ -30,11 +30,15 @@ impl TypeChecker {
         for (name, def) in defs {
             let typed_def = TypedStructDef {
                 name: name.clone(),
-                fields: def.fields.iter().map(|f| TypedField {
-                    name: f.name.clone(),
-                    field_type: field_type_to_type(&f.field_type),
-                    offset: f.offset as usize,
-                }).collect(),
+                fields: def
+                    .fields
+                    .iter()
+                    .map(|f| TypedField {
+                        name: f.name.clone(),
+                        field_type: field_type_to_type(&f.field_type),
+                        offset: f.offset as usize,
+                    })
+                    .collect(),
                 total_size: def.total_size as usize,
             };
             self.ctx.define_struct(typed_def);
@@ -73,10 +77,15 @@ impl TypeChecker {
                         for arg in args.iter().skip(1) {
                             // Fields are represented as ToolCall with the field name
                             // In OVSM: (define-struct MyStruct (field1 u64) (field2 pubkey))
-                            if let Expression::ToolCall { name: field_name, args: field_args } = &arg.value {
+                            if let Expression::ToolCall {
+                                name: field_name,
+                                args: field_args,
+                            } = &arg.value
+                            {
                                 if !field_args.is_empty() {
                                     if let Expression::Variable(type_name) = &field_args[0].value {
-                                        let field_type = Type::from_name(type_name).unwrap_or(Type::Any);
+                                        let field_type =
+                                            Type::from_name(type_name).unwrap_or(Type::Any);
                                         let size = field_type.size_bytes().unwrap_or(8);
                                         fields.push(TypedField {
                                             name: field_name.clone(),
@@ -149,14 +158,15 @@ impl TypeChecker {
             }
 
             // === Tool/Function Calls ===
-            Expression::ToolCall { name, args } => {
-                self.check_tool_call(name, args)
-            }
+            Expression::ToolCall { name, args } => self.check_tool_call(name, args),
 
             // === Arrays ===
             Expression::ArrayLiteral(elements) => {
                 if elements.is_empty() {
-                    Type::Array { element: Box::new(Type::Any), size: 0 }
+                    Type::Array {
+                        element: Box::new(Type::Any),
+                        size: 0,
+                    }
                 } else {
                     let elem_type = self.infer_type(&elements[0]);
                     for elem in elements.iter().skip(1) {
@@ -185,22 +195,32 @@ impl TypeChecker {
 
                 // Both should be integers
                 if !matches!(start_type, Type::I64 | Type::Any) {
-                    self.ctx.record_error(TypeError::new("range start must be integer"));
+                    self.ctx
+                        .record_error(TypeError::new("range start must be integer"));
                 }
                 if !matches!(end_type, Type::I64 | Type::Any) {
-                    self.ctx.record_error(TypeError::new("range end must be integer"));
+                    self.ctx
+                        .record_error(TypeError::new("range end must be integer"));
                 }
 
-                Type::Array { element: Box::new(Type::I64), size: 0 } // Size unknown at compile time
+                Type::Array {
+                    element: Box::new(Type::I64),
+                    size: 0,
+                } // Size unknown at compile time
             }
 
             // === Ternary (if-then-else) ===
-            Expression::Ternary { condition, then_expr, else_expr } => {
+            Expression::Ternary {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
                 let cond_type = self.infer_type(condition);
 
                 // Condition should be bool
                 if !matches!(cond_type, Type::Bool | Type::Any) {
-                    self.ctx.record_error(TypeError::mismatch(Type::Bool, cond_type));
+                    self.ctx
+                        .record_error(TypeError::mismatch(Type::Bool, cond_type));
                 }
 
                 let then_type = self.infer_type(then_expr);
@@ -216,9 +236,7 @@ impl TypeChecker {
             // === Lambda ===
             Expression::Lambda { params, body } => {
                 // Create fresh type variables for untyped parameters
-                let param_types: Vec<Type> = params.iter()
-                    .map(|_| self.ctx.fresh_var())
-                    .collect();
+                let param_types: Vec<Type> = params.iter().map(|_| self.ctx.fresh_var()).collect();
 
                 // Enter a new scope and bind parameters
                 self.ctx.push_scope();
@@ -247,9 +265,10 @@ impl TypeChecker {
                             if let Some(f) = struct_def.fields.iter().find(|f| &f.name == field) {
                                 f.field_type.clone()
                             } else {
-                                self.ctx.record_error(TypeError::new(
-                                    format!("struct '{}' has no field '{}'", struct_name, field)
-                                ));
+                                self.ctx.record_error(TypeError::new(format!(
+                                    "struct '{}' has no field '{}'",
+                                    struct_name, field
+                                )));
                                 Type::Any
                             }
                         } else {
@@ -258,9 +277,10 @@ impl TypeChecker {
                     }
                     Type::Any => Type::Any,
                     _ => {
-                        self.ctx.record_error(TypeError::new(
-                            format!("cannot access field '{}' on type {}", field, obj_type)
-                        ));
+                        self.ctx.record_error(TypeError::new(format!(
+                            "cannot access field '{}' on type {}",
+                            field, obj_type
+                        )));
                         Type::Any
                     }
                 }
@@ -275,9 +295,10 @@ impl TypeChecker {
                     Type::Array { element, .. } => *element,
                     Type::Any => Type::Any,
                     _ => {
-                        self.ctx.record_error(TypeError::new(
-                            format!("cannot index into type {}", arr_type)
-                        ));
+                        self.ctx.record_error(TypeError::new(format!(
+                            "cannot index into type {}",
+                            arr_type
+                        )));
                         Type::Any
                     }
                 }
@@ -289,7 +310,10 @@ impl TypeChecker {
             // === Quasiquote/Unquote (macros) ===
             Expression::Quasiquote(_) => Type::Any,
             Expression::Unquote(inner) => self.infer_type(inner),
-            Expression::UnquoteSplice(_) => Type::Array { element: Box::new(Type::Any), size: 0 },
+            Expression::UnquoteSplice(_) => Type::Array {
+                element: Box::new(Type::Any),
+                size: 0,
+            },
 
             // === Loop ===
             Expression::Loop(_) => Type::Any, // Loop results are dynamic
@@ -313,7 +337,11 @@ impl TypeChecker {
             }
 
             // === Destructuring Bind ===
-            Expression::DestructuringBind { pattern: _, value, body } => {
+            Expression::DestructuringBind {
+                pattern: _,
+                value,
+                body,
+            } => {
                 self.infer_type(value);
                 // For now, we don't track the pattern bindings
                 if body.is_empty() {
@@ -346,11 +374,16 @@ impl TypeChecker {
             }
 
             // === Typed Lambdas ===
-            Expression::TypedLambda { typed_params, return_type, body } => {
+            Expression::TypedLambda {
+                typed_params,
+                return_type,
+                body,
+            } => {
                 self.ctx.push_scope();
 
                 // Extract parameter types
-                let param_types: Vec<Type> = typed_params.iter()
+                let param_types: Vec<Type> = typed_params
+                    .iter()
                     .map(|(name, maybe_type)| {
                         let ty = match maybe_type {
                             Some(type_expr) => self.parse_type_expr(type_expr),
@@ -387,7 +420,11 @@ impl TypeChecker {
             }
 
             // === Refinement Type Expressions ===
-            Expression::RefinedTypeExpr { var, base_type, predicate } => {
+            Expression::RefinedTypeExpr {
+                var,
+                base_type,
+                predicate,
+            } => {
                 // Convert the AST to our type system's RefinementType
                 // First, infer the base type from the type expression
                 let base = self.infer_type(base_type);
@@ -421,20 +458,27 @@ impl TypeChecker {
     fn check_binary_op(&mut self, op: &BinaryOp, left: &Type, right: &Type) -> Type {
         match op {
             // Arithmetic: both operands should be numeric, result is numeric
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod | BinaryOp::Pow => {
+            BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::Div
+            | BinaryOp::Mod
+            | BinaryOp::Pow => {
                 if matches!(left, Type::Any) || matches!(right, Type::Any) {
                     return Type::Any;
                 }
 
                 if !left.is_numeric() {
-                    self.ctx.record_error(TypeError::new(
-                        format!("binary operation requires numeric type, found {}", left)
-                    ));
+                    self.ctx.record_error(TypeError::new(format!(
+                        "binary operation requires numeric type, found {}",
+                        left
+                    )));
                 }
                 if !right.is_numeric() {
-                    self.ctx.record_error(TypeError::new(
-                        format!("binary operation requires numeric type, found {}", right)
-                    ));
+                    self.ctx.record_error(TypeError::new(format!(
+                        "binary operation requires numeric type, found {}",
+                        right
+                    )));
                 }
 
                 // Result type is the "wider" of the two
@@ -445,8 +489,12 @@ impl TypeChecker {
             }
 
             // Comparison: both operands should be same type, result is bool
-            BinaryOp::Eq | BinaryOp::NotEq | BinaryOp::Lt | BinaryOp::Gt |
-            BinaryOp::LtEq | BinaryOp::GtEq => {
+            BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Lt
+            | BinaryOp::Gt
+            | BinaryOp::LtEq
+            | BinaryOp::GtEq => {
                 if !matches!(left, Type::Any) && !matches!(right, Type::Any) {
                     if let Err(e) = self.ctx.unify(left, right) {
                         self.ctx.record_error(e);
@@ -458,10 +506,12 @@ impl TypeChecker {
             // Logical: both operands should be bool, result is bool
             BinaryOp::And | BinaryOp::Or => {
                 if !matches!(left, Type::Bool | Type::Any) {
-                    self.ctx.record_error(TypeError::mismatch(Type::Bool, left.clone()));
+                    self.ctx
+                        .record_error(TypeError::mismatch(Type::Bool, left.clone()));
                 }
                 if !matches!(right, Type::Bool | Type::Any) {
-                    self.ctx.record_error(TypeError::mismatch(Type::Bool, right.clone()));
+                    self.ctx
+                        .record_error(TypeError::mismatch(Type::Bool, right.clone()));
                 }
                 Type::Bool
             }
@@ -476,15 +526,17 @@ impl TypeChecker {
         match op {
             UnaryOp::Neg => {
                 if !operand.is_numeric() && !matches!(operand, Type::Any) {
-                    self.ctx.record_error(TypeError::new(
-                        format!("negation requires numeric type, found {}", operand)
-                    ));
+                    self.ctx.record_error(TypeError::new(format!(
+                        "negation requires numeric type, found {}",
+                        operand
+                    )));
                 }
                 operand.clone()
             }
             UnaryOp::Not => {
                 if !matches!(operand, Type::Bool | Type::Any) {
-                    self.ctx.record_error(TypeError::mismatch(Type::Bool, operand.clone()));
+                    self.ctx
+                        .record_error(TypeError::mismatch(Type::Bool, operand.clone()));
                 }
                 Type::Bool
             }
@@ -571,16 +623,19 @@ impl TypeChecker {
                 if let Expression::Variable(struct_name) = &args[0].value {
                     if let Expression::Variable(field_name) = &args[2].value {
                         // Clone the field type to avoid borrow conflicts
-                        let field_type = self.ctx.lookup_struct(struct_name)
+                        let field_type = self
+                            .ctx
+                            .lookup_struct(struct_name)
                             .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                             .map(|f| f.field_type.clone());
 
                         if let Some(ty) = field_type {
                             return ty;
                         } else {
-                            self.ctx.record_error(TypeError::new(
-                                format!("struct '{}' has no field '{}'", struct_name, field_name)
-                            ));
+                            self.ctx.record_error(TypeError::new(format!(
+                                "struct '{}' has no field '{}'",
+                                struct_name, field_name
+                            )));
                         }
                     }
                 }
@@ -594,7 +649,9 @@ impl TypeChecker {
                         let val_type = self.infer_type(&args[3].value);
 
                         // Clone the field type to avoid borrow conflicts
-                        let field_type = self.ctx.lookup_struct(struct_name)
+                        let field_type = self
+                            .ctx
+                            .lookup_struct(struct_name)
                             .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                             .map(|f| f.field_type.clone());
 
@@ -603,9 +660,10 @@ impl TypeChecker {
                                 self.ctx.record_error(e);
                             }
                         } else {
-                            self.ctx.record_error(TypeError::new(
-                                format!("struct '{}' has no field '{}'", struct_name, field_name)
-                            ));
+                            self.ctx.record_error(TypeError::new(format!(
+                                "struct '{}' has no field '{}'",
+                                struct_name, field_name
+                            )));
                         }
                     }
                 }
@@ -616,7 +674,9 @@ impl TypeChecker {
             "zerocopy-load" if args.len() == 3 => {
                 if let Expression::Variable(struct_name) = &args[0].value {
                     if let Expression::Variable(field_name) = &args[2].value {
-                        let field_type = self.ctx.lookup_struct(struct_name)
+                        let field_type = self
+                            .ctx
+                            .lookup_struct(struct_name)
                             .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                             .map(|f| f.field_type.clone());
 
@@ -634,7 +694,9 @@ impl TypeChecker {
                     if let Expression::Variable(field_name) = &args[2].value {
                         let val_type = self.infer_type(&args[3].value);
 
-                        let field_type = self.ctx.lookup_struct(struct_name)
+                        let field_type = self
+                            .ctx
+                            .lookup_struct(struct_name)
                             .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                             .map(|f| f.field_type.clone());
 
@@ -695,7 +757,10 @@ impl TypeChecker {
             // Higher-order functions
             "map" | "filter" => {
                 // Returns array of same/different element type
-                Type::Array { element: Box::new(Type::Any), size: 0 }
+                Type::Array {
+                    element: Box::new(Type::Any),
+                    size: 0,
+                }
             }
             "reduce" => Type::Any,
 
@@ -705,7 +770,8 @@ impl TypeChecker {
                 if args.len() >= 2 {
                     let cond_type = self.infer_type(&args[0].value);
                     if !matches!(cond_type, Type::Bool | Type::Any) {
-                        self.ctx.record_error(TypeError::mismatch(Type::Bool, cond_type));
+                        self.ctx
+                            .record_error(TypeError::mismatch(Type::Bool, cond_type));
                     }
                     let then_type = self.infer_type(&args[1].value);
                     if args.len() >= 3 {
@@ -784,7 +850,8 @@ impl TypeChecker {
                     };
                 }
 
-                let param_types: Vec<Type> = args.iter()
+                let param_types: Vec<Type> = args
+                    .iter()
                     .take(args.len() - 1)
                     .map(|arg| self.parse_type_expr(&arg.value))
                     .collect();
@@ -798,51 +865,51 @@ impl TypeChecker {
             }
 
             // Generic types: (Array T), (Ptr T), etc.
-            Expression::ToolCall { name, args } => {
-                match name.as_str() {
-                    "Array" | "array" if !args.is_empty() => {
-                        let elem_ty = self.parse_type_expr(&args[0].value);
-                        Type::Array { element: Box::new(elem_ty), size: 0 }
+            Expression::ToolCall { name, args } => match name.as_str() {
+                "Array" | "array" if !args.is_empty() => {
+                    let elem_ty = self.parse_type_expr(&args[0].value);
+                    Type::Array {
+                        element: Box::new(elem_ty),
+                        size: 0,
                     }
-                    "Ptr" | "ptr" if !args.is_empty() => {
-                        let inner = self.parse_type_expr(&args[0].value);
-                        Type::Ptr(Box::new(inner))
-                    }
-                    "Ref" | "ref" if !args.is_empty() => {
-                        let inner = self.parse_type_expr(&args[0].value);
-                        Type::Ref(Box::new(inner))
-                    }
-                    "RefMut" | "ref-mut" if !args.is_empty() => {
-                        let inner = self.parse_type_expr(&args[0].value);
-                        Type::RefMut(Box::new(inner))
-                    }
-                    "Tuple" | "tuple" => {
-                        let types: Vec<Type> = args.iter()
-                            .map(|arg| self.parse_type_expr(&arg.value))
-                            .collect();
-                        Type::Tuple(types)
-                    }
-                    _ => Type::Any,
                 }
-            }
+                "Ptr" | "ptr" if !args.is_empty() => {
+                    let inner = self.parse_type_expr(&args[0].value);
+                    Type::Ptr(Box::new(inner))
+                }
+                "Ref" | "ref" if !args.is_empty() => {
+                    let inner = self.parse_type_expr(&args[0].value);
+                    Type::Ref(Box::new(inner))
+                }
+                "RefMut" | "ref-mut" if !args.is_empty() => {
+                    let inner = self.parse_type_expr(&args[0].value);
+                    Type::RefMut(Box::new(inner))
+                }
+                "Tuple" | "tuple" => {
+                    let types: Vec<Type> = args
+                        .iter()
+                        .map(|arg| self.parse_type_expr(&arg.value))
+                        .collect();
+                    Type::Tuple(types)
+                }
+                _ => Type::Any,
+            },
 
             Expression::NullLiteral => Type::Unit,
 
             Expression::ArrayLiteral(elements) => {
-                let types: Vec<Type> = elements.iter()
-                    .map(|e| self.parse_type_expr(e))
-                    .collect();
+                let types: Vec<Type> = elements.iter().map(|e| self.parse_type_expr(e)).collect();
                 Type::Tuple(types)
             }
 
             // Refinement type expression: {x : T | P(x)}
-            Expression::RefinedTypeExpr { var, base_type, predicate } => {
+            Expression::RefinedTypeExpr {
+                var,
+                base_type,
+                predicate,
+            } => {
                 let base = self.parse_type_expr(base_type);
-                let refined = RefinementType::from_expr(
-                    var.clone(),
-                    base,
-                    predicate,
-                );
+                let refined = RefinementType::from_expr(var.clone(), base, predicate);
                 Type::Refined(Box::new(refined))
             }
 
@@ -853,13 +920,14 @@ impl TypeChecker {
     /// Verify a value against a type's refinement constraints (if any).
     /// Returns verification errors if the value doesn't satisfy the predicate.
     fn verify_refinement(&mut self, var_name: &str, declared_type: &Type, value_expr: &Expression) {
-        self.verifier.verify_define(var_name, declared_type, value_expr);
+        self.verifier
+            .verify_define(var_name, declared_type, value_expr);
     }
 
     /// Get the accumulated verification result (call at end of type checking)
     pub fn finish_verification(&mut self) -> VerificationResult {
         // Take the verifier and get its result, replacing with a fresh one
-        let old_verifier = std::mem::replace(&mut self.verifier, RefinementVerifier::new());
+        let old_verifier = std::mem::take(&mut self.verifier);
         old_verifier.finish()
     }
 }
@@ -884,7 +952,10 @@ fn field_type_to_type(ft: &FieldType) -> Type {
             PrimitiveType::I64 => Type::I64,
         },
         FieldType::Pubkey => Type::Pubkey,
-        FieldType::Array { element_type, count } => Type::Array {
+        FieldType::Array {
+            element_type,
+            count,
+        } => Type::Array {
             element: Box::new(field_type_to_type(&FieldType::Primitive(*element_type))),
             size: *count,
         },
@@ -901,9 +972,18 @@ mod tests {
         let mut checker = TypeChecker::new();
 
         assert_eq!(checker.infer_type(&Expression::IntLiteral(42)), Type::I64);
-        assert_eq!(checker.infer_type(&Expression::FloatLiteral(3.14)), Type::F64);
-        assert_eq!(checker.infer_type(&Expression::BoolLiteral(true)), Type::Bool);
-        assert_eq!(checker.infer_type(&Expression::StringLiteral("hello".to_string())), Type::String);
+        assert_eq!(
+            checker.infer_type(&Expression::FloatLiteral(3.14)),
+            Type::F64
+        );
+        assert_eq!(
+            checker.infer_type(&Expression::BoolLiteral(true)),
+            Type::Bool
+        );
+        assert_eq!(
+            checker.infer_type(&Expression::StringLiteral("hello".to_string())),
+            Type::String
+        );
     }
 
     #[test]
@@ -984,14 +1064,22 @@ mod tests {
         let ty = checker.infer_type(&define_expr);
 
         // Type should be the refinement type
-        assert!(matches!(ty, Type::Refined(_)), "Expected Refined type, got {:?}", ty);
+        assert!(
+            matches!(ty, Type::Refined(_)),
+            "Expected Refined type, got {:?}",
+            ty
+        );
 
         // Note: Type checker may have a type mismatch error (I64 vs U64) from numeric inference
         // This is expected behavior - what matters for this test is refinement verification
 
         // Verification should pass (5 satisfies x < 10)
         let result = checker.finish_verification();
-        assert!(!result.has_errors(), "Expected no verification errors for 5 < 10, got {:?}", result.errors);
+        assert!(
+            !result.has_errors(),
+            "Expected no verification errors for 5 < 10, got {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -1025,8 +1113,14 @@ mod tests {
 
         // Verification should fail (15 doesn't satisfy x < 10)
         let result = checker.finish_verification();
-        assert!(result.has_errors(), "Expected verification error for 15 >= 10");
-        assert!(result.errors[0].message.contains("15"), "Error should mention the value 15");
+        assert!(
+            result.has_errors(),
+            "Expected verification error for 15 >= 10"
+        );
+        assert!(
+            result.errors[0].message.contains("15"),
+            "Error should mention the value 15"
+        );
     }
 
     #[test]

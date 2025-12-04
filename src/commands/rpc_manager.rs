@@ -77,9 +77,7 @@ async fn handle_solana(matches: &clap::ArgMatches) -> Result<()> {
         .map(|s| s.as_str())
         .unwrap();
     let version = matches.get_one::<String>("version").map(|s| s.as_str());
-    let client_type = matches
-        .get_one::<String>("client-type")
-        .map(|s| s.as_str());
+    let client_type = matches.get_one::<String>("client-type").map(|s| s.as_str());
     let hot_swap_enabled = matches.get_flag("hot-swap");
 
     // Parse connection string
@@ -117,7 +115,10 @@ async fn handle_solana(matches: &clap::ArgMatches) -> Result<()> {
         disk_config: None,
     };
 
-    println!("🚀 Deploying Solana {} RPC node to {}...", network_str, connection_str);
+    println!(
+        "🚀 Deploying Solana {} RPC node to {}...",
+        network_str, connection_str
+    );
     if let Some(ver) = version {
         println!("📦 Version: {}", ver);
     }
@@ -135,7 +136,10 @@ async fn handle_solana(matches: &clap::ArgMatches) -> Result<()> {
     }
 
     println!("✅ Solana RPC node deployed successfully!");
-    println!("🔗 Your RPC endpoint: http://{}:8899", connection_str.split('@').nth(1).unwrap_or(connection_str));
+    println!(
+        "🔗 Your RPC endpoint: http://{}:8899",
+        connection_str.split('@').nth(1).unwrap_or(connection_str)
+    );
     Ok(())
 }
 

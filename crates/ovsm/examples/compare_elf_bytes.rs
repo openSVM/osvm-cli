@@ -35,23 +35,46 @@ fn main() {
         let our_ph_off = our_phoff as usize + (i as usize * 56);
         let sol_ph_off = sol_phoff as usize + (i as usize * 56);
 
-        let our_type = u32::from_le_bytes(our_elf[our_ph_off..our_ph_off+4].try_into().unwrap());
-        let sol_type = u32::from_le_bytes(solana_elf[sol_ph_off..sol_ph_off+4].try_into().unwrap());
+        let our_type = u32::from_le_bytes(our_elf[our_ph_off..our_ph_off + 4].try_into().unwrap());
+        let sol_type =
+            u32::from_le_bytes(solana_elf[sol_ph_off..sol_ph_off + 4].try_into().unwrap());
 
-        if our_type == 2 { // PT_DYNAMIC
-            our_dynamic_off = u64::from_le_bytes(our_elf[our_ph_off+8..our_ph_off+16].try_into().unwrap()) as usize;
-            our_dynamic_size = u64::from_le_bytes(our_elf[our_ph_off+32..our_ph_off+40].try_into().unwrap()) as usize;
+        if our_type == 2 {
+            // PT_DYNAMIC
+            our_dynamic_off =
+                u64::from_le_bytes(our_elf[our_ph_off + 8..our_ph_off + 16].try_into().unwrap())
+                    as usize;
+            our_dynamic_size = u64::from_le_bytes(
+                our_elf[our_ph_off + 32..our_ph_off + 40]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
         }
 
-        if sol_type == 2 { // PT_DYNAMIC
-            sol_dynamic_off = u64::from_le_bytes(solana_elf[sol_ph_off+8..sol_ph_off+16].try_into().unwrap()) as usize;
-            sol_dynamic_size = u64::from_le_bytes(solana_elf[sol_ph_off+32..sol_ph_off+40].try_into().unwrap()) as usize;
+        if sol_type == 2 {
+            // PT_DYNAMIC
+            sol_dynamic_off = u64::from_le_bytes(
+                solana_elf[sol_ph_off + 8..sol_ph_off + 16]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
+            sol_dynamic_size = u64::from_le_bytes(
+                solana_elf[sol_ph_off + 32..sol_ph_off + 40]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
         }
     }
 
     println!("\n📊 PT_DYNAMIC Segments:");
-    println!("Our: offset=0x{:x}, size=0x{:x}", our_dynamic_off, our_dynamic_size);
-    println!("Solana: offset=0x{:x}, size=0x{:x}", sol_dynamic_off, sol_dynamic_size);
+    println!(
+        "Our: offset=0x{:x}, size=0x{:x}",
+        our_dynamic_off, our_dynamic_size
+    );
+    println!(
+        "Solana: offset=0x{:x}, size=0x{:x}",
+        sol_dynamic_off, sol_dynamic_size
+    );
 
     // Compare dynamic sections byte by byte
     if our_dynamic_off > 0 && sol_dynamic_off > 0 {
@@ -67,11 +90,27 @@ fn main() {
 
         println!("\n📊 Dynamic Entries:");
         while our_offset < our_end && sol_offset < sol_end {
-            let our_tag = u64::from_le_bytes(our_elf[our_offset..our_offset+8].try_into().unwrap_or([0u8;8]));
-            let our_val = u64::from_le_bytes(our_elf[our_offset+8..our_offset+16].try_into().unwrap_or([0u8;8]));
+            let our_tag = u64::from_le_bytes(
+                our_elf[our_offset..our_offset + 8]
+                    .try_into()
+                    .unwrap_or([0u8; 8]),
+            );
+            let our_val = u64::from_le_bytes(
+                our_elf[our_offset + 8..our_offset + 16]
+                    .try_into()
+                    .unwrap_or([0u8; 8]),
+            );
 
-            let sol_tag = u64::from_le_bytes(solana_elf[sol_offset..sol_offset+8].try_into().unwrap_or([0u8;8]));
-            let sol_val = u64::from_le_bytes(solana_elf[sol_offset+8..sol_offset+16].try_into().unwrap_or([0u8;8]));
+            let sol_tag = u64::from_le_bytes(
+                solana_elf[sol_offset..sol_offset + 8]
+                    .try_into()
+                    .unwrap_or([0u8; 8]),
+            );
+            let sol_val = u64::from_le_bytes(
+                solana_elf[sol_offset + 8..sol_offset + 16]
+                    .try_into()
+                    .unwrap_or([0u8; 8]),
+            );
 
             let tag_name = match our_tag {
                 0 => "DT_NULL",
@@ -81,7 +120,7 @@ fn main() {
                 18 => "DT_RELSZ",
                 19 => "DT_RELENT",
                 30 => "DT_FLAGS",
-                _ => "Unknown"
+                _ => "Unknown",
             };
 
             if our_tag != sol_tag || our_val != sol_val {
@@ -89,10 +128,15 @@ fn main() {
                 println!("     Our:    tag=0x{:x} val=0x{:x}", our_tag, our_val);
                 println!("     Solana: tag=0x{:x} val=0x{:x}", sol_tag, sol_val);
             } else {
-                println!("  ✅ Entry {}: {} matches (tag=0x{:x}, val=0x{:x})", entry_num, tag_name, our_tag, our_val);
+                println!(
+                    "  ✅ Entry {}: {} matches (tag=0x{:x}, val=0x{:x})",
+                    entry_num, tag_name, our_tag, our_val
+                );
             }
 
-            if our_tag == 0 || sol_tag == 0 { break; }
+            if our_tag == 0 || sol_tag == 0 {
+                break;
+            }
             our_offset += 16;
             sol_offset += 16;
             entry_num += 1;
@@ -116,12 +160,26 @@ fn main() {
         let our_sh_off = our_shoff as usize + (i as usize * 64);
         let sol_sh_off = sol_shoff as usize + (i as usize * 64);
 
-        let our_type = u32::from_le_bytes(our_elf[our_sh_off+4..our_sh_off+8].try_into().unwrap());
-        let sol_type = u32::from_le_bytes(solana_elf[sol_sh_off+4..sol_sh_off+8].try_into().unwrap());
+        let our_type =
+            u32::from_le_bytes(our_elf[our_sh_off + 4..our_sh_off + 8].try_into().unwrap());
+        let sol_type = u32::from_le_bytes(
+            solana_elf[sol_sh_off + 4..sol_sh_off + 8]
+                .try_into()
+                .unwrap(),
+        );
 
-        if our_type == 11 || sol_type == 11 { // SHT_DYNSYM
-            let our_addr = u64::from_le_bytes(our_elf[our_sh_off+16..our_sh_off+24].try_into().unwrap());
-            let sol_addr = u64::from_le_bytes(solana_elf[sol_sh_off+16..sol_sh_off+24].try_into().unwrap());
+        if our_type == 11 || sol_type == 11 {
+            // SHT_DYNSYM
+            let our_addr = u64::from_le_bytes(
+                our_elf[our_sh_off + 16..our_sh_off + 24]
+                    .try_into()
+                    .unwrap(),
+            );
+            let sol_addr = u64::from_le_bytes(
+                solana_elf[sol_sh_off + 16..sol_sh_off + 24]
+                    .try_into()
+                    .unwrap(),
+            );
 
             println!("  Section [{}]:", i);
             println!("    Our:    type=0x{:x} sh_addr=0x{:x}", our_type, our_addr);
@@ -147,6 +205,11 @@ fn compare_bytes(our: &[u8], sol: &[u8], name: &str) {
     if diffs.is_empty() {
         println!("  ✅ {} matches exactly", name);
     } else {
-        println!("  ❌ {} has {} differences at offsets: {:?}", name, diffs.len(), &diffs[..diffs.len().min(10)]);
+        println!(
+            "  ❌ {} has {} differences at offsets: {:?}",
+            name,
+            diffs.len(),
+            &diffs[..diffs.len().min(10)]
+        );
     }
 }

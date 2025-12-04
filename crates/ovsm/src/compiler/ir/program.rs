@@ -1,8 +1,8 @@
 //! IR program and basic block definitions
 
-use std::collections::HashMap;
 use super::instruction::IrInstruction;
 use super::instruction::IrReg;
+use std::collections::HashMap;
 
 /// Basic block in the control flow graph
 #[derive(Debug, Clone)]

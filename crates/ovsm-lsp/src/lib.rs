@@ -37,4 +37,4 @@ pub use backend::OvsmLanguageServer;
 pub use blockchain_rpc::BlockchainRpc;
 pub use investigation_templates::TemplateGenerator;
 pub use knowledge_transfer::KnowledgeProfile;
-pub use telemetry::{LearningEngine, LearningConfig, LearningStats};
+pub use telemetry::{LearningConfig, LearningEngine, LearningStats};

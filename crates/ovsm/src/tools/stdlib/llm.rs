@@ -87,19 +87,15 @@ pub async fn llm_query(args: &[Value]) -> Result<Value> {
         .get("system")
         .and_then(|v| v.as_string().ok())
         .map(|s| s.to_string());
-    let temperature = options
-        .get("temperature")
-        .and_then(|v| match v {
-            Value::Float(f) => Some(*f),
-            Value::Int(i) => Some(*i as f64),
-            _ => None,
-        });
-    let max_tokens = options
-        .get("max-tokens")
-        .and_then(|v| match v {
-            Value::Int(i) => Some(*i as usize),
-            _ => None,
-        });
+    let temperature = options.get("temperature").and_then(|v| match v {
+        Value::Float(f) => Some(*f),
+        Value::Int(i) => Some(*i as f64),
+        _ => None,
+    });
+    let max_tokens = options.get("max-tokens").and_then(|v| match v {
+        Value::Int(i) => Some(*i as usize),
+        _ => None,
+    });
     let custom_url = options
         .get("url")
         .and_then(|v| v.as_string().ok())
@@ -111,12 +107,37 @@ pub async fn llm_query(args: &[Value]) -> Result<Value> {
 
     match provider.as_str() {
         "ollama" => query_ollama(&prompt, model, system, temperature, max_tokens, custom_url).await,
-        "openai" => query_openai(&prompt, model, system, temperature, max_tokens, custom_url, api_key).await,
-        "anthropic" => query_anthropic(&prompt, model, system, temperature, max_tokens, custom_url, api_key).await,
+        "openai" => {
+            query_openai(
+                &prompt,
+                model,
+                system,
+                temperature,
+                max_tokens,
+                custom_url,
+                api_key,
+            )
+            .await
+        }
+        "anthropic" => {
+            query_anthropic(
+                &prompt,
+                model,
+                system,
+                temperature,
+                max_tokens,
+                custom_url,
+                api_key,
+            )
+            .await
+        }
         "osvm" => query_osvm(&prompt, custom_url).await,
         _ => Err(Error::InvalidArguments {
             tool: "llm-query".to_string(),
-            reason: format!("Unknown provider '{}'. Use 'ollama', 'openai', 'anthropic', or 'osvm'", provider),
+            reason: format!(
+                "Unknown provider '{}'. Use 'ollama', 'openai', 'anthropic', or 'osvm'",
+                provider
+            ),
         }),
     }
 }
@@ -147,21 +168,25 @@ async fn query_ollama(
     }
 
     let client = reqwest::Client::new();
-    let response = client
-        .post(&url)
-        .json(&body)
-        .send()
+    let response =
+        client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| Error::ToolExecutionError {
+                tool: "llm-query".to_string(),
+                reason: format!("Ollama request failed: {}", e),
+            })?;
+
+    let status = response.status();
+    let text = response
+        .text()
         .await
         .map_err(|e| Error::ToolExecutionError {
             tool: "llm-query".to_string(),
-            reason: format!("Ollama request failed: {}", e),
+            reason: format!("Failed to read Ollama response: {}", e),
         })?;
-
-    let status = response.status();
-    let text = response.text().await.map_err(|e| Error::ToolExecutionError {
-        tool: "llm-query".to_string(),
-        reason: format!("Failed to read Ollama response: {}", e),
-    })?;
 
     if !status.is_success() {
         return Err(Error::ToolExecutionError {
@@ -170,12 +195,11 @@ async fn query_ollama(
         });
     }
 
-    let json_resp: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-        Error::ToolExecutionError {
+    let json_resp: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| Error::ToolExecutionError {
             tool: "llm-query".to_string(),
             reason: format!("Failed to parse Ollama response: {}", e),
-        }
-    })?;
+        })?;
 
     // Extract response text
     let response_text = json_resp
@@ -185,12 +209,18 @@ async fn query_ollama(
 
     // Return rich result with metadata
     let mut result = HashMap::new();
-    result.insert("response".to_string(), Value::String(response_text.to_string()));
+    result.insert(
+        "response".to_string(),
+        Value::String(response_text.to_string()),
+    );
     result.insert("model".to_string(), Value::String(model));
     result.insert("provider".to_string(), Value::String("ollama".to_string()));
 
     if let Some(done_reason) = json_resp.get("done_reason").and_then(|v| v.as_str()) {
-        result.insert("done_reason".to_string(), Value::String(done_reason.to_string()));
+        result.insert(
+            "done_reason".to_string(),
+            Value::String(done_reason.to_string()),
+        );
     }
     if let Some(total_duration) = json_resp.get("total_duration").and_then(|v| v.as_i64()) {
         result.insert("duration_ns".to_string(), Value::Int(total_duration));
@@ -215,7 +245,8 @@ async fn query_openai(
         .or_else(|| std::env::var("OPENAI_API_KEY").ok())
         .ok_or_else(|| Error::InvalidArguments {
             tool: "llm-query".to_string(),
-            reason: "OpenAI API key required. Set OPENAI_API_KEY or pass :api-key option".to_string(),
+            reason: "OpenAI API key required. Set OPENAI_API_KEY or pass :api-key option"
+                .to_string(),
         })?;
 
     let mut messages = Vec::new();
@@ -250,10 +281,13 @@ async fn query_openai(
         })?;
 
     let status = response.status();
-    let text = response.text().await.map_err(|e| Error::ToolExecutionError {
-        tool: "llm-query".to_string(),
-        reason: format!("Failed to read OpenAI response: {}", e),
-    })?;
+    let text = response
+        .text()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "llm-query".to_string(),
+            reason: format!("Failed to read OpenAI response: {}", e),
+        })?;
 
     if !status.is_success() {
         return Err(Error::ToolExecutionError {
@@ -262,12 +296,11 @@ async fn query_openai(
         });
     }
 
-    let json_resp: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-        Error::ToolExecutionError {
+    let json_resp: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| Error::ToolExecutionError {
             tool: "llm-query".to_string(),
             reason: format!("Failed to parse OpenAI response: {}", e),
-        }
-    })?;
+        })?;
 
     // Extract response text
     let response_text = json_resp
@@ -279,7 +312,10 @@ async fn query_openai(
         .unwrap_or("");
 
     let mut result = HashMap::new();
-    result.insert("response".to_string(), Value::String(response_text.to_string()));
+    result.insert(
+        "response".to_string(),
+        Value::String(response_text.to_string()),
+    );
     result.insert("model".to_string(), Value::String(model));
     result.insert("provider".to_string(), Value::String("openai".to_string()));
 
@@ -309,7 +345,8 @@ async fn query_anthropic(
         .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
         .ok_or_else(|| Error::InvalidArguments {
             tool: "llm-query".to_string(),
-            reason: "Anthropic API key required. Set ANTHROPIC_API_KEY or pass :api-key option".to_string(),
+            reason: "Anthropic API key required. Set ANTHROPIC_API_KEY or pass :api-key option"
+                .to_string(),
         })?;
 
     let mut body = json!({
@@ -340,10 +377,13 @@ async fn query_anthropic(
         })?;
 
     let status = response.status();
-    let text = response.text().await.map_err(|e| Error::ToolExecutionError {
-        tool: "llm-query".to_string(),
-        reason: format!("Failed to read Anthropic response: {}", e),
-    })?;
+    let text = response
+        .text()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "llm-query".to_string(),
+            reason: format!("Failed to read Anthropic response: {}", e),
+        })?;
 
     if !status.is_success() {
         return Err(Error::ToolExecutionError {
@@ -352,12 +392,11 @@ async fn query_anthropic(
         });
     }
 
-    let json_resp: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-        Error::ToolExecutionError {
+    let json_resp: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| Error::ToolExecutionError {
             tool: "llm-query".to_string(),
             reason: format!("Failed to parse Anthropic response: {}", e),
-        }
-    })?;
+        })?;
 
     // Extract response text
     let response_text = json_resp
@@ -368,9 +407,15 @@ async fn query_anthropic(
         .unwrap_or("");
 
     let mut result = HashMap::new();
-    result.insert("response".to_string(), Value::String(response_text.to_string()));
+    result.insert(
+        "response".to_string(),
+        Value::String(response_text.to_string()),
+    );
     result.insert("model".to_string(), Value::String(model));
-    result.insert("provider".to_string(), Value::String("anthropic".to_string()));
+    result.insert(
+        "provider".to_string(),
+        Value::String("anthropic".to_string()),
+    );
 
     // Include usage stats
     if let Some(usage) = json_resp.get("usage") {
@@ -386,10 +431,7 @@ async fn query_anthropic(
 }
 
 /// Query OSVM.ai API (free, no API key needed)
-async fn query_osvm(
-    prompt: &str,
-    custom_url: Option<String>,
-) -> Result<Value> {
+async fn query_osvm(prompt: &str, custom_url: Option<String>) -> Result<Value> {
     let url = custom_url.unwrap_or_else(|| OSVM_DEFAULT_URL.to_string());
 
     let body = json!({
@@ -409,10 +451,13 @@ async fn query_osvm(
         })?;
 
     let status = response.status();
-    let text = response.text().await.map_err(|e| Error::ToolExecutionError {
-        tool: "llm-query".to_string(),
-        reason: format!("Failed to read OSVM.ai response: {}", e),
-    })?;
+    let text = response
+        .text()
+        .await
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "llm-query".to_string(),
+            reason: format!("Failed to read OSVM.ai response: {}", e),
+        })?;
 
     if !status.is_success() {
         return Err(Error::ToolExecutionError {

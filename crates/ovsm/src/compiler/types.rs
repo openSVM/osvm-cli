@@ -4,8 +4,8 @@
 //! sBPF is statically typed at the bytecode level, so we need
 //! to infer types before code generation.
 
+use crate::{Error, Expression, Program, Result, Statement};
 use std::collections::HashMap;
-use crate::{Program, Statement, Expression, Result, Error};
 
 /// OVSM Types for sBPF compilation
 #[derive(Debug, Clone, PartialEq)]
@@ -45,9 +45,9 @@ impl OvsmType {
         match self {
             OvsmType::I64 | OvsmType::F64 | OvsmType::Bool => 8,
             OvsmType::Null => 0,
-            OvsmType::String => 8,      // Pointer
-            OvsmType::Array(_) => 8,    // Pointer
-            OvsmType::Object(_) => 8,   // Pointer
+            OvsmType::String => 8,          // Pointer
+            OvsmType::Array(_) => 8,        // Pointer
+            OvsmType::Object(_) => 8,       // Pointer
             OvsmType::Function { .. } => 8, // Function pointer
             OvsmType::Unknown | OvsmType::Any => 8,
             OvsmType::Pubkey => 32,
@@ -57,12 +57,18 @@ impl OvsmType {
 
     /// Check if type is a primitive (fits in register)
     pub fn is_primitive(&self) -> bool {
-        matches!(self, OvsmType::I64 | OvsmType::F64 | OvsmType::Bool | OvsmType::Null)
+        matches!(
+            self,
+            OvsmType::I64 | OvsmType::F64 | OvsmType::Bool | OvsmType::Null
+        )
     }
 
     /// Check if type requires heap allocation
     pub fn is_heap_allocated(&self) -> bool {
-        matches!(self, OvsmType::String | OvsmType::Array(_) | OvsmType::Object(_))
+        matches!(
+            self,
+            OvsmType::String | OvsmType::Array(_) | OvsmType::Object(_)
+        )
     }
 }
 
@@ -198,12 +204,15 @@ impl TypeChecker {
                 value_ty
             }
 
-            Statement::If { condition, then_branch, else_branch } => {
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 let cond_ty = self.infer_type(condition)?;
                 if cond_ty != OvsmType::Bool && cond_ty != OvsmType::Any {
-                    self.warnings.push(format!(
-                        "Condition should be Bool, got {:?}", cond_ty
-                    ));
+                    self.warnings
+                        .push(format!("Condition should be Bool, got {:?}", cond_ty));
                 }
 
                 self.env.push_scope();
@@ -226,9 +235,8 @@ impl TypeChecker {
             Statement::While { condition, body } => {
                 let cond_ty = self.infer_type(condition)?;
                 if cond_ty != OvsmType::Bool && cond_ty != OvsmType::Any {
-                    self.warnings.push(format!(
-                        "While condition should be Bool, got {:?}", cond_ty
-                    ));
+                    self.warnings
+                        .push(format!("While condition should be Bool, got {:?}", cond_ty));
                 }
 
                 self.env.push_scope();
@@ -240,7 +248,11 @@ impl TypeChecker {
                 OvsmType::Null
             }
 
-            Statement::For { variable, iterable, body } => {
+            Statement::For {
+                variable,
+                iterable,
+                body,
+            } => {
                 let iter_ty = self.infer_type(iterable)?;
 
                 let elem_ty = match iter_ty {
@@ -311,11 +323,11 @@ impl TypeChecker {
                 Ok(OvsmType::Object(fields))
             }
 
-            Expression::Variable(name) => {
-                self.env.lookup(name)
-                    .cloned()
-                    .ok_or_else(|| Error::runtime(format!("Undefined variable: {}", name)))
-            }
+            Expression::Variable(name) => self
+                .env
+                .lookup(name)
+                .cloned()
+                .ok_or_else(|| Error::runtime(format!("Undefined variable: {}", name))),
 
             Expression::Binary { op, left, right } => {
                 let left_ty = self.infer_type(left)?;
@@ -323,7 +335,11 @@ impl TypeChecker {
 
                 use crate::BinaryOp;
                 match op {
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Mod => {
                         // Numeric operations
                         if left_ty == OvsmType::F64 || right_ty == OvsmType::F64 {
                             Ok(OvsmType::F64)
@@ -331,10 +347,12 @@ impl TypeChecker {
                             Ok(OvsmType::I64)
                         }
                     }
-                    BinaryOp::Eq | BinaryOp::NotEq | BinaryOp::Lt | BinaryOp::Gt
-                    | BinaryOp::LtEq | BinaryOp::GtEq => {
-                        Ok(OvsmType::Bool)
-                    }
+                    BinaryOp::Eq
+                    | BinaryOp::NotEq
+                    | BinaryOp::Lt
+                    | BinaryOp::Gt
+                    | BinaryOp::LtEq
+                    | BinaryOp::GtEq => Ok(OvsmType::Bool),
                     BinaryOp::And | BinaryOp::Or => Ok(OvsmType::Bool),
                     _ => Ok(OvsmType::Any),
                 }
@@ -388,16 +406,19 @@ impl TypeChecker {
             Expression::FieldAccess { object, field } => {
                 let obj_ty = self.infer_type(object)?;
                 match obj_ty {
-                    OvsmType::Object(fields) => {
-                        fields.get(field).cloned().ok_or_else(|| {
-                            Error::runtime(format!("Unknown field: {}", field))
-                        })
-                    }
+                    OvsmType::Object(fields) => fields
+                        .get(field)
+                        .cloned()
+                        .ok_or_else(|| Error::runtime(format!("Unknown field: {}", field))),
                     _ => Ok(OvsmType::Any),
                 }
             }
 
-            Expression::Ternary { condition, then_expr, else_expr } => {
+            Expression::Ternary {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
                 let _cond_ty = self.infer_type(condition)?;
                 let then_ty = self.infer_type(then_expr)?;
                 let else_ty = self.infer_type(else_expr)?;
@@ -453,7 +474,7 @@ mod tests {
 
     #[test]
     fn test_define_creates_binding() {
-        use crate::{SExprScanner, SExprParser};
+        use crate::{SExprParser, SExprScanner};
 
         let source = "(define x 42)\nx";
         let mut scanner = SExprScanner::new(source);
@@ -467,13 +488,17 @@ mod tests {
         let result = checker.check(&program);
 
         eprintln!("Result: {:?}", result);
-        assert!(result.is_ok(), "Should type-check successfully: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Should type-check successfully: {:?}",
+            result
+        );
     }
 
     #[test]
     fn test_arithmetic_expression() {
-        use crate::{SExprScanner, SExprParser};
-        use crate::compiler::{Compiler, CompileOptions};
+        use crate::compiler::{CompileOptions, Compiler};
+        use crate::{SExprParser, SExprScanner};
 
         // Test nested arithmetic like AMM
         let source = r#"
@@ -483,7 +508,7 @@ mod tests {
 c
 "#;
         let options = CompileOptions {
-            opt_level: 0,  // Disable optimization to see actual IR
+            opt_level: 0, // Disable optimization to see actual IR
             ..CompileOptions::default()
         };
         let compiler = Compiler::new(options);

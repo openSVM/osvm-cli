@@ -1328,7 +1328,8 @@ impl McpService {
             }
         }
         // Otherwise return first enabled server
-        self.servers.iter()
+        self.servers
+            .iter()
             .find(|(_, config)| config.enabled)
             .map(|(id, _)| id.clone())
     }
@@ -1668,7 +1669,8 @@ impl McpService {
                 while reader.read_line(&mut line).await? > 0 {
                     let line_trimmed = line.trim();
                     if line_trimmed.starts_with("{") {
-                        let mcp_response: Result<McpResponse, _> = serde_json::from_str(line_trimmed);
+                        let mcp_response: Result<McpResponse, _> =
+                            serde_json::from_str(line_trimmed);
                         if let Ok(response) = mcp_response {
                             if response.id == request.id {
                                 if let Some(error) = response.error {
@@ -2891,15 +2893,23 @@ impl McpService {
             if compressed_marker == "brotli" {
                 crate::tui_log!("🗜️  MCP STDIO: Decompressing Brotli response...");
 
-                if let Some(compressed_b64) = extracted_result.get("data").and_then(|v| v.as_str()) {
+                if let Some(compressed_b64) = extracted_result.get("data").and_then(|v| v.as_str())
+                {
                     use base64::Engine;
-                    if let Ok(compressed) = base64::engine::general_purpose::STANDARD.decode(compressed_b64) {
+                    if let Ok(compressed) =
+                        base64::engine::general_purpose::STANDARD.decode(compressed_b64)
+                    {
                         let mut decompressed = Vec::new();
                         let mut decoder = brotli::Decompressor::new(&compressed[..], 4096);
                         if std::io::Read::read_to_end(&mut decoder, &mut decompressed).is_ok() {
-                            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&decompressed) {
-                                crate::tui_log!("✅ MCP STDIO: Decompression successful ({} -> {} bytes)",
-                                         compressed.len(), decompressed.len());
+                            if let Ok(json) =
+                                serde_json::from_slice::<serde_json::Value>(&decompressed)
+                            {
+                                crate::tui_log!(
+                                    "✅ MCP STDIO: Decompression successful ({} -> {} bytes)",
+                                    compressed.len(),
+                                    decompressed.len()
+                                );
                                 extracted_result = json;
                             }
                         }

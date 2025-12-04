@@ -56,7 +56,7 @@ fn default_max_tokens() -> u32 {
 }
 
 fn default_timeout() -> u64 {
-    10  // Fast timeout for quick fallback
+    120 // Generous timeout for slow public endpoint responses
 }
 
 impl Default for AiConfig {

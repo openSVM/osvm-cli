@@ -14,18 +14,15 @@
 //! ```
 
 use crate::utils::collab::{
-    CollabRegistry, CollabError, SessionConfig, SessionRole,
-    CollaborativeSession, CollabWebSocketServer,
-    Annotation, AnnotationType, AnnotationSeverity,
-    session::ParticipantColor,
-    session::ClientType,
-    presence::UserPresence,
+    presence::UserPresence, session::ClientType, session::ParticipantColor, Annotation,
+    AnnotationSeverity, AnnotationType, CollabError, CollabRegistry, CollabWebSocketServer,
+    CollaborativeSession, SessionConfig, SessionRole,
 };
 
-use std::sync::Arc;
-use std::process::Command;
-use tokio::sync::OnceCell;
 use colored::Colorize;
+use std::process::Command;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 
 /// Get the current username
 fn get_username() -> String {
@@ -39,9 +36,10 @@ static COLLAB_REGISTRY: OnceCell<Arc<CollabRegistry>> = OnceCell::const_new();
 
 /// Get the global collab registry
 pub async fn get_registry() -> Arc<CollabRegistry> {
-    COLLAB_REGISTRY.get_or_init(|| async {
-        Arc::new(CollabRegistry::new())
-    }).await.clone()
+    COLLAB_REGISTRY
+        .get_or_init(|| async { Arc::new(CollabRegistry::new()) })
+        .await
+        .clone()
 }
 
 /// Start a new collaborative session
@@ -67,19 +65,57 @@ pub async fn start_session(
     let info = session.connection_info();
 
     println!();
-    println!("{}", "╔═══════════════════════════════════════════════════════════╗".green());
-    println!("{}", "║           COLLABORATIVE INVESTIGATION STARTED             ║".green());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
+    println!(
+        "{}",
+        "╔═══════════════════════════════════════════════════════════╗".green()
+    );
+    println!(
+        "{}",
+        "║           COLLABORATIVE INVESTIGATION STARTED             ║".green()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
     println!("║ {:<58}║", format!("Session: {}", info.name).white());
-    println!("║ {:<58}║", format!("ID: {}", &info.session_id[..8]).white());
-    println!("║ {:<58}║", format!("Invite Code: {}", info.invite_code).yellow().bold());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
-    println!("{}", "║ Share this command with collaborators:                    ║".cyan());
-    println!("║ {:<58}║", format!("  osvm collab join {}", info.invite_code).white().bold());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
-    println!("{}", "║ Or attach via tmux:                                       ║".cyan());
-    println!("║ {:<58}║", format!("  tmux attach -t {}", info.tmux_session).white());
-    println!("{}", "╚═══════════════════════════════════════════════════════════╝".green());
+    println!(
+        "║ {:<58}║",
+        format!("ID: {}", &info.session_id[..8]).white()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("Invite Code: {}", info.invite_code).yellow().bold()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
+    println!(
+        "{}",
+        "║ Share this command with collaborators:                    ║".cyan()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("  osvm collab join {}", info.invite_code)
+            .white()
+            .bold()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
+    println!(
+        "{}",
+        "║ Or attach via tmux:                                       ║".cyan()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("  tmux attach -t {}", info.tmux_session).white()
+    );
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════════════════╝".green()
+    );
     println!();
 
     if let Some(wallet) = &info.target_wallet {
@@ -119,13 +155,19 @@ pub async fn join_session(
                 println!("{}", format!("Joining session: {}", session_name).green());
 
                 // Add ourselves as a participant
-                let participant = session.add_participant(
-                    display_name,
-                    SessionRole::Editor,
-                    ClientType::Tmux,
-                ).await?;
+                let participant = session
+                    .add_participant(display_name, SessionRole::Editor, ClientType::Tmux)
+                    .await?;
 
-                println!("{}", format!("Connected as: {} ({})", participant.name, participant.id[..8].to_string()).cyan());
+                println!(
+                    "{}",
+                    format!(
+                        "Connected as: {} ({})",
+                        participant.name,
+                        &participant.id[..8]
+                    )
+                    .cyan()
+                );
 
                 // Attach to tmux session
                 let status = Command::new("tmux")
@@ -144,7 +186,10 @@ pub async fn join_session(
     // If not found locally, try direct tmux session name
     let tmux_session = format!("osvm_collab_{}", invite_code.to_lowercase());
 
-    println!("{}", format!("Attempting to join tmux session: {}", tmux_session).cyan());
+    println!(
+        "{}",
+        format!("Attempting to join tmux session: {}", tmux_session).cyan()
+    );
 
     let status = Command::new("tmux")
         .args(["attach-session", "-t", &tmux_session])
@@ -161,7 +206,10 @@ pub async fn join_session(
             eprintln!("  2. The session host is still running");
             eprintln!("  3. You're on the same network as the host");
             eprintln!();
-            eprintln!("{}", "For remote sessions, ask the host for the WebSocket URL.".cyan());
+            eprintln!(
+                "{}",
+                "For remote sessions, ask the host for the WebSocket URL.".cyan()
+            );
         }
     }
 
@@ -174,7 +222,10 @@ pub async fn list_sessions() -> Result<(), Box<dyn std::error::Error>> {
     let sessions = registry.list_sessions().await;
 
     if sessions.is_empty() {
-        println!("{}", "No active collaborative sessions found locally.".yellow());
+        println!(
+            "{}",
+            "No active collaborative sessions found locally.".yellow()
+        );
         println!();
         println!("{}", "You can also check for tmux sessions:".cyan());
         println!("  tmux list-sessions | grep osvm_collab");
@@ -191,12 +242,20 @@ pub async fn list_sessions() -> Result<(), Box<dyn std::error::Error>> {
 
             println!();
             println!("{}: {}", "Session".cyan(), name.white().bold());
-            println!("  {}: {}", "Invite Code".yellow(), info.invite_code.white().bold());
+            println!(
+                "  {}: {}",
+                "Invite Code".yellow(),
+                info.invite_code.white().bold()
+            );
             println!("  {}: {}", "Participants".cyan(), count);
             if let Some(wallet) = &info.target_wallet {
                 println!("  {}: {}", "Target Wallet".cyan(), wallet);
             }
-            println!("  {}: tmux attach -t {}", "Attach".cyan(), info.tmux_session);
+            println!(
+                "  {}: tmux attach -t {}",
+                "Attach".cyan(),
+                info.tmux_session
+            );
         }
     }
 
@@ -261,7 +320,12 @@ pub async fn add_annotation(
 
     let id = session.annotations().add(annotation).await;
 
-    println!("{} {} {}", severity.emoji(), "Annotation added:".green(), id[..8].to_string().cyan());
+    println!(
+        "{} {} {}",
+        severity.emoji(),
+        "Annotation added:".green(),
+        id[..8].to_string().cyan()
+    );
     println!("  {}: {}", "Target".cyan(), annotation_type);
     println!("  {}: {}", "Text".cyan(), text);
 
@@ -269,7 +333,9 @@ pub async fn add_annotation(
 }
 
 /// List annotations in a session
-pub async fn list_annotations(session_id: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn list_annotations(
+    session_id: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let registry = get_registry().await;
 
     let session = if let Some(id) = session_id {
@@ -297,7 +363,8 @@ pub async fn list_annotations(session_id: Option<String>) -> Result<(), Box<dyn 
 
     for annotation in annotations {
         println!();
-        println!("{} {} [{}]",
+        println!(
+            "{} {} [{}]",
             annotation.severity.emoji(),
             annotation.text.white(),
             annotation.author_name.cyan()
@@ -335,17 +402,50 @@ pub async fn start_server(
 
     let router = ws_server.router();
 
-    println!("{}", "╔═══════════════════════════════════════════════════════════╗".green());
-    println!("{}", "║          COLLABORATIVE SERVER STARTING                    ║".green());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
-    println!("║ {:<58}║", format!("Listening on: http://{}:{}", host, port).white());
-    println!("║ {:<58}║", format!("WebSocket: ws://{}:{}/collab/<session_id>", host, port).cyan());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
-    println!("{}", "║ Endpoints:                                                ║".cyan());
-    println!("║ {:<58}║", "  GET  /collab/join/<invite>  - Join page".white());
-    println!("║ {:<58}║", "  GET  /collab/<session>      - WebSocket".white());
-    println!("║ {:<58}║", "  GET  /api/collab/sessions   - List sessions".white());
-    println!("{}", "╚═══════════════════════════════════════════════════════════╝".green());
+    println!(
+        "{}",
+        "╔═══════════════════════════════════════════════════════════╗".green()
+    );
+    println!(
+        "{}",
+        "║          COLLABORATIVE SERVER STARTING                    ║".green()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("Listening on: http://{}:{}", host, port).white()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("WebSocket: ws://{}:{}/collab/<session_id>", host, port).cyan()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
+    println!(
+        "{}",
+        "║ Endpoints:                                                ║".cyan()
+    );
+    println!(
+        "║ {:<58}║",
+        "  GET  /collab/join/<invite>  - Join page".white()
+    );
+    println!(
+        "║ {:<58}║",
+        "  GET  /collab/<session>      - WebSocket".white()
+    );
+    println!(
+        "║ {:<58}║",
+        "  GET  /api/collab/sessions   - List sessions".white()
+    );
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════════════════╝".green()
+    );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router).await?;
@@ -367,7 +467,8 @@ pub async fn handle_collab_command(
             start_session(name, wallet, max, password).await?;
         }
         "join" => {
-            let code = args.get_one::<String>("code")
+            let code = args
+                .get_one::<String>("code")
                 .ok_or("Invite code required")?;
             let name = args.get_one::<String>("name").cloned();
             join_session(code, name).await?;
@@ -376,9 +477,9 @@ pub async fn handle_collab_command(
             list_sessions().await?;
         }
         "annotate" | "note" => {
-            let target = args.get_one::<String>("target")
-                .ok_or("Target required")?;
-            let text = args.get_one::<String>("text")
+            let target = args.get_one::<String>("target").ok_or("Target required")?;
+            let text = args
+                .get_one::<String>("text")
                 .ok_or("Annotation text required")?;
             let severity = args.get_one::<String>("severity").cloned();
             add_annotation(None, target, text, severity).await?;
@@ -387,7 +488,8 @@ pub async fn handle_collab_command(
             list_annotations(None).await?;
         }
         "server" => {
-            let port = args.get_one::<String>("port")
+            let port = args
+                .get_one::<String>("port")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(8080);
             let host = args.get_one::<String>("host").cloned();
@@ -395,7 +497,10 @@ pub async fn handle_collab_command(
         }
         _ => {
             eprintln!("{}", "Unknown collab subcommand".red());
-            eprintln!("{}", "Available: start, join, list, annotate, annotations, server".yellow());
+            eprintln!(
+                "{}",
+                "Available: start, join, list, annotate, annotations, server".yellow()
+            );
         }
     }
 
@@ -416,17 +521,18 @@ static FEDERATION_MANAGER: TokioOnceCell<Arc<CollabFederationManager>> = TokioOn
 
 /// Get or initialize the federation manager
 pub async fn get_federation_manager() -> Arc<CollabFederationManager> {
-    FEDERATION_MANAGER.get_or_init(|| async {
-        let node_id = format!("!{:08x}", std::process::id());
-        let public_address = "http://localhost:8080".to_string(); // Default
-        Arc::new(CollabFederationManager::new(&node_id, &public_address))
-    }).await.clone()
+    FEDERATION_MANAGER
+        .get_or_init(|| async {
+            let node_id = format!("!{:08x}", std::process::id());
+            let public_address = "http://localhost:8080".to_string(); // Default
+            Arc::new(CollabFederationManager::new(&node_id, &public_address))
+        })
+        .await
+        .clone()
 }
 
 /// Add a federation peer
-pub async fn add_federation_peer(
-    address: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn add_federation_peer(address: &str) -> Result<(), Box<dyn std::error::Error>> {
     let manager = get_federation_manager().await;
 
     // Generate node ID from address
@@ -434,24 +540,38 @@ pub async fn add_federation_peer(
 
     manager.add_peer(&node_id, address).await?;
 
-    println!("{} {} {}", "✓".green(), "Added federation peer:".cyan(), address.white());
+    println!(
+        "{} {} {}",
+        "✓".green(),
+        "Added federation peer:".cyan(),
+        address.white()
+    );
     println!("  {}: {}", "Node ID".bright_black(), node_id);
-    println!("  {}", "(Saved to ~/.osvm/collab/federation.json)".bright_black());
+    println!(
+        "  {}",
+        "(Saved to ~/.osvm/collab/federation.json)".bright_black()
+    );
 
     Ok(())
 }
 
 /// Remove a federation peer
-pub async fn remove_federation_peer(
-    address: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn remove_federation_peer(address: &str) -> Result<(), Box<dyn std::error::Error>> {
     let manager = get_federation_manager().await;
 
     let node_id = format!("!{:08x}", crc32fast::hash(address.as_bytes()));
     manager.remove_peer(&node_id).await?;
 
-    println!("{} {} {}", "✓".green(), "Removed federation peer:".cyan(), address.white());
-    println!("  {}", "(Saved to ~/.osvm/collab/federation.json)".bright_black());
+    println!(
+        "{} {} {}",
+        "✓".green(),
+        "Removed federation peer:".cyan(),
+        address.white()
+    );
+    println!(
+        "  {}",
+        "(Saved to ~/.osvm/collab/federation.json)".bright_black()
+    );
 
     Ok(())
 }
@@ -500,9 +620,18 @@ pub async fn discover_sessions() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    println!("{}", "╔═══════════════════════════════════════════════════════════╗".green());
-    println!("{}", "║          FEDERATED SESSIONS DISCOVERED                    ║".green());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
+    println!(
+        "{}",
+        "╔═══════════════════════════════════════════════════════════╗".green()
+    );
+    println!(
+        "{}",
+        "║          FEDERATED SESSIONS DISCOVERED                    ║".green()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
 
     for session in sessions {
         let status_icon = match session.status {
@@ -513,19 +642,41 @@ pub async fn discover_sessions() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         println!("║ {} {:<55}║", status_icon, session.name.white().bold());
-        println!("║   {}: {:<49}║", "Invite".cyan(), session.invite_code.yellow());
-        println!("║   {}: {:<49}║", "Host".bright_black(), &session.host_node_id[..8]);
-        println!("║   {}: {}/{:<44}║", "Participants".bright_black(),
+        println!(
+            "║   {}: {:<49}║",
+            "Invite".cyan(),
+            session.invite_code.yellow()
+        );
+        println!(
+            "║   {}: {:<49}║",
+            "Host".bright_black(),
+            &session.host_node_id[..8]
+        );
+        println!(
+            "║   {}: {}/{:<44}║",
+            "Participants".bright_black(),
             session.participant_count,
-            if session.max_participants == 0 { "∞".to_string() } else { session.max_participants.to_string() }
+            if session.max_participants == 0 {
+                "∞".to_string()
+            } else {
+                session.max_participants.to_string()
+            }
         );
         if let Some(wallet) = &session.target_wallet {
-            println!("║   {}: {}...{:<38}║", "Wallet".bright_black(), &wallet[..4], &wallet[wallet.len()-4..]);
+            println!(
+                "║   {}: {}...{:<38}║",
+                "Wallet".bright_black(),
+                &wallet[..4],
+                &wallet[wallet.len() - 4..]
+            );
         }
         println!("║ {:<58}║", "─".repeat(56));
     }
 
-    println!("{}", "╚═══════════════════════════════════════════════════════════╝".green());
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════════════════╝".green()
+    );
     println!();
     println!("{}", "Join a session with:".cyan());
     println!("  osvm collab join <INVITE_CODE>");
@@ -558,15 +709,41 @@ pub async fn publish_session_to_federation(
     federation.publish_session(session.clone()).await?;
 
     let info = session.connection_info();
-    println!("{}", "╔═══════════════════════════════════════════════════════════╗".green());
-    println!("{}", "║          SESSION PUBLISHED TO FEDERATION                  ║".green());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
+    println!(
+        "{}",
+        "╔═══════════════════════════════════════════════════════════╗".green()
+    );
+    println!(
+        "{}",
+        "║          SESSION PUBLISHED TO FEDERATION                  ║".green()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
     println!("║ {:<58}║", format!("Session: {}", info.name).white());
-    println!("║ {:<58}║", format!("Invite: {}", info.invite_code).yellow().bold());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
-    println!("{}", "║ Investigators on federated peers can now join with:       ║".cyan());
-    println!("║ {:<58}║", format!("  osvm collab join {}", info.invite_code).white().bold());
-    println!("{}", "╚═══════════════════════════════════════════════════════════╝".green());
+    println!(
+        "║ {:<58}║",
+        format!("Invite: {}", info.invite_code).yellow().bold()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
+    println!(
+        "{}",
+        "║ Investigators on federated peers can now join with:       ║".cyan()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("  osvm collab join {}", info.invite_code)
+            .white()
+            .bold()
+    );
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════════════════╝".green()
+    );
 
     Ok(())
 }
@@ -577,15 +754,45 @@ pub async fn show_federation_status() -> Result<(), Box<dyn std::error::Error>> 
     let peers = manager.list_peers().await;
     let sessions = manager.list_all_sessions().await;
 
-    println!("{}", "╔═══════════════════════════════════════════════════════════╗".green());
-    println!("{}", "║              FEDERATION STATUS                            ║".green());
-    println!("{}", "╠═══════════════════════════════════════════════════════════╣".green());
-    println!("║ {:<58}║", format!("Node ID: {}", manager.node_id()).white());
-    println!("║ {:<58}║", format!("Connected Peers: {}", peers.len()).cyan());
-    println!("║ {:<58}║", format!("Known Sessions: {}", sessions.len()).cyan());
-    println!("║ {:<58}║", format!("Active Sessions: {}",
-        sessions.iter().filter(|s| s.status == FederatedSessionStatus::Active).count()).green());
-    println!("{}", "╚═══════════════════════════════════════════════════════════╝".green());
+    println!(
+        "{}",
+        "╔═══════════════════════════════════════════════════════════╗".green()
+    );
+    println!(
+        "{}",
+        "║              FEDERATION STATUS                            ║".green()
+    );
+    println!(
+        "{}",
+        "╠═══════════════════════════════════════════════════════════╣".green()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("Node ID: {}", manager.node_id()).white()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("Connected Peers: {}", peers.len()).cyan()
+    );
+    println!(
+        "║ {:<58}║",
+        format!("Known Sessions: {}", sessions.len()).cyan()
+    );
+    println!(
+        "║ {:<58}║",
+        format!(
+            "Active Sessions: {}",
+            sessions
+                .iter()
+                .filter(|s| s.status == FederatedSessionStatus::Active)
+                .count()
+        )
+        .green()
+    );
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════════════════╝".green()
+    );
 
     Ok(())
 }
@@ -612,7 +819,10 @@ pub fn print_help() {
     println!("{}", "Start WebSocket server (for browser clients):".cyan());
     println!("  osvm collab server --port 8080");
     println!();
-    println!("{}", "FEDERATION (Cross-Node Collaboration):".yellow().bold());
+    println!(
+        "{}",
+        "FEDERATION (Cross-Node Collaboration):".yellow().bold()
+    );
     println!();
     println!("{}", "Add a federation peer:".cyan());
     println!("  osvm collab peers add http://peer-ip:8080");
@@ -649,25 +859,27 @@ pub async fn load_federation_dashboard_state() -> FederationDashboardState {
 
     FederationDashboardState {
         node_id: manager.node_id().to_string(),
-        peers: peers.into_iter().map(|(node_id, address)| {
-            FederationPeerInfo {
+        peers: peers
+            .into_iter()
+            .map(|(node_id, address)| FederationPeerInfo {
                 node_id,
                 address,
                 status: PeerStatus::Unknown,
                 latency_ms: None,
                 sessions_hosted: 0,
                 last_seen: None,
-            }
-        }).collect(),
-        sessions: sessions.into_iter().map(|s| {
-            FederationSessionInfo {
+            })
+            .collect(),
+        sessions: sessions
+            .into_iter()
+            .map(|s| FederationSessionInfo {
                 session_id: s.session_id,
                 name: s.name,
                 host_node_id: s.host_node_id,
                 participant_count: s.participant_count,
                 status: format!("{:?}", s.status),
-            }
-        }).collect(),
+            })
+            .collect(),
         last_refresh: Some(std::time::Instant::now()),
         total_annotations: 0,
         connection_graph: Vec::new(),
@@ -727,7 +939,8 @@ pub async fn refresh_federation_dashboard_state() -> FederationDashboardState {
 
     for (node_id, address, status, latency) in results {
         // Count sessions hosted by this peer
-        let hosted_count = sessions.iter()
+        let hosted_count = sessions
+            .iter()
             .filter(|s| s.host_node_id == node_id)
             .count();
 
@@ -757,15 +970,16 @@ pub async fn refresh_federation_dashboard_state() -> FederationDashboardState {
     FederationDashboardState {
         node_id: my_node_id,
         peers: peer_infos,
-        sessions: sessions.into_iter().map(|s| {
-            FederationSessionInfo {
+        sessions: sessions
+            .into_iter()
+            .map(|s| FederationSessionInfo {
                 session_id: s.session_id,
                 name: s.name,
                 host_node_id: s.host_node_id,
                 participant_count: s.participant_count,
                 status: format!("{:?}", s.status),
-            }
-        }).collect(),
+            })
+            .collect(),
         last_refresh: Some(std::time::Instant::now()),
         total_annotations: 0,
         connection_graph,
@@ -778,7 +992,9 @@ pub async fn tui_add_peer(address: &str) -> Result<FederationDashboardState, Str
     let manager = get_federation_manager().await;
     let node_id = format!("!{:08x}", crc32fast::hash(address.as_bytes()));
 
-    manager.add_peer(&node_id, address).await
+    manager
+        .add_peer(&node_id, address)
+        .await
         .map_err(|e| format!("Failed to add peer: {}", e))?;
 
     Ok(refresh_federation_dashboard_state().await)
@@ -788,7 +1004,9 @@ pub async fn tui_add_peer(address: &str) -> Result<FederationDashboardState, Str
 pub async fn tui_remove_peer(node_id: &str) -> Result<FederationDashboardState, String> {
     let manager = get_federation_manager().await;
 
-    manager.remove_peer(node_id).await
+    manager
+        .remove_peer(node_id)
+        .await
         .map_err(|e| format!("Failed to remove peer: {}", e))?;
 
     Ok(refresh_federation_dashboard_state().await)

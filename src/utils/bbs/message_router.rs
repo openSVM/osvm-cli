@@ -12,9 +12,7 @@ pub struct MessageRouter {
 
 impl MessageRouter {
     pub fn new() -> Self {
-        Self {
-            _connected: false,
-        }
+        Self { _connected: false }
     }
 
     /// Start message router in background

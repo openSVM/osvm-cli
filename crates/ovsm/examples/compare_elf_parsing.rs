@@ -1,9 +1,5 @@
 // Compare how RBPF parses our ELF vs Solana's working ELF
-use solana_rbpf::{
-    elf::Executable,
-    program::BuiltinProgram,
-    vm::TestContextObject,
-};
+use solana_rbpf::{elf::Executable, program::BuiltinProgram, vm::TestContextObject};
 use std::sync::Arc;
 
 fn parse_and_report(name: &str, path: &str) {
@@ -65,15 +61,18 @@ fn parse_and_report(name: &str, path: &str) {
                 if shstrtab_offset + 64 <= elf_bytes.len() as u64 {
                     let sh_name = u32::from_le_bytes(
                         elf_bytes[shstrtab_offset as usize..shstrtab_offset as usize + 4]
-                            .try_into().unwrap()
+                            .try_into()
+                            .unwrap(),
                     );
                     let sh_offset = u64::from_le_bytes(
                         elf_bytes[shstrtab_offset as usize + 24..shstrtab_offset as usize + 32]
-                            .try_into().unwrap()
+                            .try_into()
+                            .unwrap(),
                     );
                     let sh_size = u64::from_le_bytes(
                         elf_bytes[shstrtab_offset as usize + 32..shstrtab_offset as usize + 40]
-                            .try_into().unwrap()
+                            .try_into()
+                            .unwrap(),
                     );
 
                     println!("  shstrtab section header:");
@@ -114,14 +113,8 @@ fn main() {
     );
 
     // Parse our original ELF that fails
-    parse_and_report(
-        "Our minimal_sbpf.so (V2 attempt)",
-        "/tmp/minimal_sbpf.so"
-    );
+    parse_and_report("Our minimal_sbpf.so (V2 attempt)", "/tmp/minimal_sbpf.so");
 
     // Parse our new working V1 ELF
-    parse_and_report(
-        "Our solana_v1.so (WORKING!)",
-        "/tmp/solana_v1.so"
-    );
+    parse_and_report("Our solana_v1.so (WORKING!)", "/tmp/solana_v1.so");
 }

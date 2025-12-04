@@ -16,8 +16,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 
 use super::db;
 
@@ -166,7 +166,10 @@ impl FederationManager {
             peer.status = PeerStatus::Online;
         }
 
-        self.peers.write().await.insert(node_id.clone(), peer.clone());
+        self.peers
+            .write()
+            .await
+            .insert(node_id.clone(), peer.clone());
         Ok(peer)
     }
 
@@ -248,7 +251,8 @@ impl FederationManager {
                 } else if let Ok(direct) = serde_json::from_str::<SyncResponse>(&body) {
                     direct
                 } else {
-                    peer.status = PeerStatus::Error("Parse error: invalid response format".to_string());
+                    peer.status =
+                        PeerStatus::Error("Parse error: invalid response format".to_string());
                     peer.failure_count += 1;
                     return Err("Invalid response format".to_string());
                 };
@@ -260,7 +264,13 @@ impl FederationManager {
 
                 // Process gossip - add any new peers
                 for peer_addr in sync_resp.peers {
-                    if !self.peers.read().await.values().any(|p| p.address == peer_addr) {
+                    if !self
+                        .peers
+                        .read()
+                        .await
+                        .values()
+                        .any(|p| p.address == peer_addr)
+                    {
                         let _ = self.add_peer(&peer_addr).await;
                     }
                 }

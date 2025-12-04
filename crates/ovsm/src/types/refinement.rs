@@ -98,12 +98,12 @@ pub enum PredicateExpr {
 /// Comparison operators for predicates
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompareOp {
-    Lt,     // <
-    LtEq,   // <=
-    Gt,     // >
-    GtEq,   // >=
-    Eq,     // ==
-    NotEq,  // !=
+    Lt,    // <
+    LtEq,  // <=
+    Gt,    // >
+    GtEq,  // >=
+    Eq,    // ==
+    NotEq, // !=
 }
 
 impl RefinementType {
@@ -197,7 +197,11 @@ impl RefinementType {
                     let left = Self::expr_to_predicate_expr(&args[0].value, &var);
                     let right = Self::expr_to_predicate_expr(&args[1].value, &var);
                     if let (Some(l), Some(r)) = (left, right) {
-                        Predicate::Compare { op, left: l, right: r }
+                        Predicate::Compare {
+                            op,
+                            left: l,
+                            right: r,
+                        }
                     } else {
                         // Complex expression, use opaque
                         Predicate::Opaque(Self::hash_expr(predicate_expr))
@@ -258,7 +262,11 @@ impl RefinementType {
                     let l = Self::expr_to_predicate_expr(left, &var);
                     let r = Self::expr_to_predicate_expr(right, &var);
                     if let (Some(l), Some(r)) = (l, r) {
-                        Predicate::Compare { op, left: l, right: r }
+                        Predicate::Compare {
+                            op,
+                            left: l,
+                            right: r,
+                        }
                     } else {
                         Predicate::Opaque(Self::hash_expr(predicate_expr))
                     }
@@ -283,7 +291,10 @@ impl RefinementType {
     }
 
     /// Convert an AST expression to a predicate expression
-    fn expr_to_predicate_expr(expr: &crate::parser::Expression, var: &str) -> Option<PredicateExpr> {
+    fn expr_to_predicate_expr(
+        expr: &crate::parser::Expression,
+        var: &str,
+    ) -> Option<PredicateExpr> {
         use crate::parser::Expression;
 
         match expr {
@@ -327,8 +338,8 @@ impl RefinementType {
 
     /// Generate a hash for an expression (used for opaque predicates)
     fn hash_expr(expr: &crate::parser::Expression) -> u64 {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
         format!("{:?}", expr).hash(&mut hasher);
@@ -356,31 +367,25 @@ impl Predicate {
                 })
             }
 
-            Predicate::And(p, q) => {
-                match (p.evaluate(value, env), q.evaluate(value, env)) {
-                    (Some(false), _) | (_, Some(false)) => Some(false),
-                    (Some(true), Some(true)) => Some(true),
-                    _ => None,
-                }
-            }
+            Predicate::And(p, q) => match (p.evaluate(value, env), q.evaluate(value, env)) {
+                (Some(false), _) | (_, Some(false)) => Some(false),
+                (Some(true), Some(true)) => Some(true),
+                _ => None,
+            },
 
-            Predicate::Or(p, q) => {
-                match (p.evaluate(value, env), q.evaluate(value, env)) {
-                    (Some(true), _) | (_, Some(true)) => Some(true),
-                    (Some(false), Some(false)) => Some(false),
-                    _ => None,
-                }
-            }
+            Predicate::Or(p, q) => match (p.evaluate(value, env), q.evaluate(value, env)) {
+                (Some(true), _) | (_, Some(true)) => Some(true),
+                (Some(false), Some(false)) => Some(false),
+                _ => None,
+            },
 
             Predicate::Not(p) => p.evaluate(value, env).map(|v| !v),
 
-            Predicate::Implies(p, q) => {
-                match (p.evaluate(value, env), q.evaluate(value, env)) {
-                    (Some(false), _) => Some(true),
-                    (Some(true), Some(q_val)) => Some(q_val),
-                    _ => None,
-                }
-            }
+            Predicate::Implies(p, q) => match (p.evaluate(value, env), q.evaluate(value, env)) {
+                (Some(false), _) => Some(true),
+                (Some(true), Some(q_val)) => Some(q_val),
+                _ => None,
+            },
 
             Predicate::Opaque(_) => None, // Cannot evaluate opaque predicates directly
         }
@@ -403,8 +408,16 @@ impl Predicate {
 
             // x < n implies x < m when n <= m
             (
-                Predicate::Compare { op: CompareOp::Lt, left: l1, right: r1 },
-                Predicate::Compare { op: CompareOp::Lt, left: l2, right: r2 },
+                Predicate::Compare {
+                    op: CompareOp::Lt,
+                    left: l1,
+                    right: r1,
+                },
+                Predicate::Compare {
+                    op: CompareOp::Lt,
+                    left: l2,
+                    right: r2,
+                },
             ) if l1 == l2 => {
                 if let (PredicateExpr::Const(n), PredicateExpr::Const(m)) = (r1, r2) {
                     if n <= m {
@@ -416,8 +429,16 @@ impl Predicate {
 
             // x < n implies x <= m when n <= m
             (
-                Predicate::Compare { op: CompareOp::Lt, left: l1, right: r1 },
-                Predicate::Compare { op: CompareOp::LtEq, left: l2, right: r2 },
+                Predicate::Compare {
+                    op: CompareOp::Lt,
+                    left: l1,
+                    right: r1,
+                },
+                Predicate::Compare {
+                    op: CompareOp::LtEq,
+                    left: l2,
+                    right: r2,
+                },
             ) if l1 == l2 => {
                 if let (PredicateExpr::Const(n), PredicateExpr::Const(m)) = (r1, r2) {
                     if n <= m {
@@ -546,10 +567,7 @@ impl RefinementChecker {
             Some(true) => true,
             Some(false) => {
                 self.errors.push(RefinementError {
-                    message: format!(
-                        "Value {} does not satisfy refinement {}",
-                        value, refined
-                    ),
+                    message: format!("Value {} does not satisfy refinement {}", value, refined),
                     location: None,
                 });
                 false
@@ -557,10 +575,7 @@ impl RefinementChecker {
             None => {
                 // Cannot evaluate statically - add proof obligation
                 self.obligations.push(ProofObligation {
-                    description: format!(
-                        "Check that {} satisfies {}",
-                        value, refined.predicate
-                    ),
+                    description: format!("Check that {} satisfies {}", value, refined.predicate),
                     predicate: refined.predicate.clone(),
                     location: None,
                 });
@@ -592,10 +607,7 @@ impl RefinementChecker {
             }
             ImplicationResult::Unknown => {
                 self.obligations.push(ProofObligation {
-                    description: format!(
-                        "Check that {} implies {}",
-                        sub.predicate, sup.predicate
-                    ),
+                    description: format!("Check that {} implies {}", sub.predicate, sup.predicate),
                     predicate: Predicate::Implies(
                         Box::new(sub.predicate.clone()),
                         Box::new(sup.predicate.clone()),
@@ -797,8 +809,8 @@ mod tests {
 
     #[test]
     fn test_from_expr_simple_comparison() {
-        use crate::parser::Expression;
         use crate::parser::Argument;
+        use crate::parser::Expression;
 
         // Create AST for (< x 10)
         let predicate = Expression::ToolCall {
@@ -822,8 +834,8 @@ mod tests {
 
     #[test]
     fn test_from_expr_and_predicate() {
-        use crate::parser::Expression;
         use crate::parser::Argument;
+        use crate::parser::Expression;
 
         // Create AST for (and (>= x 0) (< x 100))
         let predicate = Expression::ToolCall {

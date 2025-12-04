@@ -2,11 +2,11 @@
 //!
 //! Tracks which users are connected, their activity, and cursor positions.
 
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc, Duration};
-use serde::{Serialize, Deserialize};
 
 use super::session::ParticipantColor;
 
@@ -166,7 +166,8 @@ impl PresenceManager {
     /// Get active presences (non-stale)
     pub async fn get_active(&self) -> Vec<UserPresence> {
         let presences = self.presences.read().await;
-        presences.values()
+        presences
+            .values()
             .filter(|p| !p.is_stale())
             .cloned()
             .collect()
@@ -222,7 +223,8 @@ impl PresenceManager {
         let mut presences = self.presences.write().await;
         let threshold = Utc::now() - Duration::seconds(self.stale_timeout_secs);
 
-        let stale_ids: Vec<String> = presences.iter()
+        let stale_ids: Vec<String> = presences
+            .iter()
             .filter(|(_, p)| p.last_activity < threshold)
             .map(|(id, _)| id.clone())
             .collect();
@@ -235,20 +237,19 @@ impl PresenceManager {
     }
 
     /// Get cursors for rendering (grouped by pane)
-    pub async fn get_cursors_by_pane(&self) -> HashMap<usize, Vec<(String, CursorPosition, ParticipantColor)>> {
+    pub async fn get_cursors_by_pane(
+        &self,
+    ) -> HashMap<usize, Vec<(String, CursorPosition, ParticipantColor)>> {
         let presences = self.presences.read().await;
         let mut by_pane: HashMap<usize, Vec<_>> = HashMap::new();
 
         for presence in presences.values() {
             if let Some(cursor) = &presence.cursor {
-                by_pane
-                    .entry(cursor.pane)
-                    .or_default()
-                    .push((
-                        presence.display_name.clone(),
-                        *cursor,
-                        presence.color,
-                    ));
+                by_pane.entry(cursor.pane).or_default().push((
+                    presence.display_name.clone(),
+                    *cursor,
+                    presence.color,
+                ));
             }
         }
 

@@ -4,8 +4,8 @@
 //! This module analyzes the AST to find where symbols are defined.
 
 use ovsm::parser::{Expression, Statement};
-use tower_lsp::lsp_types::{Position, Range};
 use std::collections::HashMap;
+use tower_lsp::lsp_types::{Position, Range};
 
 /// Symbol information for a defined name
 #[derive(Debug, Clone)]
@@ -117,7 +117,11 @@ fn extract_from_statement(stmt: &Statement, source: &str, table: &mut SymbolTabl
             }
             extract_from_expression(value, source, table);
         }
-        Statement::If { condition, then_branch, else_branch } => {
+        Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             extract_from_expression(condition, source, table);
             for s in then_branch {
                 extract_from_statement(s, source, table);
@@ -134,7 +138,11 @@ fn extract_from_statement(stmt: &Statement, source: &str, table: &mut SymbolTabl
                 extract_from_statement(s, source, table);
             }
         }
-        Statement::For { variable, iterable, body } => {
+        Statement::For {
+            variable,
+            iterable,
+            body,
+        } => {
             // Loop variable is a local binding
             if let Some(range) = find_name_in_source(source, variable) {
                 table.add_definition(SymbolInfo {
@@ -149,7 +157,10 @@ fn extract_from_statement(stmt: &Statement, source: &str, table: &mut SymbolTabl
                 extract_from_statement(s, source, table);
             }
         }
-        Statement::Try { body, catch_clauses } => {
+        Statement::Try {
+            body,
+            catch_clauses,
+        } => {
             for s in body {
                 extract_from_statement(s, source, table);
             }
@@ -172,7 +183,10 @@ fn extract_from_statement(stmt: &Statement, source: &str, table: &mut SymbolTabl
                 }
             }
         }
-        Statement::Guard { condition, else_body } => {
+        Statement::Guard {
+            condition,
+            else_body,
+        } => {
             extract_from_expression(condition, source, table);
             for s in else_body {
                 extract_from_statement(s, source, table);
@@ -194,11 +208,12 @@ fn extract_from_expression(expr: &Expression, source: &str, table: &mut SymbolTa
                         if let Expression::Variable(var_name) = &arg.value {
                             if let Some(range) = find_define_name_range(source, var_name) {
                                 // Check if it's a function definition (lambda in value)
-                                let kind = if args.get(1).map(|a| is_lambda(&a.value)).unwrap_or(false) {
-                                    SymbolKind::Function
-                                } else {
-                                    SymbolKind::Variable
-                                };
+                                let kind =
+                                    if args.get(1).map(|a| is_lambda(&a.value)).unwrap_or(false) {
+                                        SymbolKind::Function
+                                    } else {
+                                        SymbolKind::Variable
+                                    };
 
                                 table.add_definition(SymbolInfo {
                                     name: var_name.clone(),
@@ -309,7 +324,11 @@ fn extract_from_expression(expr: &Expression, source: &str, table: &mut SymbolTa
             extract_from_expression(left, source, table);
             extract_from_expression(right, source, table);
         }
-        Expression::Ternary { condition, then_expr, else_expr } => {
+        Expression::Ternary {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
             extract_from_expression(condition, source, table);
             extract_from_expression(then_expr, source, table);
             extract_from_expression(else_expr, source, table);
@@ -354,8 +373,8 @@ fn extract_from_expression(expr: &Expression, source: &str, table: &mut SymbolTa
         Expression::Loop(loop_data) => {
             // Loop iteration variable
             match &loop_data.iteration {
-                ovsm::parser::IterationClause::Numeric { var, .. } |
-                ovsm::parser::IterationClause::Collection { var, .. } => {
+                ovsm::parser::IterationClause::Numeric { var, .. }
+                | ovsm::parser::IterationClause::Collection { var, .. } => {
                     if let Some(range) = find_name_in_source(source, var) {
                         table.add_definition(SymbolInfo {
                             name: var.clone(),
@@ -427,7 +446,11 @@ fn find_name_in_source(source: &str, name: &str) -> Option<Range> {
                     true
                 } else {
                     let after = line.chars().nth(after_pos).unwrap_or(' ');
-                    !after.is_alphanumeric() && after != '_' && after != '-' && after != '?' && after != '!'
+                    !after.is_alphanumeric()
+                        && after != '_'
+                        && after != '-'
+                        && after != '?'
+                        && after != '!'
                 }
             };
 

@@ -15,17 +15,35 @@ fn main() {
 
     for i in 0..e_phnum {
         let phdr_offset = e_phoff as usize + (i as usize * 56);
-        let p_type = u32::from_le_bytes(elf_bytes[phdr_offset..phdr_offset+4].try_into().unwrap());
+        let p_type =
+            u32::from_le_bytes(elf_bytes[phdr_offset..phdr_offset + 4].try_into().unwrap());
 
-        if p_type == 2 { // PT_DYNAMIC
-            let p_offset = u64::from_le_bytes(elf_bytes[phdr_offset+8..phdr_offset+16].try_into().unwrap());
-            let p_filesz = u64::from_le_bytes(elf_bytes[phdr_offset+32..phdr_offset+40].try_into().unwrap());
+        if p_type == 2 {
+            // PT_DYNAMIC
+            let p_offset = u64::from_le_bytes(
+                elf_bytes[phdr_offset + 8..phdr_offset + 16]
+                    .try_into()
+                    .unwrap(),
+            );
+            let p_filesz = u64::from_le_bytes(
+                elf_bytes[phdr_offset + 32..phdr_offset + 40]
+                    .try_into()
+                    .unwrap(),
+            );
 
             // Parse dynamic entries
             for j in 0..(p_filesz / 16) {
                 let entry_offset = p_offset as usize + (j as usize * 16);
-                let d_tag = u64::from_le_bytes(elf_bytes[entry_offset..entry_offset+8].try_into().unwrap());
-                let d_val = u64::from_le_bytes(elf_bytes[entry_offset+8..entry_offset+16].try_into().unwrap());
+                let d_tag = u64::from_le_bytes(
+                    elf_bytes[entry_offset..entry_offset + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                let d_val = u64::from_le_bytes(
+                    elf_bytes[entry_offset + 8..entry_offset + 16]
+                        .try_into()
+                        .unwrap(),
+                );
 
                 match d_tag {
                     6 => dt_symtab = d_val,
@@ -59,12 +77,33 @@ fn main() {
             continue;
         }
 
-        let sh_name = u32::from_le_bytes(elf_bytes[shdr_offset..shdr_offset+4].try_into().unwrap());
-        let sh_type = u32::from_le_bytes(elf_bytes[shdr_offset+4..shdr_offset+8].try_into().unwrap());
-        let sh_flags = u64::from_le_bytes(elf_bytes[shdr_offset+8..shdr_offset+16].try_into().unwrap());
-        let sh_addr = u64::from_le_bytes(elf_bytes[shdr_offset+16..shdr_offset+24].try_into().unwrap());
-        let sh_offset = u64::from_le_bytes(elf_bytes[shdr_offset+24..shdr_offset+32].try_into().unwrap());
-        let sh_size = u64::from_le_bytes(elf_bytes[shdr_offset+32..shdr_offset+40].try_into().unwrap());
+        let sh_name =
+            u32::from_le_bytes(elf_bytes[shdr_offset..shdr_offset + 4].try_into().unwrap());
+        let sh_type = u32::from_le_bytes(
+            elf_bytes[shdr_offset + 4..shdr_offset + 8]
+                .try_into()
+                .unwrap(),
+        );
+        let sh_flags = u64::from_le_bytes(
+            elf_bytes[shdr_offset + 8..shdr_offset + 16]
+                .try_into()
+                .unwrap(),
+        );
+        let sh_addr = u64::from_le_bytes(
+            elf_bytes[shdr_offset + 16..shdr_offset + 24]
+                .try_into()
+                .unwrap(),
+        );
+        let sh_offset = u64::from_le_bytes(
+            elf_bytes[shdr_offset + 24..shdr_offset + 32]
+                .try_into()
+                .unwrap(),
+        );
+        let sh_size = u64::from_le_bytes(
+            elf_bytes[shdr_offset + 32..shdr_offset + 40]
+                .try_into()
+                .unwrap(),
+        );
 
         let type_str = match sh_type {
             0 => "NULL",
@@ -74,11 +113,13 @@ fn main() {
             6 => "DYNAMIC",
             9 => "REL",
             11 => "DYNSYM",
-            _ => "OTHER"
+            _ => "OTHER",
         };
 
-        println!("  [{}] type={} sh_addr=0x{:x} sh_offset=0x{:x} sh_size=0x{:x}",
-                 i, type_str, sh_addr, sh_offset, sh_size);
+        println!(
+            "  [{}] type={} sh_addr=0x{:x} sh_offset=0x{:x} sh_size=0x{:x}",
+            i, type_str, sh_addr, sh_offset, sh_size
+        );
 
         // Check if this matches what RBPF is looking for
         if sh_addr == dt_symtab {

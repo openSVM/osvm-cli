@@ -272,7 +272,6 @@ pub enum Expression {
     // ============================================================================
     // Type System Expressions
     // ============================================================================
-
     /// Type annotation expression (: expr type)
     /// Explicitly annotates an expression with a type for bidirectional type checking
     /// Example: (: 42 u64) or (: (lambda (x) x) (-> i64 i64))
@@ -298,7 +297,6 @@ pub enum Expression {
     // ============================================================================
     // Refinement Types
     // ============================================================================
-
     /// Refinement type expression: {x : T | predicate}
     /// Constrains a type with a predicate that must hold for all values.
     /// Example: {i : u64 | i < 10} - unsigned int less than 10

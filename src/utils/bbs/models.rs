@@ -1,11 +1,14 @@
-use chrono::{Local, MappedLocalTime, TimeZone};
-use super::schema::{board_states, boards, posts, queued_messages, users, moderators, federated_messages, known_peers, mesh_messages};
+use super::schema::{
+    board_states, boards, federated_messages, known_peers, mesh_messages, moderators, posts,
+    queued_messages, users,
+};
 use crate::utils::bbs::hex_id_to_num;
+use chrono::{Local, MappedLocalTime, TimeZone};
 use diesel::prelude::*;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fmt;
 use validator::Validate;
-use once_cell::sync::Lazy;
 
 static RE_NODE_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"^![0-9a-f]{8}$").unwrap());
 // This seems like a reasonable range to clamp timestamps to. Because we're dealing with
@@ -32,7 +35,7 @@ pub struct Board {
     pub name: String,
     pub description: String,
     pub created_at_us: i64,
-    pub creator_id: Option<i32>,  // Owner who can delete
+    pub creator_id: Option<i32>, // Owner who can delete
 }
 
 impl Board {
@@ -56,7 +59,7 @@ pub struct NewBoard<'a> {
     pub description: &'a str,
     #[validate(range(min = EARLY_2024, max=EARLY_2200))]
     pub created_at_us: &'a i64,
-    pub creator_id: Option<i32>,  // Owner who can delete
+    pub creator_id: Option<i32>, // Owner who can delete
 }
 
 #[derive(Debug, Queryable, Selectable)]
@@ -69,9 +72,9 @@ pub struct Post {
     pub user_id: i32,
     pub body: String,
     pub created_at_us: i64,
-    pub parent_id: Option<i32>,  // For local reply threading (null = top-level post)
-    pub federated_parent_id: Option<String>,  // For federated parent references (e.g., "!abc123:5")
-    pub score: i32,  // Upvotes minus downvotes
+    pub parent_id: Option<i32>, // For local reply threading (null = top-level post)
+    pub federated_parent_id: Option<String>, // For federated parent references (e.g., "!abc123:5")
+    pub score: i32,             // Upvotes minus downvotes
 }
 
 impl Post {
@@ -85,7 +88,8 @@ impl Post {
 
     /// Get the unified parent ID (federated takes precedence if set)
     pub fn unified_parent_id(&self) -> Option<String> {
-        self.federated_parent_id.clone()
+        self.federated_parent_id
+            .clone()
             .or_else(|| self.parent_id.map(|id| id.to_string()))
     }
 }
@@ -101,9 +105,9 @@ pub struct NewPost<'a> {
     pub body: &'a str,
     #[validate(range(min = EARLY_2024, max=EARLY_2200))]
     pub created_at_us: &'a i64,
-    pub parent_id: Option<i32>,  // For local reply threading
-    pub federated_parent_id: Option<&'a str>,  // For federated parent references
-    pub score: i32,  // Initial score (default 0)
+    pub parent_id: Option<i32>,               // For local reply threading
+    pub federated_parent_id: Option<&'a str>, // For federated parent references
+    pub score: i32,                           // Initial score (default 0)
 }
 
 #[derive(Debug, Clone, Identifiable, Queryable, Selectable)]
@@ -274,15 +278,15 @@ pub struct NewModerator {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FederatedMessageDb {
     pub id: i32,
-    pub message_id: String,      // Unique: origin_node:local_id
-    pub origin_node: String,     // Node that created this message
-    pub board: String,           // Board name (uppercase)
-    pub author_node: String,     // Author's node ID
-    pub author_name: String,     // Author's display name
-    pub body: String,            // Message content
+    pub message_id: String,        // Unique: origin_node:local_id
+    pub origin_node: String,       // Node that created this message
+    pub board: String,             // Board name (uppercase)
+    pub author_node: String,       // Author's node ID
+    pub author_name: String,       // Author's display name
+    pub body: String,              // Message content
     pub parent_id: Option<String>, // Parent message_id for replies
-    pub created_at: i64,         // Original creation timestamp (seconds)
-    pub received_at: i64,        // When we received this message (seconds)
+    pub created_at: i64,           // Original creation timestamp (seconds)
+    pub received_at: i64,          // When we received this message (seconds)
     pub signature: Option<String>, // Optional signature
 }
 
@@ -340,14 +344,14 @@ pub struct NewKnownPeer<'a> {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct MeshMessageDb {
     pub id: i32,
-    pub from_node_id: i64,       // Meshtastic node ID (u32 stored as i64)
-    pub from_name: Option<String>, // Sender's display name
-    pub to_node_id: Option<i64>, // Destination (null = broadcast)
-    pub channel: i32,            // Meshtastic channel
-    pub body: String,            // Message content
-    pub is_command: bool,        // Was this a /command message?
-    pub received_at_us: i64,     // When we received this (microseconds)
-    pub response: Option<String>, // Our response (if any)
+    pub from_node_id: i64,            // Meshtastic node ID (u32 stored as i64)
+    pub from_name: Option<String>,    // Sender's display name
+    pub to_node_id: Option<i64>,      // Destination (null = broadcast)
+    pub channel: i32,                 // Meshtastic channel
+    pub body: String,                 // Message content
+    pub is_command: bool,             // Was this a /command message?
+    pub received_at_us: i64,          // When we received this (microseconds)
+    pub response: Option<String>,     // Our response (if any)
     pub responded_at_us: Option<i64>, // When we responded
 }
 
@@ -397,7 +401,7 @@ pub struct UserVote {
     pub id: i32,
     pub user_id: i32,
     pub post_id: i32,
-    pub vote_type: i32,  // 1 = upvote, -1 = downvote
+    pub vote_type: i32, // 1 = upvote, -1 = downvote
     pub created_at_us: i64,
 }
 

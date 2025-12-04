@@ -13,7 +13,9 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::Duration;
-use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, Documentation, MarkupContent, MarkupKind};
+use tower_lsp::lsp_types::{
+    CompletionItem, CompletionItemKind, Documentation, MarkupContent, MarkupKind,
+};
 
 /// AI completion configuration
 #[derive(Debug, Clone)]
@@ -165,7 +167,10 @@ Focus on:
     }
 
     /// Call the LLM API
-    async fn call_llm(&self, prompt: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn call_llm(
+        &self,
+        prompt: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let request = ChatRequest {
             model: self.config.model.clone(),
             messages: vec![ChatMessage {
@@ -211,23 +216,21 @@ Focus on:
             if line.starts_with("COMPLETION:") {
                 // Save previous completion if exists
                 if let Some(code) = current_completion.take() {
-                    items.push(self.create_completion_item(
-                        &code,
-                        current_description.take().as_deref(),
-                    ));
+                    items.push(
+                        self.create_completion_item(&code, current_description.take().as_deref()),
+                    );
                 }
-                current_completion = Some(line.trim_start_matches("COMPLETION:").trim().to_string());
+                current_completion =
+                    Some(line.trim_start_matches("COMPLETION:").trim().to_string());
             } else if line.starts_with("DESCRIPTION:") {
-                current_description = Some(line.trim_start_matches("DESCRIPTION:").trim().to_string());
+                current_description =
+                    Some(line.trim_start_matches("DESCRIPTION:").trim().to_string());
             }
         }
 
         // Don't forget the last one
         if let Some(code) = current_completion {
-            items.push(self.create_completion_item(
-                &code,
-                current_description.as_deref(),
-            ));
+            items.push(self.create_completion_item(&code, current_description.as_deref()));
         }
 
         items
@@ -274,13 +277,16 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
                 kind: MarkupKind::Markdown,
                 value: "Analyze recent transactions for a wallet address".to_string(),
             })),
-            insert_text: Some(r#"(define wallet "$1")
+            insert_text: Some(
+                r#"(define wallet "$1")
 (define signatures (getSignaturesForAddress wallet :limit 100))
 (define transactions
   (mapcar (lambda (sig)
             (getTransaction (get sig "signature")))
           signatures))
-(log :message "Found transactions:" :value (length transactions))"#.to_string()),
+(log :message "Found transactions:" :value (length transactions))"#
+                    .to_string(),
+            ),
             insert_text_format: Some(tower_lsp::lsp_types::InsertTextFormat::SNIPPET),
             ..Default::default()
         },
@@ -292,13 +298,16 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
                 kind: MarkupKind::Markdown,
                 value: "Find all token transfers for a wallet".to_string(),
             })),
-            insert_text: Some(r#"(define wallet "$1")
+            insert_text: Some(
+                r#"(define wallet "$1")
 (define transfers (get_account_transfers wallet :compress true))
 (define filtered
   (filter (lambda (tx)
             (= (get tx "transferType") "token"))
           transfers))
-(log :message "Token transfers:" :value (length filtered))"#.to_string()),
+(log :message "Token transfers:" :value (length filtered))"#
+                    .to_string(),
+            ),
             insert_text_format: Some(tower_lsp::lsp_types::InsertTextFormat::SNIPPET),
             ..Default::default()
         },
@@ -310,7 +319,8 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
                 kind: MarkupKind::Markdown,
                 value: "Find and analyze DEX swap transactions".to_string(),
             })),
-            insert_text: Some(r#"(define wallet "$1")
+            insert_text: Some(
+                r#"(define wallet "$1")
 (define transfers (get_account_transfers wallet :compress true))
 (define swaps
   (filter (lambda (tx)
@@ -320,7 +330,9 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
   (reduce swaps 0
           (lambda (acc tx)
             (+ acc (get tx "amount")))))
-(log :message "DEX volume:" :value total-volume)"#.to_string()),
+(log :message "DEX volume:" :value total-volume)"#
+                    .to_string(),
+            ),
             insert_text_format: Some(tower_lsp::lsp_types::InsertTextFormat::SNIPPET),
             ..Default::default()
         },
@@ -332,7 +344,8 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
                 kind: MarkupKind::Markdown,
                 value: "Detect potential wash trading by finding circular transfers".to_string(),
             })),
-            insert_text: Some(r#"(define wallet "$1")
+            insert_text: Some(
+                r#"(define wallet "$1")
 (define transfers (get_account_transfers wallet :compress true))
 
 ;; Find transfers that return to the same wallet
@@ -346,7 +359,9 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
                                    (get_account_transfers dest :limit 50))))))
           transfers))
 
-(log :message "Potential wash trades:" :value (length potential-wash))"#.to_string()),
+(log :message "Potential wash trades:" :value (length potential-wash))"#
+                    .to_string(),
+            ),
             insert_text_format: Some(tower_lsp::lsp_types::InsertTextFormat::SNIPPET),
             ..Default::default()
         },
@@ -358,7 +373,8 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
                 kind: MarkupKind::Markdown,
                 value: "Identify and track large wallet movements".to_string(),
             })),
-            insert_text: Some(r#"(define wallet "$1")
+            insert_text: Some(
+                r#"(define wallet "$1")
 (define threshold 1000) ;; SOL threshold for "whale" transfer
 
 (define transfers (get_account_transfers wallet :compress true))
@@ -373,7 +389,9 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
           (> (get a "amount") (get b "amount")))))
 
 (log :message "Whale transfers found:" :value (length whale-transfers))
-(log :message "Top whale transfer:" :value (first sorted-whales))"#.to_string()),
+(log :message "Top whale transfer:" :value (first sorted-whales))"#
+                    .to_string(),
+            ),
             insert_text_format: Some(tower_lsp::lsp_types::InsertTextFormat::SNIPPET),
             ..Default::default()
         },
@@ -385,7 +403,8 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
                 kind: MarkupKind::Markdown,
                 value: "Find NFT mints, transfers, and sales for a wallet".to_string(),
             })),
-            insert_text: Some(r#"(define wallet "$1")
+            insert_text: Some(
+                r#"(define wallet "$1")
 (define transfers (get_account_transfers wallet :compress true))
 
 (define nft-activity
@@ -400,7 +419,9 @@ pub fn get_blockchain_snippets() -> Vec<CompletionItem> {
    :transfers (filter (lambda (t) (= (get t "transferType") "nft_transfer")) nft-activity)
    :sales (filter (lambda (t) (= (get t "transferType") "nft_sale")) nft-activity)})
 
-(log :message "NFT Activity:" :value grouped)"#.to_string()),
+(log :message "NFT Activity:" :value grouped)"#
+                    .to_string(),
+            ),
             insert_text_format: Some(tower_lsp::lsp_types::InsertTextFormat::SNIPPET),
             ..Default::default()
         },
@@ -429,6 +450,9 @@ mod tests {
     #[test]
     fn test_truncate_label() {
         assert_eq!(truncate_label("short", 10), "short");
-        assert_eq!(truncate_label("this is a very long label", 10), "this is...");
+        assert_eq!(
+            truncate_label("this is a very long label", 10),
+            "this is..."
+        );
     }
 }

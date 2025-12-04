@@ -9,9 +9,11 @@
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::io::Write;
 
 use crate::services::{
+    ai_service,
     ai_service::{AiService, PlannedTool, ToolPlan},
     mcp_service::{McpService, McpTool},
     ovsm_service::OvsmService,
@@ -400,7 +402,11 @@ fn extract_sexpr_at(text: &str, op: &str) -> Option<String> {
 ///
 /// # Returns
 /// Vector of formatted lines (for multiline display)
-fn format_value_multiline(value: &OvsmValue, max_depth: usize, max_array_items: usize) -> Vec<String> {
+fn format_value_multiline(
+    value: &OvsmValue,
+    max_depth: usize,
+    max_array_items: usize,
+) -> Vec<String> {
     format_value_multiline_impl(value, max_depth, max_array_items, 0)
 }
 
@@ -417,7 +423,10 @@ fn format_value_multiline_impl(
         OvsmValue::Float(f) => vec![format!("{:.2}", f)],
         OvsmValue::String(s) => {
             // Never truncate error messages or important debugging info
-            let is_error_msg = s.contains("Error") || s.contains("error") || s.contains("failed") || s.contains("Failed");
+            let is_error_msg = s.contains("Error")
+                || s.contains("error")
+                || s.contains("failed")
+                || s.contains("Failed");
 
             if is_error_msg || s.len() <= 200 {
                 // Show full string for errors and short strings
@@ -442,9 +451,18 @@ fn format_value_multiline_impl(
             let items_to_show = arr.len().min(max_array_items);
 
             for (idx, item) in arr.iter().take(items_to_show).enumerate() {
-                let item_lines = format_value_multiline_impl(item, max_depth, max_array_items, current_depth + 1);
+                let item_lines = format_value_multiline_impl(
+                    item,
+                    max_depth,
+                    max_array_items,
+                    current_depth + 1,
+                );
                 if item_lines.len() == 1 {
-                    let comma = if idx < items_to_show - 1 || arr.len() > items_to_show { "," } else { "" };
+                    let comma = if idx < items_to_show - 1 || arr.len() > items_to_show {
+                        ","
+                    } else {
+                        ""
+                    };
                     lines.push(format!("  {}{}", item_lines[0], comma));
                 } else {
                     lines.push(format!("  {}", item_lines[0]));
@@ -463,7 +481,9 @@ fn format_value_multiline_impl(
         }
         OvsmValue::Object(obj) => {
             // Check if this is an error response
-            let is_error_response = obj.contains_key("isError") || obj.contains_key("error") || obj.contains_key("status");
+            let is_error_response = obj.contains_key("isError")
+                || obj.contains_key("error")
+                || obj.contains_key("status");
 
             if current_depth >= max_depth && !is_error_response {
                 return vec![format!("{{...}} ({} keys)", obj.len())];
@@ -482,9 +502,14 @@ fn format_value_multiline_impl(
             };
 
             for (idx, (key, val)) in obj.iter().take(keys_to_show).enumerate() {
-                let val_lines = format_value_multiline_impl(val, max_depth, max_array_items, current_depth + 1);
+                let val_lines =
+                    format_value_multiline_impl(val, max_depth, max_array_items, current_depth + 1);
                 if val_lines.len() == 1 {
-                    let comma = if idx < keys_to_show - 1 || obj.len() > keys_to_show { "," } else { "" };
+                    let comma = if idx < keys_to_show - 1 || obj.len() > keys_to_show {
+                        ","
+                    } else {
+                        ""
+                    };
                     lines.push(format!("  {}: {}{}", key, val_lines[0], comma));
                 } else {
                     lines.push(format!("  {}: {}", key, val_lines[0]));
@@ -780,39 +805,37 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> Result<Value> {
 }
 
 /// Execute agent command with real-time streaming output to terminal
-pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool, debug: bool) -> Result<()> {
+pub async fn execute_streaming_agent(
+    query: &str,
+    verbose: u8,
+    plan_only: bool,
+    enable_planning: bool,
+    debug: bool,
+) -> Result<()> {
     let start_time = std::time::Instant::now();
-
-    // Check for OSVM API key - offer to generate one if missing
-    let auth_service = crate::services::auth_service::AuthService::new()?;
-    if !auth_service.has_api_key() {
-        println!("\n⚠️  No OSVM API key found!");
-        println!("   The AI planning agent requires an OSVM API key to access blockchain data.\n");
-
-        // Prompt user for authentication
-        print!("   Would you like to generate an API key now? [Y/n]: ");
-        std::io::Write::flush(&mut std::io::stdout())?;
-
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        let input = input.trim().to_lowercase();
-
-        if input.is_empty() || input == "y" || input == "yes" {
-            let key_name = format!("OSVM CLI - {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-            auth_service.interactive_auth(&key_name).await?;
-
-            println!("⏸️  After binding your wallet, press Enter to continue or Ctrl+C to exit...");
-            let mut _continue = String::new();
-            std::io::stdin().read_line(&mut _continue)?;
-        } else {
-            println!("\n❌ Cannot proceed without OSVM API key.");
-            println!("   Set OPENSVM_API_KEY environment variable or run again to generate a key.\n");
-            return Err(anyhow::anyhow!("OSVM API key required"));
-        }
-    }
+    let planning_enabled = plan_only || enable_planning;
+    let debug_mode = debug || verbose > 1;
+    let stdin_is_tty = std::io::stdin().is_terminal();
+    let fake_ai_mode = ai_service::is_fake_ai_enabled();
 
     // Clear schema cache from previous runs to ensure fresh data
     crate::utils::debug_logger::clear_schema_cache();
+
+    // Initialize services with caller-controlled debug mode
+    let ai_service = AiService::new_with_debug(debug_mode);
+    ai_service.add_to_history("user", query);
+
+    // Fast path: direct answer without OVSM planning/system prompt
+    if !planning_enabled {
+        let response = ai_service
+            .query_osvm_ai_with_options(query, None, Some(false), debug_mode)
+            .await?;
+
+        use crate::utils::markdown_renderer::MarkdownRenderer;
+        let renderer = MarkdownRenderer::new();
+        renderer.render(&response);
+        return Ok(());
+    }
 
     // Print minimal header (only at Detailed verbosity)
     if get_verbosity() >= VerbosityLevel::Detailed {
@@ -824,9 +847,8 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool, 
         println!();
     }
 
-    // Initialize services
-    let ai_service = AiService::new_with_debug(verbose > 1);
-    let mut mcp_service = McpService::new_with_debug(verbose > 1);
+    // Initialize MCP service only when planning
+    let mut mcp_service = McpService::new_with_debug(debug_mode);
 
     // Load MCP configurations
     if let Err(e) = mcp_service.load_config() {
@@ -1075,9 +1097,6 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool, 
         print!("🧠 AI Planning");
         std::io::stdout().flush()?;
     }
-
-    // Track initial user query in conversation history
-    ai_service.add_to_history("user", query);
 
     let tool_plan = match ai_service
         .create_validated_tool_plan(query, &available_tools, 3)
@@ -1463,14 +1482,15 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool, 
 
                         // Get execution trace from OVSM evaluator
                         let execution_trace = ovsm_service.get_execution_trace();
-                        let trace_map: std::collections::HashMap<String, Vec<String>> = execution_trace
-                            .iter()
-                            .map(|(name, value)| {
-                                // Format with nested expansion
-                                let formatted_lines = format_value_multiline(value, 3, 2);
-                                (name.clone(), formatted_lines)
-                            })
-                            .collect();
+                        let trace_map: std::collections::HashMap<String, Vec<String>> =
+                            execution_trace
+                                .iter()
+                                .map(|(name, value)| {
+                                    // Format with nested expansion
+                                    let formatted_lines = format_value_multiline(value, 3, 2);
+                                    (name.clone(), formatted_lines)
+                                })
+                                .collect();
 
                         let mut found_error_line = false;
                         let lines: Vec<&str> = current_code.lines().collect();
@@ -1541,7 +1561,10 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool, 
                                         println!("  ✓  {:3} │ {} ✓ executed", line_number, line);
                                         // Show first line with arrow
                                         if !value_lines.is_empty() {
-                                            println!("       │   → {} = {}", var_name, value_lines[0]);
+                                            println!(
+                                                "       │   → {} = {}",
+                                                var_name, value_lines[0]
+                                            );
                                             // Show additional lines with continuation indent
                                             for value_line in value_lines.iter().skip(1) {
                                                 println!("       │       {}", value_line);
@@ -1815,6 +1838,9 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool, 
 
     println!("Execution Time: {}ms | {}", elapsed_ms, timestamp);
     println!();
+
+    // Run a small background self-play iteration to evolve OVSM plans over time
+    crate::utils::selfplay::spawn_background_selfplay(query);
 
     Ok(())
 }

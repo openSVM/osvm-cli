@@ -6,7 +6,9 @@ use crate::services::{
     stream_server::{start_server, StreamServerConfig},
     stream_service::{EventFilter, StreamService},
 };
-use crate::utils::program_aliases::{resolve_programs, resolve_token, list_program_aliases, list_token_symbols};
+use crate::utils::program_aliases::{
+    list_program_aliases, list_token_symbols, resolve_programs, resolve_token,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "stream")]
@@ -97,7 +99,7 @@ pub async fn execute(cmd: StreamCommand) -> Result<()> {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("RPC URL: {}", cmd.rpc_url);
     println!("Server: {}:{}", cmd.host, cmd.port);
-    println!("");
+    println!();
 
     // Create stream service
     let stream_service = Arc::new(StreamService::new(cmd.rpc_url.clone()));
@@ -127,21 +129,17 @@ pub async fn execute(cmd: StreamCommand) -> Result<()> {
         || cmd.min_fee.is_some()
     {
         let filter = EventFilter {
-            program_ids: resolved_programs.as_ref().map(|p| {
-                p.split(',')
-                    .map(|s| s.trim().to_string())
-                    .collect()
-            }),
-            accounts: cmd.accounts.as_ref().map(|a| {
-                a.split(',')
-                    .map(|s| s.trim().to_string())
-                    .collect()
-            }),
-            event_types: cmd.event_types.as_ref().map(|e| {
-                e.split(',')
-                    .map(|s| s.trim().to_string())
-                    .collect()
-            }),
+            program_ids: resolved_programs
+                .as_ref()
+                .map(|p| p.split(',').map(|s| s.trim().to_string()).collect()),
+            accounts: cmd
+                .accounts
+                .as_ref()
+                .map(|a| a.split(',').map(|s| s.trim().to_string()).collect()),
+            event_types: cmd
+                .event_types
+                .as_ref()
+                .map(|e| e.split(',').map(|s| s.trim().to_string()).collect()),
             min_fee: cmd.min_fee,
             success_only: cmd.success_only,
         };
@@ -173,7 +171,7 @@ pub async fn execute(cmd: StreamCommand) -> Result<()> {
         if let Some(min_fee) = cmd.min_fee {
             println!("   Min fee: {} lamports", min_fee);
         }
-        println!("");
+        println!();
     }
 
     println!("📡 Available endpoints:");
@@ -188,45 +186,51 @@ pub async fn execute(cmd: StreamCommand) -> Result<()> {
         println!("   Stats:      http://{}:{}/stats", cmd.host, cmd.port);
         println!("   Health:     http://{}:{}/health", cmd.host, cmd.port);
     }
-    println!("");
+    println!();
 
     println!("🎯 Usage examples:");
-    println!("");
+    println!();
     println!("List available aliases:");
     println!("  osvm stream --list-programs");
     println!("  osvm stream --list-tokens");
-    println!("");
+    println!();
     println!("Stream with friendly names:");
     println!("  osvm stream --programs pumpfun");
     println!("  osvm stream --programs \"raydium,orca,jupiter\"");
     println!("  osvm stream --tokens \"USDC,BONK,SOL\"");
     println!("  osvm stream --programs raydium --tokens BONK --success-only");
-    println!("");
+    println!();
     println!("WebSocket (JavaScript):");
-    println!("  const ws = new WebSocket('ws://{}:{}/ws');", cmd.host, cmd.port);
+    println!(
+        "  const ws = new WebSocket('ws://{}:{}/ws');",
+        cmd.host, cmd.port
+    );
     println!("  ws.onmessage = (event) => {{");
     println!("    const data = JSON.parse(event.data);");
     println!("    console.log('Event:', data);");
     println!("  }};");
-    println!("");
+    println!();
     println!("SSE (JavaScript):");
-    println!("  const eventSource = new EventSource('http://{}:{}/stream');", cmd.host, cmd.port);
+    println!(
+        "  const eventSource = new EventSource('http://{}:{}/stream');",
+        cmd.host, cmd.port
+    );
     println!("  eventSource.onmessage = (event) => {{");
     println!("    const data = JSON.parse(event.data);");
     println!("    console.log('Event:', data);");
     println!("  }};");
-    println!("");
+    println!();
     println!("HTTP Polling (curl):");
     println!("  curl http://{}:{}/events?limit=10", cmd.host, cmd.port);
-    println!("");
+    println!();
     println!("Set filter (curl):");
     println!("  curl -X POST http://{}:{}/filter \\", cmd.host, cmd.port);
     println!("    -H 'Content-Type: application/json' \\");
     println!("    -d '{{\"success_only\": true, \"event_types\": [\"transaction\"]}}'");
-    println!("");
+    println!();
 
     println!("✨ Server starting...");
-    println!("");
+    println!();
 
     // Create server config
     let config = StreamServerConfig {

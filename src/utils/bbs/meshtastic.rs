@@ -5,10 +5,10 @@
 //!
 //! Uses the `meshtastic` crate for proper protobuf handling.
 
+use crate::services::ai_service::AiService;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use crate::services::ai_service::AiService;
 
 /// Meshtastic default TCP port
 pub const DEFAULT_TCP_PORT: u16 = 4403;
@@ -156,7 +156,9 @@ impl MeshtasticRadio {
                 let addr = format!("{}:{}", address, port);
 
                 match TcpStream::connect_timeout(
-                    &addr.parse().map_err(|e| format!("Invalid address: {}", e))?,
+                    &addr
+                        .parse()
+                        .map_err(|e| format!("Invalid address: {}", e))?,
                     Duration::from_secs(5),
                 ) {
                     Ok(_stream) => {
@@ -203,7 +205,10 @@ impl MeshtasticRadio {
         }
 
         // Sync version cannot send - need async client
-        Err("Use async MeshtasticClient for message sending. Sync radio only validates connection.".to_string())
+        Err(
+            "Use async MeshtasticClient for message sending. Sync radio only validates connection."
+                .to_string(),
+        )
     }
 
     /// Poll for incoming messages (stub - requires async client)
@@ -285,10 +290,12 @@ impl MeshtasticClient {
     /// Connect and run the message loop
     ///
     /// Returns a receiver for incoming packets
-    pub async fn connect_and_run(&mut self) -> Result<mpsc::UnboundedReceiver<MeshtasticPacket>, String> {
+    pub async fn connect_and_run(
+        &mut self,
+    ) -> Result<mpsc::UnboundedReceiver<MeshtasticPacket>, String> {
         use meshtastic::api::StreamApi;
+        use meshtastic::protobufs::{from_radio, FromRadio};
         use meshtastic::utils::stream::build_tcp_stream;
-        use meshtastic::protobufs::{FromRadio, from_radio};
 
         *self.state.lock().unwrap() = ConnectionState::Connecting;
 
@@ -304,7 +311,8 @@ impl MeshtasticClient {
 
         // Configure to get our node info
         let config_id = meshtastic::utils::generate_rand_id();
-        let _configured_api = connected_api.configure(config_id)
+        let _configured_api = connected_api
+            .configure(config_id)
             .await
             .map_err(|e| format!("Failed to configure: {}", e))?;
 
@@ -347,9 +355,14 @@ impl MeshtasticClient {
                         from_radio::PayloadVariant::Packet(mesh_packet) => {
                             // Handle decoded data packets
                             if let Some(payload) = mesh_packet.payload_variant {
-                                if let meshtastic::protobufs::mesh_packet::PayloadVariant::Decoded(data) = payload {
+                                if let meshtastic::protobufs::mesh_packet::PayloadVariant::Decoded(
+                                    data,
+                                ) = payload
+                                {
                                     // Check for text message (portnum 1)
-                                    if data.portnum == meshtastic::protobufs::PortNum::TextMessageApp as i32 {
+                                    if data.portnum
+                                        == meshtastic::protobufs::PortNum::TextMessageApp as i32
+                                    {
                                         if let Ok(text) = String::from_utf8(data.payload) {
                                             let packet = MeshtasticPacket::TextMessage {
                                                 from: mesh_packet.from,
@@ -511,9 +524,7 @@ impl BBSCommandRouter {
     /// Execute a BBS command and return response (async for AI support)
     async fn execute_command(&self, from_node: u32, cmd: BBSCommand) -> String {
         match cmd {
-            BBSCommand::AgentQuery(query) => {
-                self.handle_agent_query(from_node, &query).await
-            }
+            BBSCommand::AgentQuery(query) => self.handle_agent_query(from_node, &query).await,
             // All other commands use sync execution
             _ => self.execute_command_sync(from_node, cmd),
         }
@@ -551,7 +562,10 @@ impl BBSCommandRouter {
             }
             Err(e) => {
                 log::error!("AI query failed: {}", e);
-                format!("🤖 Error: {}", e.to_string().chars().take(100).collect::<String>())
+                format!(
+                    "🤖 Error: {}",
+                    e.to_string().chars().take(100).collect::<String>()
+                )
             }
         }
     }

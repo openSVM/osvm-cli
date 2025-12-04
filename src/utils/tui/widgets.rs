@@ -26,15 +26,12 @@ impl LoadingSpinner {
         let spinner = spinner_chars[self.frame];
 
         let text = Line::from(vec![
-            Span::styled(
-                format!("{} ", spinner),
-                Style::default().fg(Color::Cyan),
-            ),
+            Span::styled(format!("{} ", spinner), Style::default().fg(Color::Cyan)),
             Span::styled(&self.message, Style::default().fg(Color::White)),
         ]);
 
-        let widget = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Status"));
+        let widget =
+            Paragraph::new(text).block(Block::default().borders(Borders::ALL).title("Status"));
 
         f.render_widget(widget, area);
     }
@@ -75,8 +72,8 @@ impl ProgressBar {
             Line::from(format!("{}/{}", self.current, self.total)),
         ];
 
-        let widget = Paragraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title("Progress"));
+        let widget =
+            Paragraph::new(text).block(Block::default().borders(Borders::ALL).title("Progress"));
 
         f.render_widget(widget, area);
     }

@@ -6,9 +6,7 @@
 use ovsm::error::Error as OvsmError;
 use ovsm::lexer::{SExprScanner, Token, TokenKind};
 use ovsm::parser::SExprParser;
-use tower_lsp::lsp_types::{
-    Diagnostic, DiagnosticSeverity, Position, Range, Url,
-};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range, Url};
 
 /// Result of analyzing a document
 pub struct AnalysisResult {
@@ -43,7 +41,10 @@ pub fn analyze_document(source: &str, uri: &Url) -> AnalysisResult {
         }
     }
 
-    AnalysisResult { diagnostics, tokens }
+    AnalysisResult {
+        diagnostics,
+        tokens,
+    }
 }
 
 /// Convert an OVSM error to an LSP Diagnostic
@@ -191,7 +192,8 @@ fn check_parenthesis_balance(tokens: &[Token], diagnostics: &mut Vec<Diagnostic>
                         )),
                         code_description: None,
                         source: Some("ovsm".to_string()),
-                        message: "Unmatched closing parenthesis `)`. No corresponding opening `(`.".to_string(),
+                        message: "Unmatched closing parenthesis `)`. No corresponding opening `(`."
+                            .to_string(),
                         related_information: None,
                         tags: None,
                         data: None,
@@ -209,7 +211,8 @@ fn check_parenthesis_balance(tokens: &[Token], diagnostics: &mut Vec<Diagnostic>
                         )),
                         code_description: None,
                         source: Some("ovsm".to_string()),
-                        message: "Unmatched closing bracket `]`. No corresponding opening `[`.".to_string(),
+                        message: "Unmatched closing bracket `]`. No corresponding opening `[`."
+                            .to_string(),
                         related_information: None,
                         tags: None,
                         data: None,
@@ -227,7 +230,8 @@ fn check_parenthesis_balance(tokens: &[Token], diagnostics: &mut Vec<Diagnostic>
                         )),
                         code_description: None,
                         source: Some("ovsm".to_string()),
-                        message: "Unmatched closing brace `}`. No corresponding opening `{`.".to_string(),
+                        message: "Unmatched closing brace `}`. No corresponding opening `{`."
+                            .to_string(),
                         related_information: None,
                         tags: None,
                         data: None,
@@ -362,7 +366,11 @@ pub fn get_word_at_position(source: &str, position: Position) -> Option<String> 
 
 /// Check if character is valid in a symbol name
 fn is_symbol_char(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '_' | '-' | '!' | '?' | '*' | '+' | '/' | '<' | '>' | '=' | '&')
+    c.is_alphanumeric()
+        || matches!(
+            c,
+            '_' | '-' | '!' | '?' | '*' | '+' | '/' | '<' | '>' | '=' | '&'
+        )
 }
 
 #[cfg(test)]
@@ -395,10 +403,22 @@ mod tests {
     #[test]
     fn test_get_word_at_position() {
         let source = "(define foo 42)";
-        let word = get_word_at_position(source, Position { line: 0, character: 1 });
+        let word = get_word_at_position(
+            source,
+            Position {
+                line: 0,
+                character: 1,
+            },
+        );
         assert_eq!(word, Some("define".to_string()));
 
-        let word = get_word_at_position(source, Position { line: 0, character: 8 });
+        let word = get_word_at_position(
+            source,
+            Position {
+                line: 0,
+                character: 8,
+            },
+        );
         assert_eq!(word, Some("foo".to_string()));
     }
 }

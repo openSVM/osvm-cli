@@ -40,18 +40,21 @@
 //! (+ x y)  ; Works: Any + i64 -> Any
 //! ```
 
-pub mod checker;
 pub mod bidirectional;
 pub mod bridge;
+pub mod checker;
 pub mod refinement;
 pub mod verify;
 
 // Re-export TypeChecker for convenience
-pub use checker::TypeChecker;
 pub use bidirectional::BidirectionalChecker;
 pub use bridge::{TypeBridge, TypeEnvSourceExt};
-pub use refinement::{RefinementType, RefinementChecker, Predicate, PredicateExpr, CompareOp, RefinementError, ProofObligation};
-pub use verify::{RefinementVerifier, VerificationResult, VerificationError};
+pub use checker::TypeChecker;
+pub use refinement::{
+    CompareOp, Predicate, PredicateExpr, ProofObligation, RefinementChecker, RefinementError,
+    RefinementType,
+};
+pub use verify::{RefinementVerifier, VerificationError, VerificationResult};
 
 use std::collections::HashMap;
 use std::fmt;
@@ -76,7 +79,10 @@ pub enum Type {
 
     // === Compound Types ===
     /// Fixed-size array: [T; N]
-    Array { element: Box<Type>, size: usize },
+    Array {
+        element: Box<Type>,
+        size: usize,
+    },
     /// Tuple: (T1, T2, ...)
     Tuple(Vec<Type>),
     /// Named struct type
@@ -145,9 +151,16 @@ impl Type {
     pub fn is_numeric(&self) -> bool {
         matches!(
             self,
-            Type::U8 | Type::U16 | Type::U32 | Type::U64 |
-            Type::I8 | Type::I16 | Type::I32 | Type::I64 |
-            Type::F32 | Type::F64
+            Type::U8
+                | Type::U16
+                | Type::U32
+                | Type::U64
+                | Type::I8
+                | Type::I16
+                | Type::I32
+                | Type::I64
+                | Type::F32
+                | Type::F64
         )
     }
 
@@ -155,8 +168,14 @@ impl Type {
     pub fn is_integer(&self) -> bool {
         matches!(
             self,
-            Type::U8 | Type::U16 | Type::U32 | Type::U64 |
-            Type::I8 | Type::I16 | Type::I32 | Type::I64
+            Type::U8
+                | Type::U16
+                | Type::U32
+                | Type::U64
+                | Type::I8
+                | Type::I16
+                | Type::I32
+                | Type::I64
         )
     }
 
@@ -178,9 +197,7 @@ impl Type {
             Type::U32 | Type::I32 | Type::F32 => Some(4),
             Type::U64 | Type::I64 | Type::F64 | Type::Ptr(_) => Some(8),
             Type::Pubkey => Some(32),
-            Type::Array { element, size } => {
-                element.size_bytes().map(|s| s * size)
-            }
+            Type::Array { element, size } => element.size_bytes().map(|s| s * size),
             _ => None,
         }
     }
@@ -223,7 +240,9 @@ impl fmt::Display for Type {
             Type::Tuple(types) => {
                 write!(f, "(")?;
                 for (i, t) in types.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", t)?;
                 }
                 write!(f, ")")
@@ -235,7 +254,9 @@ impl fmt::Display for Type {
             Type::Fn { params, ret } => {
                 write!(f, "fn(")?;
                 for (i, p) in params.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", p)?;
                 }
                 write!(f, ") -> {}", ret)
@@ -456,12 +477,24 @@ impl TypeContext {
 
         // Structural unification for compound types
         match (&t1, &t2) {
-            (Type::Array { element: e1, size: s1 }, Type::Array { element: e2, size: s2 }) => {
+            (
+                Type::Array {
+                    element: e1,
+                    size: s1,
+                },
+                Type::Array {
+                    element: e2,
+                    size: s2,
+                },
+            ) => {
                 if s1 != s2 {
                     return Err(TypeError::mismatch(t1.clone(), t2.clone()));
                 }
                 let unified_elem = self.unify(e1, e2)?;
-                Ok(Type::Array { element: Box::new(unified_elem), size: *s1 })
+                Ok(Type::Array {
+                    element: Box::new(unified_elem),
+                    size: *s1,
+                })
             }
 
             (Type::Ptr(inner1), Type::Ptr(inner2)) => {
@@ -483,18 +516,29 @@ impl TypeContext {
                 if types1.len() != types2.len() {
                     return Err(TypeError::mismatch(t1.clone(), t2.clone()));
                 }
-                let unified: Result<Vec<_>, _> = types1.iter()
+                let unified: Result<Vec<_>, _> = types1
+                    .iter()
                     .zip(types2.iter())
                     .map(|(a, b)| self.unify(a, b))
                     .collect();
                 Ok(Type::Tuple(unified?))
             }
 
-            (Type::Fn { params: p1, ret: r1 }, Type::Fn { params: p2, ret: r2 }) => {
+            (
+                Type::Fn {
+                    params: p1,
+                    ret: r1,
+                },
+                Type::Fn {
+                    params: p2,
+                    ret: r2,
+                },
+            ) => {
                 if p1.len() != p2.len() {
                     return Err(TypeError::mismatch(t1.clone(), t2.clone()));
                 }
-                let unified_params: Result<Vec<_>, _> = p1.iter()
+                let unified_params: Result<Vec<_>, _> = p1
+                    .iter()
                     .zip(p2.iter())
                     .map(|(a, b)| self.unify(a, b))
                     .collect();
@@ -506,22 +550,34 @@ impl TypeContext {
             }
 
             // Numeric coercion: smaller -> larger is allowed implicitly
-            (Type::I8, Type::I16) | (Type::I8, Type::I32) | (Type::I8, Type::I64) |
-            (Type::I16, Type::I32) | (Type::I16, Type::I64) |
-            (Type::I32, Type::I64) |
-            (Type::U8, Type::U16) | (Type::U8, Type::U32) | (Type::U8, Type::U64) |
-            (Type::U16, Type::U32) | (Type::U16, Type::U64) |
-            (Type::U32, Type::U64) |
-            (Type::F32, Type::F64) => Ok(t2),
+            (Type::I8, Type::I16)
+            | (Type::I8, Type::I32)
+            | (Type::I8, Type::I64)
+            | (Type::I16, Type::I32)
+            | (Type::I16, Type::I64)
+            | (Type::I32, Type::I64)
+            | (Type::U8, Type::U16)
+            | (Type::U8, Type::U32)
+            | (Type::U8, Type::U64)
+            | (Type::U16, Type::U32)
+            | (Type::U16, Type::U64)
+            | (Type::U32, Type::U64)
+            | (Type::F32, Type::F64) => Ok(t2),
 
             // Reverse direction: larger -> smaller requires explicit cast
-            (Type::I64, Type::I32) | (Type::I64, Type::I16) | (Type::I64, Type::I8) |
-            (Type::I32, Type::I16) | (Type::I32, Type::I8) |
-            (Type::I16, Type::I8) |
-            (Type::U64, Type::U32) | (Type::U64, Type::U16) | (Type::U64, Type::U8) |
-            (Type::U32, Type::U16) | (Type::U32, Type::U8) |
-            (Type::U16, Type::U8) |
-            (Type::F64, Type::F32) => {
+            (Type::I64, Type::I32)
+            | (Type::I64, Type::I16)
+            | (Type::I64, Type::I8)
+            | (Type::I32, Type::I16)
+            | (Type::I32, Type::I8)
+            | (Type::I16, Type::I8)
+            | (Type::U64, Type::U32)
+            | (Type::U64, Type::U16)
+            | (Type::U64, Type::U8)
+            | (Type::U32, Type::U16)
+            | (Type::U32, Type::U8)
+            | (Type::U16, Type::U8)
+            | (Type::F64, Type::F32) => {
                 // For now, allow with a warning (implicit truncation)
                 // In strict mode, this would be an error
                 Ok(t2)
@@ -565,7 +621,16 @@ mod tests {
     #[test]
     fn test_type_display() {
         assert_eq!(format!("{}", Type::U64), "u64");
-        assert_eq!(format!("{}", Type::Array { element: Box::new(Type::U8), size: 32 }), "[u8; 32]");
+        assert_eq!(
+            format!(
+                "{}",
+                Type::Array {
+                    element: Box::new(Type::U8),
+                    size: 32
+                }
+            ),
+            "[u8; 32]"
+        );
         assert_eq!(format!("{}", Type::Ptr(Box::new(Type::U64))), "*u64");
     }
 
@@ -618,6 +683,13 @@ mod tests {
         assert_eq!(Type::U8.size_bytes(), Some(1));
         assert_eq!(Type::U64.size_bytes(), Some(8));
         assert_eq!(Type::Pubkey.size_bytes(), Some(32));
-        assert_eq!(Type::Array { element: Box::new(Type::U8), size: 32 }.size_bytes(), Some(32));
+        assert_eq!(
+            Type::Array {
+                element: Box::new(Type::U8),
+                size: 32
+            }
+            .size_bytes(),
+            Some(32)
+        );
     }
 }

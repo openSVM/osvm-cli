@@ -157,7 +157,9 @@ impl OpenSvmApi {
 
         match response {
             Ok(resp) if resp.status().is_success() => {
-                let data: AddressAnnotationsResponse = resp.json().await
+                let data: AddressAnnotationsResponse = resp
+                    .json()
+                    .await
                     .context("Failed to parse annotation response")?;
 
                 let annotation = data.annotations.into_iter().next();
@@ -179,7 +181,10 @@ impl OpenSvmApi {
     }
 
     /// Get annotations for multiple addresses (batched)
-    pub async fn get_annotations_batch(&self, addresses: &[String]) -> HashMap<String, AddressAnnotation> {
+    pub async fn get_annotations_batch(
+        &self,
+        addresses: &[String],
+    ) -> HashMap<String, AddressAnnotation> {
         let mut results = HashMap::new();
 
         // Check cache for all addresses first
@@ -196,9 +201,7 @@ impl OpenSvmApi {
 
         // Fetch uncached addresses (in parallel batches of 10)
         for chunk in uncached.chunks(10) {
-            let futures: Vec<_> = chunk.iter()
-                .map(|addr| self.get_annotation(addr))
-                .collect();
+            let futures: Vec<_> = chunk.iter().map(|addr| self.get_annotation(addr)).collect();
 
             let batch_results = futures::future::join_all(futures).await;
 
@@ -239,11 +242,17 @@ impl OpenSvmApi {
             url.push_str(&format!("limit={}&", l));
         }
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .context("Failed to search annotations")?;
 
         if response.status().is_success() {
-            let data: AnnotationsListResponse = response.json().await
+            let data: AnnotationsListResponse = response
+                .json()
+                .await
                 .context("Failed to parse search response")?;
             Ok(data.annotations)
         } else {
@@ -254,10 +263,14 @@ impl OpenSvmApi {
     }
 
     /// Create a new annotation
-    pub async fn create_annotation(&self, request: CreateAnnotationRequest) -> Result<CreateAnnotationResponse> {
+    pub async fn create_annotation(
+        &self,
+        request: CreateAnnotationRequest,
+    ) -> Result<CreateAnnotationResponse> {
         let url = format!("{}/annotations", BASE_URL);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&request)
             .send()
@@ -265,7 +278,9 @@ impl OpenSvmApi {
             .context("Failed to create annotation")?;
 
         if response.status().is_success() {
-            let data: CreateAnnotationResponse = response.json().await
+            let data: CreateAnnotationResponse = response
+                .json()
+                .await
                 .context("Failed to parse create response")?;
 
             // Invalidate cache for this address
@@ -283,11 +298,17 @@ impl OpenSvmApi {
     pub async fn get_stats(&self) -> Result<AnnotationStats> {
         let url = format!("{}/annotations/stats", BASE_URL);
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .context("Failed to get stats")?;
 
         if response.status().is_success() {
-            let data: AnnotationStats = response.json().await
+            let data: AnnotationStats = response
+                .json()
+                .await
                 .context("Failed to parse stats response")?;
             Ok(data)
         } else {
@@ -304,11 +325,17 @@ impl OpenSvmApi {
     pub async fn get_idl(&self, program_id: &str) -> Result<Option<IdlResponse>> {
         let url = format!("{}/idl/{}", BASE_URL, program_id);
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .context("Failed to fetch IDL")?;
 
         if response.status().is_success() {
-            let data: IdlResponse = response.json().await
+            let data: IdlResponse = response
+                .json()
+                .await
                 .context("Failed to parse IDL response")?;
             Ok(Some(data))
         } else if response.status() == 404 {
@@ -336,15 +363,19 @@ impl OpenSvmApi {
 
     fn update_cache(&self, address: &str, annotation: Option<AddressAnnotation>) {
         if let Ok(mut cache) = self.annotation_cache.lock() {
-            cache.insert(address.to_string(), CachedAnnotation {
-                data: annotation,
-                fetched_at: Instant::now(),
-            });
+            cache.insert(
+                address.to_string(),
+                CachedAnnotation {
+                    data: annotation,
+                    fetched_at: Instant::now(),
+                },
+            );
 
             // Limit cache size
             if cache.len() > 1000 {
                 // Remove oldest entries
-                let mut entries: Vec<_> = cache.iter()
+                let mut entries: Vec<_> = cache
+                    .iter()
                     .map(|(k, v)| (k.clone(), v.fetched_at))
                     .collect();
                 entries.sort_by(|a, b| a.1.cmp(&b.1));
@@ -442,7 +473,7 @@ mod tests {
 
         let formatted = format_address_with_label(
             "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
-            Some(&annotation)
+            Some(&annotation),
         );
         assert!(formatted.contains("Jupiter V6"));
         assert!(formatted.contains("✅"));
@@ -450,10 +481,7 @@ mod tests {
 
     #[test]
     fn test_format_address_no_label() {
-        let formatted = format_address_with_label(
-            "SomeAddress123456789",
-            None
-        );
+        let formatted = format_address_with_label("SomeAddress123456789", None);
         assert_eq!(formatted, "SomeAddress123456789");
     }
 

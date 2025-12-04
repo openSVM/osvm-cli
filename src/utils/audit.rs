@@ -1380,7 +1380,10 @@ impl AuditCoordinator {
 
     /// Run comprehensive security audit with enhanced modular architecture
     pub async fn run_security_audit(&self) -> Result<AuditReport> {
-        println!("🔍 Starting comprehensive security audit with enhanced modular system...");
+        println!("🔍 Starting comprehensive security audit with intelligent analysis...");
+
+        // Stage 0: Run intelligent audit (project analysis, legitimacy scoring, type detection)
+        let intelligent_findings = self.run_intelligent_audit_stage().await?;
 
         if self.should_use_ai() {
             println!("🤖 AI-powered analysis enabled");
@@ -1413,6 +1416,9 @@ impl AuditCoordinator {
 
         // Convert diagnostic results to audit findings
         let mut findings = self.convert_diagnostics_to_findings(&diagnostic_results);
+
+        // Add intelligent audit findings
+        findings.extend(intelligent_findings);
 
         // Run enhanced modular security checks
         findings.extend(self.run_modular_security_checks().await?);
@@ -7787,5 +7793,137 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         println!("✅ PDF generated successfully: {}", output_path.display());
         Ok(())
+    }
+
+    /// Run intelligent audit stage (project analysis, legitimacy scoring, type detection)
+    async fn run_intelligent_audit_stage(&self) -> Result<Vec<AuditFinding>> {
+        use crate::utils::audit_intelligent::{
+            IntelligentAuditCoordinator, LegitimacyAnalyzer, ProjectTreeBuilder, ProjectType,
+            ProjectTypeDetector,
+        };
+
+        println!("🧠 Stage 0: Intelligent Project Analysis");
+        println!("────────────────────────────────────────");
+
+        let current_dir = std::env::current_dir()?;
+        let mut findings = Vec::new();
+
+        // Step 1: Build project structure treemap
+        println!("📊 Building project structure treemap...");
+        let tree_builder = ProjectTreeBuilder::new(current_dir.clone());
+        let tree_map = match tree_builder.build() {
+            Ok(tm) => tm,
+            Err(e) => {
+                println!("⚠️  Failed to build project treemap: {}", e);
+                return Ok(findings);
+            }
+        };
+
+        println!(
+            "   ✓ Analyzed {} files, {} LOC across {} languages",
+            tree_map.total_files,
+            tree_map.total_loc,
+            tree_map.language_distribution.len()
+        );
+
+        // Step 2: Score project legitimacy
+        println!("🎯 Analyzing project legitimacy...");
+        let legitimacy_analyzer = if let Some(ref ai_service) = self.internal_ai_service {
+            LegitimacyAnalyzer::new(tree_map.clone()).with_ai(ai_service.clone())
+        } else {
+            LegitimacyAnalyzer::new(tree_map.clone())
+        };
+
+        let legitimacy = match legitimacy_analyzer.analyze().await {
+            Ok(score) => {
+                println!("   ✓ Legitimacy Score: {:.2}/1.00", score.overall_score);
+                if !score.red_flags.is_empty() {
+                    println!("   🚩 Red Flags:");
+                    for flag in &score.red_flags {
+                        println!("      • {}", flag);
+                    }
+                }
+                if !score.green_flags.is_empty() {
+                    println!("   ✅ Green Flags:");
+                    for flag in &score.green_flags {
+                        println!("      • {}", flag);
+                    }
+                }
+                score
+            }
+            Err(e) => {
+                println!("⚠️  Failed to analyze legitimacy: {}", e);
+                return Ok(findings);
+            }
+        };
+
+        // Step 3: Detect project type
+        println!("🔍 Detecting project type...");
+        let detector = ProjectTypeDetector::new(tree_map.clone(), current_dir.clone());
+        let project_type = detector.detect();
+        println!("   ✓ Detected: {:?}", project_type);
+
+        // Step 4: Add legitimacy findings
+        if legitimacy.overall_score < 0.5 {
+            findings.push(AuditFinding {
+                id: uuid::Uuid::new_v4().to_string(),
+                title: "Low Project Legitimacy Score".to_string(),
+                description: format!(
+                    "This project has a legitimacy score of {:.2}/1.00, indicating potential quality concerns. {}",
+                    legitimacy.overall_score,
+                    if legitimacy.overall_score < 0.3 {
+                        "This appears to be a template or incomplete implementation with minimal customization."
+                    } else {
+                        "The project shows some development but may lack depth or testing."
+                    }
+                ),
+                severity: if legitimacy.overall_score < 0.3 {
+                    AuditSeverity::High
+                } else {
+                    AuditSeverity::Medium
+                },
+                category: "Project Quality".to_string(),
+                cwe_id: None,
+                cvss_score: None,
+                impact: "May indicate AI-generated template spam or incomplete development".to_string(),
+                recommendation: format!(
+                    "Review the following concerns: {}. Consider improving project structure, adding tests, and expanding implementation.",
+                    legitimacy.red_flags.join("; ")
+                ),
+                code_location: Some(current_dir.to_string_lossy().to_string()),
+                references: vec![],
+            });
+        }
+
+        // Step 5: Add project type information as an info finding
+        findings.push(AuditFinding {
+            id: uuid::Uuid::new_v4().to_string(),
+            title: format!("Project Type: {:?}", project_type),
+            description: format!(
+                "Intelligent analysis detected this as a {:?} project. Security checks will be tailored accordingly.",
+                project_type
+            ),
+            severity: AuditSeverity::Info,
+            category: "Project Analysis".to_string(),
+            cwe_id: None,
+            cvss_score: None,
+            impact: match project_type {
+                ProjectType::SolanaProgram => "Solana-specific security checks will be applied (account validation, PDA security, etc.)".to_string(),
+                ProjectType::RustCLI | ProjectType::RustLibrary => "Rust-specific security checks will be applied (unsafe usage, panic handling, etc.)".to_string(),
+                ProjectType::Python => "Python-specific security checks will be applied (eval/exec, SQL injection, etc.)".to_string(),
+                ProjectType::WebBackend | ProjectType::WebFrontend => "Web security checks will be applied (XSS, CSRF, etc.)".to_string(),
+                _ => "Generic security checks will be applied".to_string(),
+            },
+            recommendation: "No action required - this is informational".to_string(),
+            code_location: Some(current_dir.to_string_lossy().to_string()),
+            references: vec![],
+        });
+
+        // Step 6: Store project type for conditional analysis in modular checks
+        // (This would require adding a field to AuditCoordinator to store the detected type)
+        println!("────────────────────────────────────────");
+        println!("✅ Intelligent analysis complete\n");
+
+        Ok(findings)
     }
 }

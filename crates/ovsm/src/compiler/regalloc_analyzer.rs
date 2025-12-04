@@ -75,26 +75,74 @@ impl RegAllocReport {
     pub fn format(&self) -> String {
         let mut output = String::new();
 
-        writeln!(output, "╔══════════════════════════════════════════════════════════════════╗").unwrap();
-        writeln!(output, "║            REGISTER ALLOCATION ANALYSIS REPORT                  ║").unwrap();
-        writeln!(output, "╠══════════════════════════════════════════════════════════════════╣").unwrap();
-        writeln!(output, "║ Available Registers: {} (R3-R5, R8-R9)                          ║", self.available_regs).unwrap();
-        writeln!(output, "║ Peak Register Pressure: {} at instruction #{}                    ║", self.peak_pressure, self.peak_pressure_index).unwrap();
-        writeln!(output, "║ Total Spills: {}                                                 ║", self.total_spills).unwrap();
-        writeln!(output, "║ Issues Found: {}                                                 ║", self.issues.len()).unwrap();
-        writeln!(output, "╚══════════════════════════════════════════════════════════════════╝").unwrap();
+        writeln!(
+            output,
+            "╔══════════════════════════════════════════════════════════════════╗"
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "║            REGISTER ALLOCATION ANALYSIS REPORT                  ║"
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "╠══════════════════════════════════════════════════════════════════╣"
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "║ Available Registers: {} (R3-R5, R8-R9)                          ║",
+            self.available_regs
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "║ Peak Register Pressure: {} at instruction #{}                    ║",
+            self.peak_pressure, self.peak_pressure_index
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "║ Total Spills: {}                                                 ║",
+            self.total_spills
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "║ Issues Found: {}                                                 ║",
+            self.issues.len()
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "╚══════════════════════════════════════════════════════════════════╝"
+        )
+        .unwrap();
 
         // Issues section
         if !self.issues.is_empty() {
             writeln!(output, "\n🚨 ISSUES DETECTED:").unwrap();
-            writeln!(output, "─────────────────────────────────────────────────────────────────────").unwrap();
+            writeln!(
+                output,
+                "─────────────────────────────────────────────────────────────────────"
+            )
+            .unwrap();
             for issue in &self.issues {
                 let icon = match issue.severity {
                     "critical" => "🔴",
                     "warning" => "🟡",
                     _ => "🔵",
                 };
-                writeln!(output, "{} [{}] IR #{}: {}", icon, issue.severity.to_uppercase(), issue.index, issue.message).unwrap();
+                writeln!(
+                    output,
+                    "{} [{}] IR #{}: {}",
+                    icon,
+                    issue.severity.to_uppercase(),
+                    issue.index,
+                    issue.message
+                )
+                .unwrap();
                 if let Some(reg) = issue.affected_reg {
                     writeln!(output, "   Affected register: R{}", reg.0).unwrap();
                 }
@@ -103,34 +151,63 @@ impl RegAllocReport {
 
         // Pressure timeline
         writeln!(output, "\n📊 REGISTER PRESSURE TIMELINE:").unwrap();
-        writeln!(output, "─────────────────────────────────────────────────────────────────────").unwrap();
+        writeln!(
+            output,
+            "─────────────────────────────────────────────────────────────────────"
+        )
+        .unwrap();
 
         let max_bar_width = 50;
         for instr in &self.instructions {
             let bar_len = (instr.pressure * max_bar_width) / self.available_regs.max(1);
             let bar = "█".repeat(bar_len.min(max_bar_width));
-            let overflow = if instr.pressure > self.available_regs { " ⚠️ SPILL" } else { "" };
+            let overflow = if instr.pressure > self.available_regs {
+                " ⚠️ SPILL"
+            } else {
+                ""
+            };
             let syscall_marker = if instr.is_syscall { " 📞" } else { "" };
 
-            writeln!(output, "{:4} │{:<50}│ {}/{}{}{}",
-                instr.index,
-                bar,
-                instr.pressure,
-                self.available_regs,
-                overflow,
-                syscall_marker
-            ).unwrap();
+            writeln!(
+                output,
+                "{:4} │{:<50}│ {}/{}{}{}",
+                instr.index, bar, instr.pressure, self.available_regs, overflow, syscall_marker
+            )
+            .unwrap();
         }
 
         // Detailed instruction trace (first 20 instructions)
         writeln!(output, "\n📋 DETAILED INSTRUCTION TRACE (first 30):").unwrap();
-        writeln!(output, "─────────────────────────────────────────────────────────────────────").unwrap();
-        writeln!(output, "{:4} {:40} {:15} {:15} {:6}", "IDX", "INSTRUCTION", "DEFS", "USES", "LIVE").unwrap();
-        writeln!(output, "─────────────────────────────────────────────────────────────────────").unwrap();
+        writeln!(
+            output,
+            "─────────────────────────────────────────────────────────────────────"
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "{:4} {:40} {:15} {:15} {:6}",
+            "IDX", "INSTRUCTION", "DEFS", "USES", "LIVE"
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "─────────────────────────────────────────────────────────────────────"
+        )
+        .unwrap();
 
         for instr in self.instructions.iter().take(30) {
-            let defs_str: String = instr.defs.iter().map(|r| format!("R{}", r.0)).collect::<Vec<_>>().join(",");
-            let uses_str: String = instr.uses.iter().map(|r| format!("R{}", r.0)).collect::<Vec<_>>().join(",");
+            let defs_str: String = instr
+                .defs
+                .iter()
+                .map(|r| format!("R{}", r.0))
+                .collect::<Vec<_>>()
+                .join(",");
+            let uses_str: String = instr
+                .uses
+                .iter()
+                .map(|r| format!("R{}", r.0))
+                .collect::<Vec<_>>()
+                .join(",");
             let live_count = instr.live_regs.len();
 
             let desc = if instr.description.len() > 38 {
@@ -139,13 +216,24 @@ impl RegAllocReport {
                 instr.description.clone()
             };
 
-            writeln!(output, "{:4} {:40} {:15} {:15} {:6}",
+            writeln!(
+                output,
+                "{:4} {:40} {:15} {:15} {:6}",
                 instr.index,
                 desc,
-                if defs_str.is_empty() { "-".to_string() } else { defs_str },
-                if uses_str.is_empty() { "-".to_string() } else { uses_str },
+                if defs_str.is_empty() {
+                    "-".to_string()
+                } else {
+                    defs_str
+                },
+                if uses_str.is_empty() {
+                    "-".to_string()
+                } else {
+                    uses_str
+                },
                 live_count
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         output
@@ -153,7 +241,8 @@ impl RegAllocReport {
 
     /// Get JSON representation for programmatic analysis
     pub fn to_json(&self) -> String {
-        format!(r#"{{
+        format!(
+            r#"{{
   "available_regs": {},
   "peak_pressure": {},
   "peak_pressure_index": {},
@@ -166,8 +255,14 @@ impl RegAllocReport {
             self.peak_pressure_index,
             self.total_spills,
             self.issues.len(),
-            self.issues.iter()
-                .map(|i| format!(r#"{{"index": {}, "severity": "{}", "message": "{}"}}"#, i.index, i.severity, i.message.replace('"', "'")))
+            self.issues
+                .iter()
+                .map(|i| format!(
+                    r#"{{"index": {}, "severity": "{}", "message": "{}"}}"#,
+                    i.index,
+                    i.severity,
+                    i.message.replace('"', "'")
+                ))
                 .collect::<Vec<_>>()
                 .join(",\n    ")
         )
@@ -191,11 +286,11 @@ impl Default for RegAllocAnalyzer {
 impl RegAllocAnalyzer {
     pub fn new() -> Self {
         let mut reserved = HashSet::new();
-        reserved.insert(0);  // R0 - return value
-        reserved.insert(1);  // R1 - accounts pointer (ABI)
-        reserved.insert(2);  // R2 - instruction data (ABI)
-        reserved.insert(6);  // R6 - saved accounts
-        reserved.insert(7);  // R7 - saved instr data
+        reserved.insert(0); // R0 - return value
+        reserved.insert(1); // R1 - accounts pointer (ABI)
+        reserved.insert(2); // R2 - instruction data (ABI)
+        reserved.insert(6); // R6 - saved accounts
+        reserved.insert(7); // R7 - saved instr data
         reserved.insert(10); // R10 - frame pointer
 
         Self {
@@ -284,16 +379,18 @@ impl RegAllocAnalyzer {
 
             // Issue: Syscall with high pressure (clobbers R1-R5)
             if is_syscall && pressure > 2 {
-                let caller_saved_live: Vec<_> = live_regs.iter()
-                    .filter(|r| r.0 >= 3 && r.0 <= 5)
-                    .collect();
+                let caller_saved_live: Vec<_> =
+                    live_regs.iter().filter(|r| r.0 >= 3 && r.0 <= 5).collect();
                 if !caller_saved_live.is_empty() {
                     issues.push(RegAllocIssue {
                         index: idx,
                         severity: "warning",
                         message: format!(
                             "Syscall may clobber live values in caller-saved registers: {:?}",
-                            caller_saved_live.iter().map(|r| format!("R{}", r.0)).collect::<Vec<_>>()
+                            caller_saved_live
+                                .iter()
+                                .map(|r| format!("R{}", r.0))
+                                .collect::<Vec<_>>()
                         ),
                         affected_reg: caller_saved_live.first().copied().copied(),
                     });
@@ -315,9 +412,10 @@ impl RegAllocAnalyzer {
 
             // Issue: Large constant potentially spilled
             if let IrInstruction::ConstI64(dst, val) = ir {
-                if *val > i32::MAX as i64 || *val < i32::MIN as i64 {
-                    if pressure >= self.available_regs {
-                        issues.push(RegAllocIssue {
+                if (*val > i32::MAX as i64 || *val < i32::MIN as i64)
+                    && pressure >= self.available_regs
+                {
+                    issues.push(RegAllocIssue {
                             index: idx,
                             severity: "critical",
                             message: format!(
@@ -326,7 +424,6 @@ impl RegAllocAnalyzer {
                             ),
                             affected_reg: Some(*dst),
                         });
-                    }
                 }
             }
 
@@ -346,7 +443,9 @@ impl RegAllocAnalyzer {
         for (idx, instr) in instructions.iter().enumerate() {
             for use_reg in &instr.uses {
                 // Check if this register was ever defined before this point
-                let defined_before = instructions.iter().take(idx)
+                let defined_before = instructions
+                    .iter()
+                    .take(idx)
                     .any(|i| i.defs.contains(use_reg));
 
                 // Also check if it's a pre-allocated register (1,2,6,7)
@@ -374,7 +473,11 @@ impl RegAllocAnalyzer {
     }
 
     /// Analyze a single IR instruction
-    fn analyze_instruction(&self, ir: &IrInstruction, _idx: usize) -> (Vec<IrReg>, Vec<IrReg>, String, bool) {
+    fn analyze_instruction(
+        &self,
+        ir: &IrInstruction,
+        _idx: usize,
+    ) -> (Vec<IrReg>, Vec<IrReg>, String, bool) {
         let mut defs = Vec::new();
         let mut uses = Vec::new();
         let desc: String;
@@ -431,9 +534,12 @@ impl RegAllocAnalyzer {
                 uses.push(*b);
                 desc = format!("Mod R{} = R{} % R{}", dst.0, a.0, b.0);
             }
-            IrInstruction::Eq(dst, a, b) | IrInstruction::Ne(dst, a, b) |
-            IrInstruction::Lt(dst, a, b) | IrInstruction::Le(dst, a, b) |
-            IrInstruction::Gt(dst, a, b) | IrInstruction::Ge(dst, a, b) => {
+            IrInstruction::Eq(dst, a, b)
+            | IrInstruction::Ne(dst, a, b)
+            | IrInstruction::Lt(dst, a, b)
+            | IrInstruction::Le(dst, a, b)
+            | IrInstruction::Gt(dst, a, b)
+            | IrInstruction::Ge(dst, a, b) => {
                 defs.push(*dst);
                 uses.push(*a);
                 uses.push(*b);
@@ -615,7 +721,11 @@ mod tests {
 
         let report = analyzer.analyze(&program);
         // Should detect high pressure (10 registers needed at peak)
-        assert!(report.peak_pressure > 5, "Expected peak_pressure > 5, got {}", report.peak_pressure);
+        assert!(
+            report.peak_pressure > 5,
+            "Expected peak_pressure > 5, got {}",
+            report.peak_pressure
+        );
         // The spill count depends on whether graph coloring finds better solutions
         // We just verify we detected high pressure; spills may or may not occur
     }

@@ -24,8 +24,10 @@ fn main() {
 
         let opcode = elf_bytes[abs_offset];
 
-        print!("  Instr[{}]: byte_offset=0x{:02x}, abs=0x{:04x}, opcode=0x{:02x} ",
-               instr_count, byte_offset, abs_offset, opcode);
+        print!(
+            "  Instr[{}]: byte_offset=0x{:02x}, abs=0x{:04x}, opcode=0x{:02x} ",
+            instr_count, byte_offset, abs_offset, opcode
+        );
 
         // Check if this is the problematic instruction 5
         if instr_count == 5 {
@@ -44,7 +46,10 @@ fn main() {
                     0
                 };
                 println!("           → Jump offset would be: {}", imm);
-                println!("           → Target would be instruction: {}", instr_count as i32 + imm as i32 + 1);
+                println!(
+                    "           → Target would be instruction: {}",
+                    instr_count as i32 + imm as i32 + 1
+                );
             }
         } else {
             println!();
@@ -71,7 +76,7 @@ fn main() {
 
     // Check if instruction 5 has any issues
     let instr5_offset = text_start + 0x28; // 5 instructions * 8 bytes (but LDDW is 16)
-    // Actually: 2*16 (two LDDW) + 8 (MOV) = 40 = 0x28
+                                           // Actually: 2*16 (two LDDW) + 8 (MOV) = 40 = 0x28
 
     if instr5_offset < elf_bytes.len() {
         println!("\n🎯 Instruction 5 is at offset 0x{:x}", instr5_offset);

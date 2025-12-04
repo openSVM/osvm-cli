@@ -404,7 +404,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let args: Vec<String> = std::env::args().collect();
         // Find "stream" and take everything after it
         let stream_args: Vec<String> = std::iter::once("stream".to_string())
-            .chain(args.iter().skip_while(|arg| *arg != "stream").skip(1).cloned())
+            .chain(
+                args.iter()
+                    .skip_while(|arg| *arg != "stream")
+                    .skip(1)
+                    .cloned(),
+            )
             .collect();
 
         let cmd = StreamCommand::parse_from(&stream_args);
@@ -546,12 +551,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let verbose = app_matches.get_count("verbose");
         let plan_only = app_matches.get_flag("plan_only");
         let debug = app_matches.get_flag("debug");
+        let plan_flag = app_matches.get_flag("plan");
 
         // Use streaming agent for direct queries
         return crate::utils::streaming_agent::execute_streaming_agent(
             sub_command,
             verbose,
             plan_only,
+            plan_flag,
             debug,
         )
         .await
@@ -833,7 +840,8 @@ async fn handle_collab_command(
             collab_service::start_session(name, wallet, max, password).await?;
         }
         Some(("join", args)) => {
-            let code = args.get_one::<String>("code")
+            let code = args
+                .get_one::<String>("code")
                 .ok_or("Invite code required")?;
             let name = args.get_one::<String>("name").cloned();
             collab_service::join_session(code, name).await?;
@@ -842,9 +850,9 @@ async fn handle_collab_command(
             collab_service::list_sessions().await?;
         }
         Some(("annotate", args)) | Some(("note", args)) => {
-            let target = args.get_one::<String>("target")
-                .ok_or("Target required")?;
-            let text = args.get_one::<String>("text")
+            let target = args.get_one::<String>("target").ok_or("Target required")?;
+            let text = args
+                .get_one::<String>("text")
                 .ok_or("Annotation text required")?;
             let severity = args.get_one::<String>("severity").cloned();
             collab_service::add_annotation(None, target, text, severity).await?;
@@ -853,33 +861,34 @@ async fn handle_collab_command(
             collab_service::list_annotations(None).await?;
         }
         Some(("server", args)) => {
-            let port = args.get_one::<String>("port")
+            let port = args
+                .get_one::<String>("port")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(8080);
             let host = args.get_one::<String>("host").cloned();
             collab_service::start_server(port, host).await?;
         }
         // Federation commands
-        Some(("peers", peer_args)) => {
-            match peer_args.subcommand() {
-                Some(("add", add_args)) => {
-                    let address = add_args.get_one::<String>("address")
-                        .ok_or("Peer address required")?;
-                    collab_service::add_federation_peer(address).await?;
-                }
-                Some(("remove", rm_args)) => {
-                    let address = rm_args.get_one::<String>("address")
-                        .ok_or("Peer address required")?;
-                    collab_service::remove_federation_peer(address).await?;
-                }
-                Some(("list", _)) | None => {
-                    collab_service::list_federation_peers().await?;
-                }
-                _ => {
-                    collab_service::list_federation_peers().await?;
-                }
+        Some(("peers", peer_args)) => match peer_args.subcommand() {
+            Some(("add", add_args)) => {
+                let address = add_args
+                    .get_one::<String>("address")
+                    .ok_or("Peer address required")?;
+                collab_service::add_federation_peer(address).await?;
             }
-        }
+            Some(("remove", rm_args)) => {
+                let address = rm_args
+                    .get_one::<String>("address")
+                    .ok_or("Peer address required")?;
+                collab_service::remove_federation_peer(address).await?;
+            }
+            Some(("list", _)) | None => {
+                collab_service::list_federation_peers().await?;
+            }
+            _ => {
+                collab_service::list_federation_peers().await?;
+            }
+        },
         Some(("discover", _)) => {
             collab_service::discover_sessions().await?;
         }

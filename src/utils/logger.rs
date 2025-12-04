@@ -10,7 +10,8 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 /// for all OSVM operations.
 pub fn init_logging() -> Result<PathBuf> {
     // Get home directory
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
 
     // Create ~/.osvm/logs/ directory
     let logs_dir = home.join(".osvm").join("logs");
@@ -31,19 +32,16 @@ pub fn init_logging() -> Result<PathBuf> {
     // Create fmt layer for file output
     let file_layer = fmt::layer()
         .with_writer(file_appender)
-        .with_ansi(false)  // No ANSI codes in log files
+        .with_ansi(false) // No ANSI codes in log files
         .with_target(true)
         .with_thread_ids(true)
         .with_line_number(true);
 
     // Create console layer for stdout (optional, can be disabled)
-    let console_layer = fmt::layer()
-        .with_writer(std::io::stdout)
-        .with_target(false);
+    let console_layer = fmt::layer().with_writer(std::io::stdout).with_target(false);
 
     // Set up env filter (default to info level)
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     // Initialize subscriber with both file and console output
     tracing_subscriber::registry()
@@ -64,7 +62,8 @@ pub fn init_logging() -> Result<PathBuf> {
 /// This suppresses all stdout/stderr logging to keep the TUI clean.
 pub fn init_logging_quiet() -> Result<PathBuf> {
     // Get home directory
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
 
     // Create ~/.osvm/logs/ directory
     let logs_dir = home.join(".osvm").join("logs");
@@ -91,8 +90,7 @@ pub fn init_logging_quiet() -> Result<PathBuf> {
         .with_line_number(true);
 
     // Set up env filter (default to info level)
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     // Initialize subscriber with file output ONLY (no console layer)
     tracing_subscriber::registry()
@@ -109,7 +107,8 @@ pub fn init_logging_quiet() -> Result<PathBuf> {
 
 /// Get the logs directory path
 pub fn get_logs_dir() -> Result<PathBuf> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
     Ok(home.join(".osvm").join("logs"))
 }
 
@@ -124,9 +123,7 @@ pub fn list_log_files() -> Result<Vec<PathBuf>> {
     let mut log_files: Vec<PathBuf> = fs::read_dir(&logs_dir)?
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
-        .filter(|path| {
-            path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("log")
-        })
+        .filter(|path| path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("log"))
         .collect();
 
     // Sort by modification time (newest first)

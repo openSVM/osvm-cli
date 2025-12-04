@@ -323,7 +323,9 @@ impl LanguageServer for OvsmLanguageServer {
         if locations.is_empty() {
             Ok(None)
         } else if locations.len() == 1 {
-            Ok(Some(GotoDefinitionResponse::Scalar(locations.into_iter().next().unwrap())))
+            Ok(Some(GotoDefinitionResponse::Scalar(
+                locations.into_iter().next().unwrap(),
+            )))
         } else {
             Ok(Some(GotoDefinitionResponse::Array(locations)))
         }
@@ -391,17 +393,11 @@ impl LanguageServer for OvsmLanguageServer {
 
         for (name, entry) in crate::documentation::all_documentation() {
             let kind = match entry.category {
-                crate::documentation::DocCategory::SpecialForm => {
-                    CompletionItemKind::KEYWORD
-                }
-                crate::documentation::DocCategory::ControlFlow => {
-                    CompletionItemKind::KEYWORD
-                }
+                crate::documentation::DocCategory::SpecialForm => CompletionItemKind::KEYWORD,
+                crate::documentation::DocCategory::ControlFlow => CompletionItemKind::KEYWORD,
                 crate::documentation::DocCategory::Arithmetic
                 | crate::documentation::DocCategory::Comparison
-                | crate::documentation::DocCategory::Logical => {
-                    CompletionItemKind::OPERATOR
-                }
+                | crate::documentation::DocCategory::Logical => CompletionItemKind::OPERATOR,
                 _ => CompletionItemKind::FUNCTION,
             };
 
@@ -538,7 +534,12 @@ impl LanguageServer for OvsmLanguageServer {
                 for i in (0..position.line as usize).rev() {
                     let line = lines.get(i).unwrap_or(&"");
                     let func_name = extract_function_name(line.trim());
-                    if !func_name.is_empty() && func_name.chars().next().map_or(false, |c| c.is_alphabetic()) {
+                    if !func_name.is_empty()
+                        && func_name
+                            .chars()
+                            .next()
+                            .map_or(false, |c| c.is_alphabetic())
+                    {
                         // Found a previous function call, get suggestions
                         let suggestions = learning_engine.get_next_suggestions(&func_name).await;
                         for (idx, suggestion) in suggestions.into_iter().enumerate() {
@@ -612,7 +613,10 @@ impl LanguageServer for OvsmLanguageServer {
     // Execute Command (REPL)
     // ========================================================================
 
-    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<serde_json::Value>> {
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams,
+    ) -> Result<Option<serde_json::Value>> {
         let args = params.arguments;
 
         match params.command.as_str() {
@@ -625,21 +629,19 @@ impl LanguageServer for OvsmLanguageServer {
 
                         // Extract function name for learning
                         let func_name = extract_function_name(source);
-                        self.learning_engine.log_execution(&func_name, result.success).await;
+                        self.learning_engine
+                            .log_execution(&func_name, result.success)
+                            .await;
 
                         // Show result to user
                         if result.success {
-                            self.client
-                                .show_message(MessageType::INFO, &message)
-                                .await;
+                            self.client.show_message(MessageType::INFO, &message).await;
                         } else {
                             // Log error for learning
                             if let Some(ref err) = result.error {
                                 self.learning_engine.log_error("runtime", err).await;
                             }
-                            self.client
-                                .show_message(MessageType::ERROR, &message)
-                                .await;
+                            self.client.show_message(MessageType::ERROR, &message).await;
                         }
 
                         return Ok(Some(serde_json::json!({
@@ -672,9 +674,7 @@ impl LanguageServer for OvsmLanguageServer {
                             );
 
                             if success_count == total {
-                                self.client
-                                    .show_message(MessageType::INFO, &message)
-                                    .await;
+                                self.client.show_message(MessageType::INFO, &message).await;
                             } else {
                                 self.client
                                     .show_message(MessageType::WARNING, &message)
@@ -718,9 +718,7 @@ impl LanguageServer for OvsmLanguageServer {
                     }
                 );
 
-                self.client
-                    .show_message(MessageType::INFO, &message)
-                    .await;
+                self.client.show_message(MessageType::INFO, &message).await;
 
                 Ok(Some(serde_json::json!({
                     "total_events": stats.total_events,
@@ -734,24 +732,30 @@ impl LanguageServer for OvsmLanguageServer {
             "ovsm.nextSteps" => {
                 // Get suggested next functions based on last executed function
                 if let Some(current_func) = args.get(0).and_then(|v| v.as_str()) {
-                    let suggestions = self.learning_engine.get_next_suggestions(current_func).await;
+                    let suggestions = self
+                        .learning_engine
+                        .get_next_suggestions(current_func)
+                        .await;
 
                     if suggestions.is_empty() {
                         self.client
-                            .show_message(MessageType::INFO, "No learned sequences yet. Keep using the REPL!")
+                            .show_message(
+                                MessageType::INFO,
+                                "No learned sequences yet. Keep using the REPL!",
+                            )
                             .await;
                     } else {
                         let message = format!(
                             "📊 Suggested next steps after {}:\n{}",
                             current_func,
-                            suggestions.iter().enumerate()
+                            suggestions
+                                .iter()
+                                .enumerate()
                                 .map(|(i, s)| format!("  {}. {}", i + 1, s))
                                 .collect::<Vec<_>>()
                                 .join("\n")
                         );
-                        self.client
-                            .show_message(MessageType::INFO, &message)
-                            .await;
+                        self.client.show_message(MessageType::INFO, &message).await;
                     }
 
                     return Ok(Some(serde_json::json!({
@@ -773,11 +777,15 @@ fn extract_function_name(source: &str) -> String {
     if trimmed.starts_with('(') {
         // Find the first word after the opening paren
         let after_paren = &trimmed[1..];
-        let end = after_paren.find(|c: char| c.is_whitespace() || c == ')').unwrap_or(after_paren.len());
+        let end = after_paren
+            .find(|c: char| c.is_whitespace() || c == ')')
+            .unwrap_or(after_paren.len());
         after_paren[..end].to_string()
     } else {
         // Just a symbol or literal
-        let end = trimmed.find(|c: char| c.is_whitespace()).unwrap_or(trimmed.len());
+        let end = trimmed
+            .find(|c: char| c.is_whitespace())
+            .unwrap_or(trimmed.len());
         trimmed[..end].to_string()
     }
 }

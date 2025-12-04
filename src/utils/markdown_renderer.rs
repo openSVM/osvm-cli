@@ -21,11 +21,14 @@ impl MarkdownRenderer {
         // Enhance colors for better readability in blockchain reports
         // Headers stand out for sections like "Wallet Activity", "Risk Assessment"
         skin.bold.set_fg(termimad::crossterm::style::Color::Cyan);
-        skin.italic.set_fg(termimad::crossterm::style::Color::Yellow);
+        skin.italic
+            .set_fg(termimad::crossterm::style::Color::Yellow);
 
         // Code blocks for wallet addresses, transaction IDs
-        skin.code_block.set_fg(termimad::crossterm::style::Color::Green);
-        skin.inline_code.set_fg(termimad::crossterm::style::Color::Green);
+        skin.code_block
+            .set_fg(termimad::crossterm::style::Color::Green);
+        skin.inline_code
+            .set_fg(termimad::crossterm::style::Color::Green);
 
         Self { skin }
     }

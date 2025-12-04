@@ -372,9 +372,7 @@ impl PartialEq for Value {
             }
             (Value::Multiple(a), Value::Multiple(b)) => a == b,
             // Functions, macros, and async handles compared by identity (pointer equality)
-            (Value::Function { body: a, .. }, Value::Function { body: b, .. }) => {
-                Arc::ptr_eq(a, b)
-            }
+            (Value::Function { body: a, .. }, Value::Function { body: b, .. }) => Arc::ptr_eq(a, b),
             (Value::Macro { body: a, .. }, Value::Macro { body: b, .. }) => Arc::ptr_eq(a, b),
             (Value::AsyncHandle { id: a, .. }, Value::AsyncHandle { id: b, .. }) => a == b,
             _ => false,

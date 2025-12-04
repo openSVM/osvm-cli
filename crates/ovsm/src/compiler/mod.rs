@@ -20,31 +20,33 @@
 //! std::fs::write("program.so", elf_bytes)?;
 //! ```
 
-pub mod types;
+pub mod anchor_idl;
+pub mod debug;
+pub mod elf;
+pub mod formal_verification;
+pub mod graph_coloring;
 pub mod ir;
 pub mod optimizer;
-pub mod sbpf_codegen;
-pub mod elf;
-pub mod verifier;
-pub mod runtime;
-pub mod debug;
-pub mod solana_abi;
 pub mod regalloc_analyzer;
-pub mod graph_coloring;
-pub mod anchor_idl;
-pub mod formal_verification;
+pub mod runtime;
+pub mod sbpf_codegen;
+pub mod solana_abi;
+pub mod types;
+pub mod verifier;
 
-pub use types::{OvsmType, TypeChecker, TypeEnv};
-pub use ir::{IrProgram, IrInstruction, IrReg, IrGenerator};
-pub use optimizer::Optimizer;
-pub use sbpf_codegen::{SbpfCodegen, SbpfInstruction, SbpfReg, memory, syscall_hash, SolanaSymbols};
+pub use debug::{debug_compile, disassemble_sbpf, dump_ir, extract_text_section, validate_sbpf};
 pub use elf::ElfWriter;
-pub use verifier::{Verifier, VerifyResult, VerifyError};
-pub use runtime::{StackFrame, HeapAllocator, StringRuntime, ArrayRuntime};
-pub use debug::{dump_ir, disassemble_sbpf, validate_sbpf, debug_compile, extract_text_section};
-pub use regalloc_analyzer::{RegAllocAnalyzer, RegAllocReport, RegAllocIssue, InstructionAnalysis};
+pub use ir::{IrGenerator, IrInstruction, IrProgram, IrReg};
+pub use optimizer::Optimizer;
+pub use regalloc_analyzer::{InstructionAnalysis, RegAllocAnalyzer, RegAllocIssue, RegAllocReport};
+pub use runtime::{ArrayRuntime, HeapAllocator, StackFrame, StringRuntime};
+pub use sbpf_codegen::{
+    memory, syscall_hash, SbpfCodegen, SbpfInstruction, SbpfReg, SolanaSymbols,
+};
+pub use types::{OvsmType, TypeChecker, TypeEnv};
+pub use verifier::{Verifier, VerifyError, VerifyResult};
 
-use crate::{SExprScanner as Scanner, SExprParser as Parser, Program, Result, Error};
+use crate::{Error, Program, Result, SExprParser as Parser, SExprScanner as Scanner};
 
 /// SBPF bytecode version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,7 +96,7 @@ impl Default for CompileOptions {
             debug_info: false,
             source_map: false,
             sbpf_version: SbpfVersion::V1, // V1 with relocations for comparison
-            enable_solana_abi: false,  // Temporarily disabled while fixing opcode issues
+            enable_solana_abi: false,      // Temporarily disabled while fixing opcode issues
             type_check_mode: TypeCheckMode::Legacy, // Use existing checker by default
         }
     }
@@ -198,9 +200,8 @@ impl Compiler {
 
         // Check for fatal verification errors
         if !verification.valid {
-            let error_msgs: Vec<String> = verification.errors.iter()
-                .map(|e| e.to_string())
-                .collect();
+            let error_msgs: Vec<String> =
+                verification.errors.iter().map(|e| e.to_string()).collect();
             return Err(Error::compiler(format!(
                 "Verification failed: {}",
                 error_msgs.join("; ")
@@ -211,7 +212,9 @@ impl Compiler {
         let mut elf_writer = ElfWriter::new();
 
         // Convert syscall call sites to ELF relocation format
-        let syscall_refs: Vec<crate::compiler::elf::SyscallRef> = codegen.syscall_sites.iter()
+        let syscall_refs: Vec<crate::compiler::elf::SyscallRef> = codegen
+            .syscall_sites
+            .iter()
             .map(|site| crate::compiler::elf::SyscallRef {
                 offset: site.offset,
                 name: site.name.clone(),
@@ -219,7 +222,9 @@ impl Compiler {
             .collect();
 
         // Convert string load sites to ELF format for patching
-        let string_load_refs: Vec<crate::compiler::elf::StringLoadRef> = codegen.string_load_sites.iter()
+        let string_load_refs: Vec<crate::compiler::elf::StringLoadRef> = codegen
+            .string_load_sites
+            .iter()
             .map(|site| crate::compiler::elf::StringLoadRef {
                 offset: site.offset,
                 rodata_offset: site.rodata_offset,
@@ -230,11 +235,22 @@ impl Compiler {
         let elf_bytes = match self.options.sbpf_version {
             SbpfVersion::V1 => {
                 // V1: Must use write_with_syscalls to generate relocations
-                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &string_load_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write_with_syscalls(
+                    &sbpf_program,
+                    &syscall_refs,
+                    &string_load_refs,
+                    &codegen.rodata,
+                    self.options.debug_info,
+                    self.options.sbpf_version,
+                )?
             }
             SbpfVersion::V2 => {
                 // V2: No relocations needed, syscalls are embedded
-                elf_writer.write(&sbpf_program, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write(
+                    &sbpf_program,
+                    self.options.debug_info,
+                    self.options.sbpf_version,
+                )?
             }
         };
 
@@ -307,9 +323,8 @@ impl Compiler {
         let verification = verifier.verify(&sbpf_program);
 
         if !verification.valid {
-            let error_msgs: Vec<String> = verification.errors.iter()
-                .map(|e| e.to_string())
-                .collect();
+            let error_msgs: Vec<String> =
+                verification.errors.iter().map(|e| e.to_string()).collect();
             return Err(Error::compiler(format!(
                 "Verification failed: {}",
                 error_msgs.join("; ")
@@ -317,7 +332,9 @@ impl Compiler {
         }
 
         // Convert syscall call sites to ELF relocation format
-        let syscall_refs: Vec<crate::compiler::elf::SyscallRef> = codegen.syscall_sites.iter()
+        let syscall_refs: Vec<crate::compiler::elf::SyscallRef> = codegen
+            .syscall_sites
+            .iter()
             .map(|site| crate::compiler::elf::SyscallRef {
                 offset: site.offset,
                 name: site.name.clone(),
@@ -325,7 +342,9 @@ impl Compiler {
             .collect();
 
         // Convert string load sites to ELF format for patching
-        let string_load_refs: Vec<crate::compiler::elf::StringLoadRef> = codegen.string_load_sites.iter()
+        let string_load_refs: Vec<crate::compiler::elf::StringLoadRef> = codegen
+            .string_load_sites
+            .iter()
             .map(|site| crate::compiler::elf::StringLoadRef {
                 offset: site.offset,
                 rodata_offset: site.rodata_offset,
@@ -338,11 +357,22 @@ impl Compiler {
         let elf_bytes = match self.options.sbpf_version {
             SbpfVersion::V1 => {
                 // V1: Must use write_with_syscalls to generate relocations
-                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &string_load_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write_with_syscalls(
+                    &sbpf_program,
+                    &syscall_refs,
+                    &string_load_refs,
+                    &codegen.rodata,
+                    self.options.debug_info,
+                    self.options.sbpf_version,
+                )?
             }
             SbpfVersion::V2 => {
                 // V2: No relocations needed, syscalls are embedded
-                elf_writer.write(&sbpf_program, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write(
+                    &sbpf_program,
+                    self.options.debug_info,
+                    self.options.sbpf_version,
+                )?
             }
         };
 

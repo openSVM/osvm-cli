@@ -1,8 +1,3 @@
-use anyhow::{Context, Result};
-use clap::ArgMatches;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use crate::services::{
     ai_service::AiService,
     mcp_pool::{McpPool, McpPoolConfig},
@@ -11,6 +6,26 @@ use crate::services::{
     research_agent::ResearchAgent,
 };
 use crate::utils::mcp_bridge::McpBridgeTool;
+use anyhow::{Context, Result};
+use clap::ArgMatches;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+/// Type alias for flow adjacency list: maps wallet -> [(dest_wallet, amount, timestamp)]
+type FlowAdjacency<'a> = HashMap<&'a str, Vec<(&'a str, f64, Option<i64>)>>;
+
+/// Type alias for flow data with optional token: maps wallet -> [(dest_wallet, amount, token)]
+type FlowWithToken<'a> = HashMap<&'a str, Vec<(&'a str, f64, Option<&'a str>)>>;
+
+/// Context for tree rendering operations (reduces function parameter count)
+struct TreeRenderContext<'a> {
+    adjacency: &'a FlowAdjacency<'a>,
+    edge_count: &'a HashMap<(&'a str, &'a str), usize>,
+    target: &'a str,
+    token_name: &'a str,
+    max_depth: usize,
+}
 
 /// Handle the research command for intelligent wallet investigation
 pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
@@ -68,7 +83,11 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     // Discover and register MCP tools
     {
         let mut svc = mcp_arc.lock().await;
-        let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+        let servers: Vec<String> = svc
+            .list_servers()
+            .iter()
+            .map(|(id, _)| (*id).clone())
+            .collect();
 
         for server_id in servers {
             if svc.initialize_server(&server_id).await.is_err() {
@@ -94,7 +113,8 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
 
     // Execute OVSM script
     crate::tui_log!("⚙️  Executing on-chain data analysis...");
-    let raw_result = ovsm_service.execute_code(&ovsm_script)
+    let raw_result = ovsm_service
+        .execute_code(&ovsm_script)
         .context("Failed to execute OVSM analysis")?;
 
     // Extract ONLY the aggregated summary (not raw transfers!)
@@ -169,7 +189,11 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
         crate::tui_log!("🔍 DEBUG: Acquiring MCP lock...");
         let mut svc = mcp_arc.lock().await;
         crate::tui_log!("🔍 DEBUG: Lock acquired, listing servers...");
-        let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+        let servers: Vec<String> = svc
+            .list_servers()
+            .iter()
+            .map(|(id, _)| (*id).clone())
+            .collect();
         crate::tui_log!("🔍 DEBUG: Found {} servers: {:?}", servers.len(), servers);
 
         for server_id in servers {
@@ -182,7 +206,11 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
 
             crate::tui_log!("🔍 DEBUG: Listing tools for server '{}'...", server_id);
             if let Ok(tools) = svc.list_tools(&server_id).await {
-                crate::tui_log!("✅ DEBUG: Found {} tools for server '{}'", tools.len(), server_id);
+                crate::tui_log!(
+                    "✅ DEBUG: Found {} tools for server '{}'",
+                    tools.len(),
+                    server_id
+                );
                 drop(svc);
                 for tool in tools {
                     crate::tui_log!("  📋 Registering tool: {}", tool.name);
@@ -196,11 +224,18 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
         crate::tui_log!("🔍 DEBUG: MCP initialization loop complete");
     }
 
-    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(registry, false, false)));
+    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(
+        registry, false, false,
+    )));
     crate::tui_log!("✅ OVSM initialized with blockchain tools\n");
 
     // Create research agent with MCP service
-    let agent = ResearchAgent::new(ai_service, ovsm_service, Arc::clone(&mcp_arc), wallet.to_string());
+    let agent = ResearchAgent::new(
+        ai_service,
+        ovsm_service,
+        Arc::clone(&mcp_arc),
+        wallet.to_string(),
+    );
 
     // Check if real-time streaming mode is enabled
     // Note: --realtime is an alias for --stream, so we only check "stream"
@@ -217,7 +252,7 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
             }
             Err(e) => {
                 crate::tui_log!("❌ Streaming failed: {}", e);
-                return Err(e.into());
+                return Err(e);
             }
         }
     } else {
@@ -240,7 +275,7 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
         }
         Err(e) => {
             crate::tui_log!("❌ Research failed: {}", e);
-            return Err(e.into());
+            return Err(e);
         }
     }
 
@@ -250,7 +285,8 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
 /// Generate the OVSM script for wallet analysis
 /// Fetches ALL transfers with pagination, then aggregates by token
 fn generate_wallet_analysis_script(wallet: &str) -> String {
-    format!(r#";; Wallet analysis - fetch ALL transfers and aggregate by token
+    format!(
+        r#";; Wallet analysis - fetch ALL transfers and aggregate by token
 (do
   (define target "{}")
 
@@ -380,7 +416,9 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
    :outflow_count (length all_outflows)
    :top_senders top_senders
    :top_receivers top_receivers}})
-"#, wallet)
+"#,
+        wallet
+    )
 }
 
 /// Extract compact summary JSON from OVSM result (no raw transfers!)
@@ -389,32 +427,39 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
 
     let obj = result.as_object()?;
 
-    let wallet = obj.get("wallet")
+    let wallet = obj
+        .get("wallet")
         .and_then(|v| v.as_string().ok())
         .unwrap_or("unknown");
 
-    let total_raw = obj.get("total_transfers_raw")
+    let total_raw = obj
+        .get("total_transfers_raw")
         .and_then(|v| v.as_int().ok())
         .unwrap_or(0);
 
-    let total_unique = obj.get("total_transfers_unique")
+    let total_unique = obj
+        .get("total_transfers_unique")
         .and_then(|v| v.as_int().ok())
         .unwrap_or(0);
 
-    let num_tokens = obj.get("num_tokens")
+    let num_tokens = obj
+        .get("num_tokens")
         .and_then(|v| v.as_int().ok())
         .unwrap_or(0);
 
-    let inflow_count = obj.get("inflow_count")
+    let inflow_count = obj
+        .get("inflow_count")
         .and_then(|v| v.as_int().ok())
         .unwrap_or(0);
 
-    let outflow_count = obj.get("outflow_count")
+    let outflow_count = obj
+        .get("outflow_count")
         .and_then(|v| v.as_int().ok())
         .unwrap_or(0);
 
     // Extract top senders: [[address, {symbol: amount, ...}], ...]
-    let top_senders_array = obj.get("top_senders")
+    let top_senders_array = obj
+        .get("top_senders")
         .ok_or_else(|| anyhow::anyhow!("Expected top_senders key"))?
         .as_array()?;
 
@@ -443,7 +488,8 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
     }
 
     // Extract top receivers: [[address, {symbol: amount, ...}], ...]
-    let top_receivers_array = obj.get("top_receivers")
+    let top_receivers_array = obj
+        .get("top_receivers")
         .ok_or_else(|| anyhow::anyhow!("Expected top_receivers key"))?
         .as_array()?;
 
@@ -486,7 +532,11 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
 }
 
 /// Format the wallet analysis summary using AI
-async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, summary_json: &str) -> Result<String> {
+async fn format_wallet_analysis(
+    ai_service: &mut AiService,
+    wallet: &str,
+    summary_json: &str,
+) -> Result<String> {
     // System prompt for custom formatting (bypass planning mode)
     let system_prompt = r#"You are a blockchain detective presenting findings. Format the JSON data as an engaging terminal report.
 
@@ -518,20 +568,25 @@ FORMAT:
 Add a witty one-liner observation at the end based on the flow pattern."#.to_string();
 
     // Question contains the actual data
-    let question = format!(r#"Wallet Address: {}
+    let question = format!(
+        r#"Wallet Address: {}
 
 Aggregated Transfer Summary (JSON):
-{}"#, wallet, summary_json);
+{}"#,
+        wallet, summary_json
+    );
 
     // Use ownPlan=true to bypass planning and use our custom system prompt directly
-    ai_service.query_osvm_ai_with_options(&question, Some(system_prompt), Some(true), false).await
+    ai_service
+        .query_osvm_ai_with_options(&question, Some(system_prompt), Some(true), false)
+        .await
         .context("Failed to format analysis with AI")
 }
 
 /// Handle TUI-based research with real-time visualization
 async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
-    use crate::utils::tui::OsvmApp;
     use crate::utils::tui::graph::TransferData;
+    use crate::utils::tui::OsvmApp;
     use crate::utils::web_terminal::WebTerminal;
 
     // Check if web streaming is enabled
@@ -568,7 +623,9 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
         println!(
             "{} {}",
             "🚀 Web terminal started at:".bright_green(),
-            format!("http://localhost:{}", web_port).bright_cyan().underline()
+            format!("http://localhost:{}", web_port)
+                .bright_cyan()
+                .underline()
         );
         println!(
             "{}",
@@ -614,7 +671,11 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     // Discover and register MCP tools
     {
         let mut svc = mcp_arc.lock().await;
-        let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+        let servers: Vec<String> = svc
+            .list_servers()
+            .iter()
+            .map(|(id, _)| (*id).clone())
+            .collect();
 
         for server_id in servers {
             if svc.initialize_server(&server_id).await.is_err() {
@@ -631,7 +692,9 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
         }
     }
 
-    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(registry, false, false)));
+    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(
+        registry, false, false,
+    )));
 
     // Create TUI app
     let mut app = OsvmApp::new(wallet.to_string());
@@ -676,7 +739,10 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
 
             {
                 let mut log = logs.lock().unwrap();
-                log.push(format!("Investigation started for wallet: {}", wallet_clone));
+                log.push(format!(
+                    "Investigation started for wallet: {}",
+                    wallet_clone
+                ));
                 log.push("Initializing MCP service...".to_string());
             }
 
@@ -684,77 +750,89 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
 
             // Create callbacks for TUI updates
             let agent_output_clone = Arc::clone(&agent_output);
-            let output_callback: crate::services::research_agent::TuiCallback = Arc::new(move |msg: &str| {
-                if let Ok(mut output) = agent_output_clone.lock() {
-                    output.push(msg.to_string());
-                    if output.len() > 500 {
-                        output.drain(0..250);
+            let output_callback: crate::services::research_agent::TuiCallback =
+                Arc::new(move |msg: &str| {
+                    if let Ok(mut output) = agent_output_clone.lock() {
+                        output.push(msg.to_string());
+                        if output.len() > 500 {
+                            output.drain(0..250);
+                        }
                     }
-                }
-            });
+                });
 
             let logs_clone = Arc::clone(&logs);
-            let logs_callback: crate::services::research_agent::TuiCallback = Arc::new(move |msg: &str| {
-                if let Ok(mut log) = logs_clone.lock() {
-                    log.push(format!("[{}] {}", chrono::Local::now().format("%H:%M:%S"), msg));
-                    if log.len() > 1000 {
-                        log.drain(0..500);
+            let logs_callback: crate::services::research_agent::TuiCallback =
+                Arc::new(move |msg: &str| {
+                    if let Ok(mut log) = logs_clone.lock() {
+                        log.push(format!(
+                            "[{}] {}",
+                            chrono::Local::now().format("%H:%M:%S"),
+                            msg
+                        ));
+                        if log.len() > 1000 {
+                            log.drain(0..500);
+                        }
                     }
-                }
-            });
+                });
 
             // Create graph callback to update TUI wallet graph AND analytics
             let target_w = target_wallet_for_callback.clone();
-            let graph_callback: crate::services::research_agent::GraphCallback = Arc::new(move |from: &str, to: &str, amount: f64, token: &str, timestamp: &str| {
-                // Update graph
-                if let Ok(mut graph) = wallet_graph.lock() {
-                    use crate::utils::tui::graph::WalletNodeType;
-                    graph.add_transfer(
-                        from.to_string(),
-                        to.to_string(),
-                        amount,
-                        token.to_string(),
-                        WalletNodeType::Funding,
-                        WalletNodeType::Recipient,
-                        Some(timestamp.to_string()),
-                        None,  // No signature available in this context
-                    );
-                }
-
-                // Update token volumes
-                if let Ok(mut vols) = token_volumes.lock() {
-                    if let Some(existing) = vols.iter_mut().find(|v| v.symbol == token) {
-                        existing.amount += amount;
-                    } else {
-                        vols.push(crate::utils::tui::app::TokenVolume {
-                            symbol: token.to_string(),
+            let graph_callback: crate::services::research_agent::GraphCallback = Arc::new(
+                move |from: &str, to: &str, amount: f64, token: &str, timestamp: &str| {
+                    // Update graph
+                    if let Ok(mut graph) = wallet_graph.lock() {
+                        use crate::utils::tui::graph::WalletNodeType;
+                        graph.add_transfer(
+                            from.to_string(),
+                            to.to_string(),
                             amount,
+                            token.to_string(),
+                            WalletNodeType::Funding,
+                            WalletNodeType::Recipient,
+                            Some(timestamp.to_string()),
+                            None, // No signature available in this context
+                        );
+                    }
+
+                    // Update token volumes
+                    if let Ok(mut vols) = token_volumes.lock() {
+                        if let Some(existing) = vols.iter_mut().find(|v| v.symbol == token) {
+                            existing.amount += amount;
+                        } else {
+                            vols.push(crate::utils::tui::app::TokenVolume {
+                                symbol: token.to_string(),
+                                amount,
+                            });
+                        }
+                        // Sort by volume descending
+                        vols.sort_by(|a, b| {
+                            b.amount
+                                .partial_cmp(&a.amount)
+                                .unwrap_or(std::cmp::Ordering::Equal)
                         });
                     }
-                    // Sort by volume descending
-                    vols.sort_by(|a, b| b.amount.partial_cmp(&a.amount).unwrap_or(std::cmp::Ordering::Equal));
-                }
 
-                // Update transfer events with HISTORICAL timestamp
-                if let Ok(mut evts) = transfer_events.lock() {
-                    let direction = if to == target_w { "IN" } else { "OUT" };
-                    // Use historical timestamp if available, else current time
-                    let ts = if !timestamp.is_empty() && timestamp.len() >= 10 {
-                        timestamp[..10].to_string() // Just the date
-                    } else {
-                        chrono::Local::now().format("%Y-%m-%d").to_string()
-                    };
-                    evts.push(crate::utils::tui::app::TransferEvent {
-                        timestamp: ts,
-                        amount,
-                        token: token.to_string(),
-                        direction: direction.to_string(),
-                    });
-                    // Sort by timestamp descending (newest first) and keep last 50
-                    evts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-                    evts.truncate(50);
-                }
-            });
+                    // Update transfer events with HISTORICAL timestamp
+                    if let Ok(mut evts) = transfer_events.lock() {
+                        let direction = if to == target_w { "IN" } else { "OUT" };
+                        // Use historical timestamp if available, else current time
+                        let ts = if !timestamp.is_empty() && timestamp.len() >= 10 {
+                            timestamp[..10].to_string() // Just the date
+                        } else {
+                            chrono::Local::now().format("%Y-%m-%d").to_string()
+                        };
+                        evts.push(crate::utils::tui::app::TransferEvent {
+                            timestamp: ts,
+                            amount,
+                            token: token.to_string(),
+                            direction: direction.to_string(),
+                        });
+                        // Sort by timestamp descending (newest first) and keep last 50
+                        evts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+                        evts.truncate(50);
+                    }
+                },
+            );
 
             let tui_callbacks = crate::services::research_agent::TuiCallbacks {
                 output: Some(output_callback),
@@ -768,7 +846,7 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
                 ovsm_service,
                 Arc::clone(&mcp_arc),
                 wallet_clone.clone(),
-                tui_callbacks
+                tui_callbacks,
             );
 
             // Add initialization complete message
@@ -792,7 +870,10 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
 
                     let mut output = agent_output.lock().unwrap();
                     output.push("✅ Investigation complete!".to_string());
-                    output.push(format!("📊 Final report generated ({} chars)", report.len()));
+                    output.push(format!(
+                        "📊 Final report generated ({} chars)",
+                        report.len()
+                    ));
 
                     let mut log = logs.lock().unwrap();
                     log.push("Investigation finished successfully".to_string());
@@ -828,16 +909,18 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
 
 /// Handle autonomous CLI research (no TUI, no user input)
 async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
+    use crate::services::opensvm_api::OpenSvmApi;
     use colored::Colorize;
     use std::collections::{HashSet, VecDeque};
     use std::io::Write;
-    use crate::services::opensvm_api::OpenSvmApi;
 
     // Parse options
-    let depth: usize = matches.get_one::<String>("depth")
+    let depth: usize = matches
+        .get_one::<String>("depth")
         .map(|s| s.parse().unwrap_or(5))
         .unwrap_or(5);
-    let max_wallets: usize = matches.get_one::<String>("max-wallets")
+    let max_wallets: usize = matches
+        .get_one::<String>("max-wallets")
         .map(|s| s.parse().unwrap_or(50))
         .unwrap_or(50);
     let query = matches.get_one::<String>("query").map(|s| s.as_str());
@@ -845,32 +928,60 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     let save_report = matches.get_flag("save") || output_path.is_some();
     let token_filter = matches.get_one::<String>("token").cloned();
     let use_ai_chart = matches.get_flag("ai-chart");
+    let use_timeline = matches.get_flag("timeline");
 
     // Print banner
     println!();
-    println!("{}", "╔══════════════════════════════════════════════════════════════════════════════╗".cyan());
-    println!("{} {} {}",
+    println!(
+        "{}",
+        "╔══════════════════════════════════════════════════════════════════════════════╗".cyan()
+    );
+    println!(
+        "{} {} {}",
         "║".cyan(),
         "🔍 OSVM AUTONOMOUS INVESTIGATION".bold().white(),
         "                                      ║".cyan()
     );
-    println!("{}", "╚══════════════════════════════════════════════════════════════════════════════╝".cyan());
+    println!(
+        "{}",
+        "╚══════════════════════════════════════════════════════════════════════════════╝".cyan()
+    );
     println!();
 
     // Print configuration
     println!("{} {}", "Target Wallet:".bright_yellow(), wallet.white());
-    println!("{} {}", "Max Depth:".bright_yellow(), depth.to_string().white());
-    println!("{} {}", "Max Wallets:".bright_yellow(), max_wallets.to_string().white());
+    println!(
+        "{} {}",
+        "Max Depth:".bright_yellow(),
+        depth.to_string().white()
+    );
+    println!(
+        "{} {}",
+        "Max Wallets:".bright_yellow(),
+        max_wallets.to_string().white()
+    );
     if let Some(q) = query {
-        println!("{} {}", "Query/Hypothesis:".bright_yellow(), q.bright_magenta());
+        println!(
+            "{} {}",
+            "Query/Hypothesis:".bright_yellow(),
+            q.bright_magenta()
+        );
     }
     if let Some(ref token) = token_filter {
-        println!("{} {} {}", "Token Filter:".bright_yellow(), token.bright_cyan(), "(tracing specific token flow)".dimmed());
+        println!(
+            "{} {} {}",
+            "Token Filter:".bright_yellow(),
+            token.bright_cyan(),
+            "(tracing specific token flow)".dimmed()
+        );
     }
     println!();
 
     // Initialize MCP pool with dynamic scaling
-    print!("{}", "⏳ Initializing MCP pool (dynamic scaling)...".dimmed());
+    print!(
+        "{}",
+        "⏳ Initializing MCP pool (dynamic scaling)...".dimmed()
+    );
     std::io::stdout().flush()?;
 
     let pool_config = McpPoolConfig {
@@ -892,7 +1003,11 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     let tool_count = {
         let guard = mcp_pool.acquire().await?;
         let svc = guard.service().await;
-        let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+        let servers: Vec<String> = svc
+            .list_servers()
+            .iter()
+            .map(|(id, _)| (*id).clone())
+            .collect();
         let mut count = 0;
         for server_id in &servers {
             if let Ok(tools) = svc.list_tools(server_id).await {
@@ -901,7 +1016,11 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
         }
         count
     };
-    println!("\r{} {} tools, pool ready (1-6 instances)", "✅ MCP pool:".green(), tool_count);
+    println!(
+        "\r{} {} tools, pool ready (1-6 instances)",
+        "✅ MCP pool:".green(),
+        tool_count
+    );
 
     // Initialize OpenSVM API for address labels
     let opensvm_api = OpenSvmApi::new();
@@ -917,9 +1036,15 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     discovered.insert(wallet.to_string());
 
     println!();
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!("{}", "📡 PHASE 1: BFS GRAPH EXPLORATION".bold().cyan());
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!();
 
     let start_time = std::time::Instant::now();
@@ -952,15 +1077,21 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
 
         // Show pool scaling status
         let stats = mcp_pool.stats().await;
-        eprintln!("  {} batch of {}: {} [pool: {}]",
+        eprintln!(
+            "  {} batch of {}: {} [pool: {}]",
             "⚡ Fetching".bright_blue(),
             batch.len(),
-            batch.iter().map(|(w, _)| truncate_address(w)).collect::<Vec<_>>().join(", "),
+            batch
+                .iter()
+                .map(|(w, _)| truncate_address(w))
+                .collect::<Vec<_>>()
+                .join(", "),
             stats
         );
 
         // Fetch wallets in parallel via MCP pool (auto-scales as needed!)
-        let fetch_futures: Vec<_> = batch.iter()
+        let fetch_futures: Vec<_> = batch
+            .iter()
             .map(|(wallet, _)| {
                 let pool = Arc::clone(&mcp_pool);
                 let w = wallet.clone();
@@ -975,7 +1106,8 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
 
         // Show pool stats after batch (to see scaling)
         let post_stats = mcp_pool.stats().await;
-        eprintln!("  {} [pool: {}/{} instances active, {}/{} busy after batch]",
+        eprintln!(
+            "  {} [pool: {}/{} instances active, {}/{} busy after batch]",
             "📈".bright_green(),
             post_stats.total_instances,
             post_stats.max_instances,
@@ -1008,14 +1140,20 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
 
             match result {
                 Ok(txs) => {
-                    let new_wallets = txs.iter()
+                    let new_wallets = txs
+                        .iter()
                         .filter(|tx| {
-                            let connected = if tx.direction == "IN" { &tx.from } else { &tx.to };
+                            let connected = if tx.direction == "IN" {
+                                &tx.from
+                            } else {
+                                &tx.to
+                            };
                             !discovered.contains(connected) && current_depth + 1 < depth
                         })
                         .count();
 
-                    progress.println(format!("  {} [{}/{}] {} {} d={} → {} txs, +{} wallets",
+                    progress.println(format!(
+                        "  {} [{}/{}] {} {} d={} → {} txs, +{} wallets",
                         "→".bright_blue(),
                         fetched_count,
                         max_wallets,
@@ -1030,7 +1168,11 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
                     for tx in &txs {
                         all_transfers.push(tx.clone());
 
-                        let connected = if tx.direction == "IN" { &tx.from } else { &tx.to };
+                        let connected = if tx.direction == "IN" {
+                            &tx.from
+                        } else {
+                            &tx.to
+                        };
                         if !discovered.contains(connected) && current_depth + 1 < depth {
                             discovered.insert(connected.clone());
                             queue.push_back((connected.clone(), current_depth + 1));
@@ -1040,8 +1182,10 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
                             findings.push(Finding {
                                 category: "Large Transfer".to_string(),
                                 severity: "High".to_string(),
-                                description: format!("{:.2} {} {} → {}",
-                                    tx.amount, tx.token,
+                                description: format!(
+                                    "{:.2} {} {} → {}",
+                                    tx.amount,
+                                    tx.token,
                                     truncate_address(&tx.from),
                                     truncate_address(&tx.to)
                                 ),
@@ -1050,7 +1194,8 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
                     }
                 }
                 Err(e) => {
-                    progress.println(format!("  {} [{}/{}] {} {} d={} → {}",
+                    progress.println(format!(
+                        "  {} [{}/{}] {} {} d={} → {}",
                         "→".bright_blue(),
                         fetched_count,
                         max_wallets,
@@ -1071,42 +1216,82 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     progress.finish_with_message("BFS complete!");
 
     if !queue.is_empty() {
-        println!("{}", format!("⚠️  Reached max wallets limit ({}) - {} in queue remaining",
-            max_wallets, queue.len()).yellow());
+        println!(
+            "{}",
+            format!(
+                "⚠️  Reached max wallets limit ({}) - {} in queue remaining",
+                max_wallets,
+                queue.len()
+            )
+            .yellow()
+        );
     }
 
     let exploration_time = start_time.elapsed();
 
     println!();
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!("{}", "📊 PHASE 2: ANALYSIS".bold().cyan());
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!();
 
     // Calculate statistics
-    let total_inflows: f64 = all_transfers.iter()
+    let total_inflows: f64 = all_transfers
+        .iter()
         .filter(|t| t.direction == "IN")
         .map(|t| t.amount)
         .sum();
-    let total_outflows: f64 = all_transfers.iter()
+    let total_outflows: f64 = all_transfers
+        .iter()
         .filter(|t| t.direction == "OUT")
         .map(|t| t.amount)
         .sum();
 
     let unique_tokens: HashSet<_> = all_transfers.iter().map(|t| &t.token).collect();
-    let unique_counterparties: HashSet<_> = all_transfers.iter()
+    let unique_counterparties: HashSet<_> = all_transfers
+        .iter()
         .flat_map(|t| vec![&t.from, &t.to])
         .collect();
 
     println!("📈 {}", "Statistics:".bold());
-    println!("   • Wallets fetched: {}", fetched_count.to_string().bright_white());
-    println!("   • Wallets discovered: {}", discovered.len().to_string().bright_white());
-    println!("   • Total transfers: {}", all_transfers.len().to_string().bright_white());
-    println!("   • Unique tokens: {}", unique_tokens.len().to_string().bright_white());
-    println!("   • Unique counterparties: {}", unique_counterparties.len().to_string().bright_white());
-    println!("   • Total inflows: {:.2}", format!("{:.2}", total_inflows).green());
-    println!("   • Total outflows: {:.2}", format!("{:.2}", total_outflows).red());
-    println!("   • Exploration time: {:.2}s", exploration_time.as_secs_f64());
+    println!(
+        "   • Wallets fetched: {}",
+        fetched_count.to_string().bright_white()
+    );
+    println!(
+        "   • Wallets discovered: {}",
+        discovered.len().to_string().bright_white()
+    );
+    println!(
+        "   • Total transfers: {}",
+        all_transfers.len().to_string().bright_white()
+    );
+    println!(
+        "   • Unique tokens: {}",
+        unique_tokens.len().to_string().bright_white()
+    );
+    println!(
+        "   • Unique counterparties: {}",
+        unique_counterparties.len().to_string().bright_white()
+    );
+    println!(
+        "   • Total inflows: {:.2}",
+        format!("{:.2}", total_inflows).green()
+    );
+    println!(
+        "   • Total outflows: {:.2}",
+        format!("{:.2}", total_outflows).red()
+    );
+    println!(
+        "   • Exploration time: {:.2}s",
+        exploration_time.as_secs_f64()
+    );
     println!();
 
     // Render ASCII graph visualization (or token flow if filtering)
@@ -1116,8 +1301,13 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
         // Show token summary before graph (helps users discover which tokens to trace)
         render_token_summary(&all_transfers);
 
-        // Use AI-generated chart if --ai-chart flag is set
-        if use_ai_chart {
+        // Choose visualization mode:
+        // --timeline: chronological bidirectional view
+        // --ai-chart: AI-generated chart
+        // default: aggregated tree view
+        if use_timeline {
+            render_timeline_tree(wallet, &all_transfers);
+        } else if use_ai_chart {
             println!("{}", "🤖 Generating AI-powered flow chart...".dimmed());
 
             // Prepare inflows and outflows for AI
@@ -1133,46 +1323,69 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
             }
 
             // Aggregate by counterparty
-            let mut inflow_map: std::collections::HashMap<String, (String, f64)> = std::collections::HashMap::new();
+            let mut inflow_map: std::collections::HashMap<String, (String, f64)> =
+                std::collections::HashMap::new();
             for (addr, token, amount) in &inflows {
-                let entry = inflow_map.entry(addr.clone()).or_insert((token.clone(), 0.0));
+                let entry = inflow_map
+                    .entry(addr.clone())
+                    .or_insert((token.clone(), 0.0));
                 entry.1 += amount;
             }
-            let aggregated_inflows: Vec<(String, String, f64)> = inflow_map.into_iter()
+            let aggregated_inflows: Vec<(String, String, f64)> = inflow_map
+                .into_iter()
                 .map(|(addr, (token, amount))| (addr, token, amount))
                 .collect();
 
-            let mut outflow_map: std::collections::HashMap<String, (String, f64)> = std::collections::HashMap::new();
+            let mut outflow_map: std::collections::HashMap<String, (String, f64)> =
+                std::collections::HashMap::new();
             for (addr, token, amount) in &outflows {
-                let entry = outflow_map.entry(addr.clone()).or_insert((token.clone(), 0.0));
+                let entry = outflow_map
+                    .entry(addr.clone())
+                    .or_insert((token.clone(), 0.0));
                 entry.1 += amount;
             }
-            let aggregated_outflows: Vec<(String, String, f64)> = outflow_map.into_iter()
+            let aggregated_outflows: Vec<(String, String, f64)> = outflow_map
+                .into_iter()
                 .map(|(addr, (token, amount))| (addr, token, amount))
                 .collect();
 
             // Get entity clusters for the AI chart
             let entity_clusters = detect_wallet_entities(&all_transfers);
-            let cluster_data: Vec<(String, Vec<String>, f64)> = entity_clusters.iter()
+            let cluster_data: Vec<(String, Vec<String>, f64)> = entity_clusters
+                .iter()
                 .map(|c| (c.entity_type.clone(), c.wallets.clone(), c.confidence))
                 .collect();
 
             // Call AI service to generate chart
             let ai_service = AiService::new();
-            match ai_service.generate_ascii_flow_chart(
-                wallet,
-                &aggregated_inflows,
-                &aggregated_outflows,
-                if cluster_data.is_empty() { None } else { Some(&cluster_data) },
-                None, // swaps - could be enhanced later
-            ).await {
+            match ai_service
+                .generate_ascii_flow_chart(
+                    wallet,
+                    &aggregated_inflows,
+                    &aggregated_outflows,
+                    if cluster_data.is_empty() {
+                        None
+                    } else {
+                        Some(&cluster_data)
+                    },
+                    None, // swaps - could be enhanced later
+                )
+                .await
+            {
                 Ok(chart) => {
                     println!();
                     println!("{}", chart);
                     println!();
                 }
                 Err(e) => {
-                    println!("{}", format!("⚠️  AI chart generation failed: {}. Falling back to standard chart.", e).yellow());
+                    println!(
+                        "{}",
+                        format!(
+                            "⚠️  AI chart generation failed: {}. Falling back to standard chart.",
+                            e
+                        )
+                        .yellow()
+                    );
                     render_ascii_graph(wallet, &all_transfers);
                 }
             }
@@ -1191,7 +1404,8 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
                 "Medium" => finding.severity.yellow(),
                 _ => finding.severity.white(),
             };
-            println!("   [{:^8}] {} - {}",
+            println!(
+                "   [{:^8}] {} - {}",
                 severity_color,
                 finding.category.bright_cyan(),
                 finding.description
@@ -1204,10 +1418,21 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     let entity_clusters = detect_wallet_entities(&all_transfers);
     if !entity_clusters.is_empty() {
         println!();
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
-        println!("🔗 {} {}", "ENTITY CLUSTERS".bold().cyan(),
-            format!("({} groups of related wallets)", entity_clusters.len()).dimmed());
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .cyan()
+        );
+        println!(
+            "🔗 {} {}",
+            "ENTITY CLUSTERS".bold().cyan(),
+            format!("({} groups of related wallets)", entity_clusters.len()).dimmed()
+        );
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .cyan()
+        );
         println!();
 
         for cluster in entity_clusters.iter().take(5) {
@@ -1229,7 +1454,8 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
                 _ => "🔗",
             };
 
-            println!("  {} {} {} [{}] {:.0}%",
+            println!(
+                "  {} {} {} [{}] {:.0}%",
                 type_icon,
                 cluster.entity_type.bold().cyan(),
                 format!("(Entity #{})", cluster.id).dimmed(),
@@ -1238,28 +1464,42 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
             );
 
             // Show member wallets
-            println!("    {} {}", "Wallets:".dimmed(),
-                format!("{} linked", cluster.wallets.len()).white());
+            println!(
+                "    {} {}",
+                "Wallets:".dimmed(),
+                format!("{} linked", cluster.wallets.len()).white()
+            );
             for (i, wallet) in cluster.wallets.iter().take(4).enumerate() {
                 let wallet_label = classify_wallet(wallet)
                     .map(|t| format!(" ({})", t).bright_blue().to_string())
                     .unwrap_or_default();
-                let prefix = if i == cluster.wallets.len().min(4) - 1 { "└─" } else { "├─" };
-                println!("      {} {}{}",
+                let prefix = if i == cluster.wallets.len().min(4) - 1 {
+                    "└─"
+                } else {
+                    "├─"
+                };
+                println!(
+                    "      {} {}{}",
                     prefix.dimmed(),
                     truncate_address(wallet).white(),
                     wallet_label
                 );
             }
             if cluster.wallets.len() > 4 {
-                println!("      {} {} more", "...".dimmed(),
-                    cluster.wallets.len() - 4);
+                println!(
+                    "      {} {} more",
+                    "...".dimmed(),
+                    cluster.wallets.len() - 4
+                );
             }
 
             // Show evidence
             if !cluster.evidence.is_empty() {
-                println!("    {} {}", "Evidence:".dimmed(),
-                    cluster.evidence.first().unwrap_or(&String::new()).dimmed());
+                println!(
+                    "    {} {}",
+                    "Evidence:".dimmed(),
+                    cluster.evidence.first().unwrap_or(&String::new()).dimmed()
+                );
                 for ev in cluster.evidence.iter().skip(1).take(2) {
                     println!("              {}", ev.dimmed());
                 }
@@ -1268,32 +1508,58 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
         }
 
         if entity_clusters.len() > 5 {
-            println!("  {} {} more clusters...", "...".dimmed(), entity_clusters.len() - 5);
+            println!(
+                "  {} {} more clusters...",
+                "...".dimmed(),
+                entity_clusters.len() - 5
+            );
             println!();
         }
     }
 
     // Cross-token swaps (DEX trades)
     let cross_token_swaps = detect_cross_token_swaps(&all_transfers);
-    let high_conf_swaps: Vec<_> = cross_token_swaps.iter().filter(|s| s.confidence >= 0.75).collect();
+    let high_conf_swaps: Vec<_> = cross_token_swaps
+        .iter()
+        .filter(|s| s.confidence >= 0.75)
+        .collect();
     if !high_conf_swaps.is_empty() {
         println!();
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".magenta());
-        println!("🔄 {} {}", "CROSS-TOKEN SWAPS".bold().magenta(),
-            format!("({} DEX trades detected)", high_conf_swaps.len()).dimmed());
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".magenta());
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .magenta()
+        );
+        println!(
+            "🔄 {} {}",
+            "CROSS-TOKEN SWAPS".bold().magenta(),
+            format!("({} DEX trades detected)", high_conf_swaps.len()).dimmed()
+        );
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .magenta()
+        );
         println!();
 
         // Group by swap type
-        let atomic_count = high_conf_swaps.iter().filter(|s| s.swap_type == "Atomic Swap").count();
-        let dex_count = high_conf_swaps.iter().filter(|s| s.swap_type == "DEX Swap").count();
+        let atomic_count = high_conf_swaps
+            .iter()
+            .filter(|s| s.swap_type == "Atomic Swap")
+            .count();
+        let dex_count = high_conf_swaps
+            .iter()
+            .filter(|s| s.swap_type == "DEX Swap")
+            .count();
 
         if atomic_count > 0 || dex_count > 0 {
-            println!("  {} {} atomic, {} DEX, {} other",
+            println!(
+                "  {} {} atomic, {} DEX, {} other",
                 "Summary:".bold(),
                 atomic_count,
                 dex_count,
-                high_conf_swaps.len() - atomic_count - dex_count);
+                high_conf_swaps.len() - atomic_count - dex_count
+            );
             println!();
         }
 
@@ -1331,29 +1597,33 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
             let token_out = resolve_token_symbol(&swap.token_out);
 
             // Display DEX name if identified
-            let dex_label = swap.dex_name.as_ref()
+            let dex_label = swap
+                .dex_name
+                .as_ref()
                 .map(|d| format!(" via {}", d.bright_blue()))
                 .unwrap_or_default();
 
-            println!("  {} {} ({}) [{}{}] {:.0}%{}",
+            println!(
+                "  {} {} ({}) [{}{}] {:.0}%{}",
                 type_icon,
                 swap.swap_type.bright_magenta(),
                 truncate_address(&swap.wallet),
                 confidence_bar.bright_green(),
                 empty_bar.dimmed(),
                 swap.confidence * 100.0,
-                dex_label);
-            println!("      {} {} → {} {}",
+                dex_label
+            );
+            println!(
+                "      {} {} → {} {}",
                 fmt_in.bright_yellow(),
                 token_in.dimmed(),
                 fmt_out.bright_cyan(),
-                token_out.dimmed());
+                token_out.dimmed()
+            );
 
             // Time info
             let time_str = if swap.time_diff_secs == 0 {
                 "same block".to_string()
-            } else if swap.time_diff_secs <= 5 {
-                format!("{}s apart", swap.time_diff_secs)
             } else if swap.time_diff_secs <= 60 {
                 format!("{}s apart", swap.time_diff_secs)
             } else {
@@ -1364,16 +1634,28 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
         }
 
         if high_conf_swaps.len() > 10 {
-            println!("  {} {} more swaps...", "...".dimmed(), high_conf_swaps.len() - 10);
+            println!(
+                "  {} {} more swaps...",
+                "...".dimmed(),
+                high_conf_swaps.len() - 10
+            );
             println!();
         }
     }
 
     // Query/hypothesis evaluation
     if let Some(q) = query {
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .cyan()
+        );
         println!("{}", "🧠 PHASE 3: HYPOTHESIS EVALUATION".bold().cyan());
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .cyan()
+        );
         println!();
         println!("📝 {}: {}", "Query".bright_yellow(), q.bright_white());
         println!();
@@ -1406,7 +1688,10 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
         std::io::stdout().flush()?;
 
         let mut ai = ai_service.lock().await;
-        match ai.query_osvm_ai_with_options(&evaluation_prompt, None, Some(true), false).await {
+        match ai
+            .query_osvm_ai_with_options(&evaluation_prompt, None, Some(true), false)
+            .await
+        {
             Ok(evaluation) => {
                 println!("\r{}", "                              ".dimmed()); // Clear line
                 println!("{}", evaluation.bright_white());
@@ -1419,9 +1704,15 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
     }
 
     // Generate report
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!("{}", "📋 FINAL REPORT".bold().cyan());
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!();
 
     let report = generate_auto_report(
@@ -1441,13 +1732,18 @@ async fn handle_auto_research(matches: &ArgMatches, wallet: &str) -> Result<()> 
             let reports_dir = home.join(".osvm").join("reports");
             std::fs::create_dir_all(&reports_dir).ok();
             let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-            reports_dir.join(format!("investigation_{}_{}.md", &wallet[..8], timestamp))
+            reports_dir
+                .join(format!("investigation_{}_{}.md", &wallet[..8], timestamp))
                 .to_string_lossy()
                 .to_string()
         });
 
         std::fs::write(&report_path, &report)?;
-        println!("{} {}", "📄 Report saved to:".green(), report_path.bright_white());
+        println!(
+            "{} {}",
+            "📄 Report saved to:".green(),
+            report_path.bright_white()
+        );
     }
 
     println!();
@@ -1477,10 +1773,7 @@ struct Finding {
 }
 
 /// Fetch transfers for a wallet via MCP pool (parallel-safe!)
-async fn fetch_wallet_via_pool(
-    pool: &Arc<McpPool>,
-    wallet: &str,
-) -> Result<Vec<TransferRecord>> {
+async fn fetch_wallet_via_pool(pool: &Arc<McpPool>, wallet: &str) -> Result<Vec<TransferRecord>> {
     // Acquire instance from pool (will scale up if all busy)
     let guard = pool.acquire().await?;
 
@@ -1491,30 +1784,37 @@ async fn fetch_wallet_via_pool(
     });
 
     // Call via the pooled instance
-    let result = guard.call_tool("get_account_transfers", Some(params)).await?;
+    let result = guard
+        .call_tool("get_account_transfers", Some(params))
+        .await?;
 
     // Parse the result
     if let Some(data) = result.get("data").and_then(|d| d.as_array()) {
-        let transfers: Vec<TransferRecord> = data.iter()
+        let transfers: Vec<TransferRecord> = data
+            .iter()
             .filter_map(|tx| {
                 Some(TransferRecord {
                     from: tx.get("from")?.as_str()?.to_string(),
                     to: tx.get("to")?.as_str()?.to_string(),
-                    amount: tx.get("tokenAmount")
+                    amount: tx
+                        .get("tokenAmount")
                         .and_then(|v| v.as_str())
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(0.0),
-                    token: tx.get("tokenSymbol")
+                    token: tx
+                        .get("tokenSymbol")
                         .and_then(|v| v.as_str())
                         .unwrap_or("SOL")
                         .to_string(),
-                    direction: tx.get("transferType")
+                    direction: tx
+                        .get("transferType")
                         .and_then(|v| v.as_str())
                         .unwrap_or("OUT")
                         .to_string(),
                     timestamp: {
                         // Try multiple possible timestamp field names
-                        let ts_value = tx.get("timestamp")
+                        let ts_value = tx
+                            .get("timestamp")
                             .or_else(|| tx.get("blockTime"))
                             .or_else(|| tx.get("date"));
 
@@ -1530,16 +1830,16 @@ async fn fetch_wallet_via_pool(
                                     return Some(s.to_string());
                                 }
                                 // Try other common date formats
-                                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+                                if let Ok(dt) =
+                                    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+                                {
                                     return Some(dt.and_utc().timestamp().to_string());
                                 }
                                 None
                             } else if let Some(n) = v.as_i64() {
                                 Some(n.to_string())
-                            } else if let Some(n) = v.as_f64() {
-                                Some((n as i64).to_string())
                             } else {
-                                None
+                                v.as_f64().map(|n| (n as i64).to_string())
                             }
                         })
                     },
@@ -1562,7 +1862,11 @@ async fn fetch_wallet_transfers(
     let mut svc = mcp.lock().await;
 
     // Try to find a server with get_account_transfers tool
-    let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+    let servers: Vec<String> = svc
+        .list_servers()
+        .iter()
+        .map(|(id, _)| (*id).clone())
+        .collect();
 
     for server_id in servers {
         if svc.initialize_server(&server_id).await.is_err() {
@@ -1577,27 +1881,35 @@ async fn fetch_wallet_transfers(
         });
 
         // Try to call get_account_transfers
-        if let Ok(result) = svc.call_tool(&server_id, "get_account_transfers", Some(params.clone())).await {
+        if let Ok(result) = svc
+            .call_tool(&server_id, "get_account_transfers", Some(params.clone()))
+            .await
+        {
             // Parse the result
             if let Some(data) = result.get("data").and_then(|d| d.as_array()) {
-                let transfers: Vec<TransferRecord> = data.iter()
+                let transfers: Vec<TransferRecord> = data
+                    .iter()
                     .filter_map(|tx| {
                         Some(TransferRecord {
                             from: tx.get("from")?.as_str()?.to_string(),
                             to: tx.get("to")?.as_str()?.to_string(),
-                            amount: tx.get("tokenAmount")
+                            amount: tx
+                                .get("tokenAmount")
                                 .and_then(|v| v.as_str())
                                 .and_then(|s| s.parse().ok())
                                 .unwrap_or(0.0),
-                            token: tx.get("tokenSymbol")
+                            token: tx
+                                .get("tokenSymbol")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("SOL")
                                 .to_string(),
-                            direction: tx.get("transferType")
+                            direction: tx
+                                .get("transferType")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("OUT")
                                 .to_string(),
-                            timestamp: tx.get("timestamp")
+                            timestamp: tx
+                                .get("timestamp")
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string()),
                         })
@@ -1615,7 +1927,7 @@ async fn fetch_wallet_transfers(
 /// Truncate address for display
 fn truncate_address(addr: &str) -> String {
     if addr.len() > 12 {
-        format!("{}...{}", &addr[..6], &addr[addr.len()-4..])
+        format!("{}...{}", &addr[..6], &addr[addr.len() - 4..])
     } else {
         addr.to_string()
     }
@@ -1640,11 +1952,11 @@ fn format_amount(amount: f64) -> String {
 fn get_arrow_style(amount: f64, max_amount: f64) -> &'static str {
     let ratio = amount / max_amount;
     if ratio > 0.5 {
-        "━━━▶"  // Thick arrow for big flows
+        "━━━▶" // Thick arrow for big flows
     } else if ratio > 0.2 {
-        "──▶"   // Medium arrow
+        "──▶" // Medium arrow
     } else {
-        "─▶"    // Thin arrow for small flows
+        "─▶" // Thin arrow for small flows
     }
 }
 
@@ -1659,125 +1971,302 @@ fn render_ascii_graph(target: &str, transfers: &[TransferRecord]) {
 
     for tx in transfers {
         if tx.direction == "IN" {
-            let entry = inflows.entry(tx.from.clone()).or_insert((0.0, HashMap::new()));
+            let entry = inflows
+                .entry(tx.from.clone())
+                .or_insert((0.0, HashMap::new()));
             entry.0 += tx.amount;
             *entry.1.entry(tx.token.clone()).or_insert(0.0) += tx.amount;
         } else {
-            let entry = outflows.entry(tx.to.clone()).or_insert((0.0, HashMap::new()));
+            let entry = outflows
+                .entry(tx.to.clone())
+                .or_insert((0.0, HashMap::new()));
             entry.0 += tx.amount;
             *entry.1.entry(tx.token.clone()).or_insert(0.0) += tx.amount;
         }
     }
 
-    // Sort by total amount and take top 5
+    // Sort by total amount descending
     let mut top_inflows: Vec<_> = inflows.into_iter().collect();
-    top_inflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
-    top_inflows.truncate(5);
+    top_inflows.sort_by(|a, b| {
+        b.1 .0
+            .partial_cmp(&a.1 .0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut top_outflows: Vec<_> = outflows.into_iter().collect();
-    top_outflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
-    top_outflows.truncate(5);
-
-    // Calculate max amounts for arrow scaling
-    let max_inflow = top_inflows.first().map(|(_, (a, _))| *a).unwrap_or(1.0);
-    let max_outflow = top_outflows.first().map(|(_, (a, _))| *a).unwrap_or(1.0);
+    top_outflows.sort_by(|a, b| {
+        b.1 .0
+            .partial_cmp(&a.1 .0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Calculate totals
     let total_inflow: f64 = top_inflows.iter().map(|(_, (a, _))| a).sum();
     let total_outflow: f64 = top_outflows.iter().map(|(_, (a, _))| a).sum();
 
-    let target_short = truncate_address(target);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TREE DIAGRAM VISUALIZATION (like Unix `tree` command)
+    // ═══════════════════════════════════════════════════════════════════════════
 
-    // Enhanced ASCII box diagram style flow graph
-    println!("┌─────────────────────────────────────────────────────────────────────────────────┐");
-    println!("│                          {} WALLET FLOW GRAPH                          │", "🕸️".cyan());
-    println!("├─────────────────────────────────────────────────────────────────────────────────┤");
-
-    // Build inflow entries
-    let mut inflow_lines: Vec<String> = Vec::new();
-    for (addr, (amount, tokens)) in &top_inflows {
-        let addr_short = truncate_address(addr);
-        let main_token = tokens.iter()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(t, _)| resolve_token_symbol(t))
-            .unwrap_or_else(|| "?".to_string());
-        let amount_str = format_amount(*amount);
-        let extra = if tokens.len() > 1 { format!("+{}", tokens.len() - 1) } else { String::new() };
-        inflow_lines.push(format!("{} [{}{} {}]", addr_short, main_token, extra, amount_str));
-    }
-
-    // Build outflow entries
-    let mut outflow_lines: Vec<String> = Vec::new();
-    for (addr, (amount, tokens)) in &top_outflows {
-        let addr_short = truncate_address(addr);
-        let main_token = tokens.iter()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(t, _)| resolve_token_symbol(t))
-            .unwrap_or_else(|| "?".to_string());
-        let amount_str = format_amount(*amount);
-        let extra = if tokens.len() > 1 { format!("+{}", tokens.len() - 1) } else { String::new() };
-        outflow_lines.push(format!("[{}{} {}] {}", main_token, extra, amount_str, addr_short));
-    }
-
-    // Determine the number of rows needed
-    let max_flows = inflow_lines.len().max(outflow_lines.len()).max(1);
-
-    // Print the inflow header
-    println!("│  ┌──────────────────────────────┐      ┌──────────────────┐      ┌──────────────────────────────┐  │");
-    println!("│  │       {} INFLOWS ({})        │      │  {} TARGET WALLET │      │       {} OUTFLOWS ({})       │  │",
-        "◀".bright_green(),
-        top_inflows.len().to_string().bright_green(),
-        "◉".bright_yellow(),
-        "▶".bright_red(),
-        top_outflows.len().to_string().bright_red()
+    // Print target wallet as root
+    println!();
+    println!(
+        "{} {}",
+        "◉".bright_yellow().bold(),
+        target.bright_yellow().bold()
     );
-    println!("│  ├──────────────────────────────┤      ├──────────────────┤      ├──────────────────────────────┤  │");
 
-    // Print the central target wallet
-    println!("│  │                              │──────▶│ {} │◀──────│                              │  │",
-        target_short.bright_yellow().bold());
-    println!("│  │                              │      └────────┬─────────┘      │                              │  │");
-    println!("│  │                              │               │                │                              │  │");
+    // Check if we have any flows
+    let has_inflows = !top_inflows.is_empty();
+    let has_outflows = !top_outflows.is_empty();
 
-    // Print flow entries
-    for i in 0..max_flows {
-        let left = inflow_lines.get(i)
-            .map(|s| format!("{:<30}", s))
-            .unwrap_or_else(|| " ".repeat(30));
-        let right = outflow_lines.get(i)
-            .map(|s| format!("{:>30}", s))
-            .unwrap_or_else(|| " ".repeat(30));
+    // Print INFLOWS branch
+    if has_inflows {
+        // Branch connector: ├── if outflows follow, └── if this is the last branch
+        let branch_char = if has_outflows { "├" } else { "└" };
+        let continue_char = if has_outflows { "│" } else { " " };
 
-        // Arrow style based on row
-        let (left_arrow, right_arrow) = if i == 0 {
-            ("─────────────▶", "◀─────────────")
-        } else if i < max_flows / 2 {
-            ("──────────┐  │", "│  ┌──────────")
-        } else {
-            ("──────────┘  │", "│  └──────────")
-        };
+        println!(
+            "{}── {} {} ({})",
+            branch_char.bright_white(),
+            "◀".bright_green().bold(),
+            "INFLOWS".bright_green().bold(),
+            format!(
+                "{} sources, {}",
+                top_inflows.len(),
+                format_amount(total_inflow)
+            )
+            .green()
+        );
 
-        if i < max_flows {
-            println!("│  │ {} │{}│               │{}│ {} │  │",
-                left.bright_green(),
-                left_arrow.green(),
-                right_arrow.red(),
-                right.bright_red()
+        // Print each inflow source
+        for (i, (addr, (amount, tokens))) in top_inflows.iter().enumerate() {
+            let is_last = i == top_inflows.len() - 1;
+            let connector = if is_last { "└" } else { "├" };
+            let sub_continue = if is_last { " " } else { "│" };
+
+            // Format token info
+            let main_token = tokens
+                .iter()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(t, _)| resolve_token_symbol(t))
+                .unwrap_or_else(|| "?".to_string());
+            let token_count = if tokens.len() > 1 {
+                format!(" (+{} more)", tokens.len() - 1)
+            } else {
+                String::new()
+            };
+
+            // Print the wallet address line
+            println!(
+                "{}   {}── {} {}",
+                continue_char.bright_white(),
+                connector.bright_white(),
+                addr.bright_green(),
+                format!("[{} {}{}]", format_amount(*amount), main_token, token_count).green()
             );
+
+            // If this wallet has multiple tokens, show breakdown
+            if tokens.len() > 1 {
+                let mut sorted_tokens: Vec<_> = tokens.iter().collect();
+                sorted_tokens
+                    .sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                for (j, (token_addr, token_amount)) in sorted_tokens.iter().take(3).enumerate() {
+                    let token_is_last = j == sorted_tokens.len().min(3) - 1;
+                    let token_connector = if token_is_last { "└" } else { "├" };
+                    let symbol = resolve_token_symbol(token_addr);
+                    println!(
+                        "{}   {}   {}── {} {}",
+                        continue_char.bright_white(),
+                        sub_continue.bright_white(),
+                        token_connector.dimmed(),
+                        symbol.dimmed(),
+                        format_amount(**token_amount).dimmed()
+                    );
+                }
+                if sorted_tokens.len() > 3 {
+                    println!(
+                        "{}   {}   {}",
+                        continue_char.bright_white(),
+                        sub_continue.bright_white(),
+                        format!("    ... and {} more tokens", sorted_tokens.len() - 3).dimmed()
+                    );
+                }
+            }
         }
     }
 
-    println!("│  └──────────────────────────────┘               │                └──────────────────────────────┘  │");
-    println!("│                                                 ▼                                                  │");
-    println!("│  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐  │");
-    println!("│  │  {} ({})  ══════════════════════════════════════════════════  {} ({})  │  │",
-        format!("📥 Inflows: {}", top_inflows.len()).bright_green(),
-        format_amount(total_inflow).bright_green(),
-        format!("📤 Outflows: {}", top_outflows.len()).bright_red(),
-        format_amount(total_outflow).bright_red()
+    // Print OUTFLOWS branch
+    if has_outflows {
+        println!(
+            "{}── {} {} ({})",
+            "└".bright_white(),
+            "▶".bright_red().bold(),
+            "OUTFLOWS".bright_red().bold(),
+            format!(
+                "{} destinations, {}",
+                top_outflows.len(),
+                format_amount(total_outflow)
+            )
+            .red()
+        );
+
+        // Print each outflow destination
+        for (i, (addr, (amount, tokens))) in top_outflows.iter().enumerate() {
+            let is_last = i == top_outflows.len() - 1;
+            let connector = if is_last { "└" } else { "├" };
+            let sub_continue = if is_last { " " } else { "│" };
+
+            // Format token info
+            let main_token = tokens
+                .iter()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(t, _)| resolve_token_symbol(t))
+                .unwrap_or_else(|| "?".to_string());
+            let token_count = if tokens.len() > 1 {
+                format!(" (+{} more)", tokens.len() - 1)
+            } else {
+                String::new()
+            };
+
+            // Print the wallet address line
+            println!(
+                "    {}── {} {}",
+                connector.bright_white(),
+                addr.bright_red(),
+                format!("[{} {}{}]", format_amount(*amount), main_token, token_count).red()
+            );
+
+            // If this wallet has multiple tokens, show breakdown
+            if tokens.len() > 1 {
+                let mut sorted_tokens: Vec<_> = tokens.iter().collect();
+                sorted_tokens
+                    .sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                for (j, (token_addr, token_amount)) in sorted_tokens.iter().take(3).enumerate() {
+                    let token_is_last = j == sorted_tokens.len().min(3) - 1;
+                    let token_connector = if token_is_last { "└" } else { "├" };
+                    let symbol = resolve_token_symbol(token_addr);
+                    println!(
+                        "    {}   {}── {} {}",
+                        sub_continue.bright_white(),
+                        token_connector.dimmed(),
+                        symbol.dimmed(),
+                        format_amount(**token_amount).dimmed()
+                    );
+                }
+                if sorted_tokens.len() > 3 {
+                    println!(
+                        "    {}   {}",
+                        sub_continue.bright_white(),
+                        format!("    ... and {} more tokens", sorted_tokens.len() - 3).dimmed()
+                    );
+                }
+            }
+        }
+    }
+
+    // Summary line
+    println!();
+    println!(
+        "{} {} {} | {} {}",
+        "📊".dimmed(),
+        format!("{} inflows", top_inflows.len()).green(),
+        format!("({})", format_amount(total_inflow)).green(),
+        format!("{} outflows", top_outflows.len()).red(),
+        format!("({})", format_amount(total_outflow)).red()
     );
-    println!("│  └─────────────────────────────────────────────────────────────────────────────────────────────┘  │");
-    println!("└─────────────────────────────────────────────────────────────────────────────────────────────────────┘");
+    println!();
+}
+
+/// Render time-ordered bidirectional flow tree
+/// Shows all transactions in chronological order, interleaving inflows and outflows
+/// This helps detect wash trading patterns and understand actual fund movement
+#[allow(dead_code)]
+fn render_timeline_tree(target: &str, transfers: &[TransferRecord]) {
+    use colored::Colorize;
+
+    if transfers.is_empty() {
+        println!("{}", "No transfers found.".dimmed());
+        return;
+    }
+
+    // Sort transfers by timestamp (if available) or just show in order
+    // For now, we show them in the order received (which is usually reverse chronological from API)
+    let mut sorted_transfers: Vec<_> = transfers.iter().collect();
+    // Reverse to show oldest first (chronological order)
+    sorted_transfers.reverse();
+
+    // Print target wallet as root
+    println!();
+    println!(
+        "{} {} {}",
+        "◉".bright_yellow().bold(),
+        target.bright_yellow().bold(),
+        "(timeline view)".dimmed()
+    );
+
+    // Group consecutive same-direction transfers for cleaner output
+    let total_transfers = sorted_transfers.len();
+
+    for (i, tx) in sorted_transfers.iter().enumerate() {
+        let is_last = i == total_transfers - 1;
+        let connector = if is_last { "└" } else { "├" };
+
+        let (direction_icon, counterparty, color_fn): (
+            &str,
+            &str,
+            fn(&str) -> colored::ColoredString,
+        ) = if tx.direction == "IN" {
+            ("◀", &tx.from, |s: &str| s.bright_green())
+        } else {
+            ("▶", &tx.to, |s: &str| s.bright_red())
+        };
+
+        let token_symbol = resolve_token_symbol(&tx.token);
+        let amount_str = format_amount(tx.amount);
+
+        // Main transaction line
+        println!(
+            "{}── {} {} {} {}",
+            connector.bright_white(),
+            direction_icon.bold(),
+            color_fn(counterparty),
+            format!("[{} {}]", amount_str, token_symbol).dimmed(),
+            if tx.direction == "IN" {
+                "→ IN"
+            } else {
+                "← OUT"
+            }
+            .dimmed()
+        );
+    }
+
+    // Summary
+    let inflow_count = transfers.iter().filter(|t| t.direction == "IN").count();
+    let outflow_count = transfers.iter().filter(|t| t.direction == "OUT").count();
+    let total_in: f64 = transfers
+        .iter()
+        .filter(|t| t.direction == "IN")
+        .map(|t| t.amount)
+        .sum();
+    let total_out: f64 = transfers
+        .iter()
+        .filter(|t| t.direction == "OUT")
+        .map(|t| t.amount)
+        .sum();
+
+    println!();
+    println!(
+        "{} {} transactions: {} in ({}) | {} out ({})",
+        "📈".dimmed(),
+        total_transfers.to_string().bold(),
+        inflow_count.to_string().green(),
+        format_amount(total_in).green(),
+        outflow_count.to_string().red(),
+        format_amount(total_out).red()
+    );
     println!();
 }
 
@@ -1800,12 +2289,21 @@ fn render_token_summary(transfers: &[TransferRecord]) {
 
     // Sort by transfer count descending
     let mut sorted: Vec<_> = token_stats.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+    sorted.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
 
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
-    println!("{} {}", "🪙 TOKEN BREAKDOWN".bold().cyan(),
-        format!("({} unique tokens)", sorted.len()).dimmed());
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
+    println!(
+        "{} {}",
+        "🪙 TOKEN BREAKDOWN".bold().cyan(),
+        format!("({} unique tokens)", sorted.len()).dimmed()
+    );
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!();
 
     // Show top 10 tokens
@@ -1819,7 +2317,10 @@ fn render_token_summary(transfers: &[TransferRecord]) {
             resolved
         };
 
-        let is_stablecoin = matches!(token_display.as_str(), "USDC" | "USDT" | "BUSD" | "DAI" | "TUSD" | "USDH");
+        let is_stablecoin = matches!(
+            token_display.as_str(),
+            "USDC" | "USDT" | "BUSD" | "DAI" | "TUSD" | "USDH"
+        );
         let token_colored = if is_stablecoin {
             token_display.bright_green().bold()
         } else if token_display == "SOL" || token_display == "wSOL" {
@@ -1830,10 +2331,11 @@ fn render_token_summary(transfers: &[TransferRecord]) {
 
         // Bar visualization
         let max_bar = 20;
-        let bar_len = (((*count as f64) / (sorted[0].1.0 as f64)) * max_bar as f64) as usize;
+        let bar_len = (((*count as f64) / (sorted[0].1 .0 as f64)) * max_bar as f64) as usize;
         let bar = "█".repeat(bar_len);
 
-        println!("  {:>2}. {:<12}  {:>5} transfers  {}  {}",
+        println!(
+            "  {:>2}. {:<12}  {:>5} transfers  {}  {}",
             (i + 1).to_string().dimmed(),
             token_colored,
             count.to_string().white(),
@@ -1843,12 +2345,16 @@ fn render_token_summary(transfers: &[TransferRecord]) {
     }
 
     if sorted.len() > 10 {
-        println!("  {} {}", "...".dimmed(),
-            format!("and {} more tokens", sorted.len() - 10).dimmed());
+        println!(
+            "  {} {}",
+            "...".dimmed(),
+            format!("and {} more tokens", sorted.len() - 10).dimmed()
+        );
     }
 
     println!();
-    println!("  {} {}",
+    println!(
+        "  {} {}",
         "💡 Tip:".bright_yellow(),
         "Use --token <NAME> to trace specific token flow".dimmed()
     );
@@ -1863,34 +2369,53 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
 
     // Filter transfers for the specific token
     let token_lower = token_filter.to_lowercase();
-    let filtered: Vec<&TransferRecord> = transfers.iter()
+    let filtered: Vec<&TransferRecord> = transfers
+        .iter()
         .filter(|tx| {
             let tx_token_lower = tx.token.to_lowercase();
-            tx_token_lower == token_lower ||
-            tx_token_lower.contains(&token_lower) ||
-            tx.token == token_filter
+            tx_token_lower == token_lower
+                || tx_token_lower.contains(&token_lower)
+                || tx.token == token_filter
         })
         .collect();
 
     if filtered.is_empty() {
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
-        println!("{} {}", "🌳 TOKEN FLOW TREE:".bold().cyan(), token_filter.bright_cyan());
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .cyan()
+        );
+        println!(
+            "{} {}",
+            "🌳 TOKEN FLOW TREE:".bold().cyan(),
+            token_filter.bright_cyan()
+        );
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                .cyan()
+        );
         println!();
-        println!("  {} No transfers found for token '{}' in the explored wallets.",
-            "⚠️".yellow(), token_filter.bright_cyan());
+        println!(
+            "  {} No transfers found for token '{}' in the explored wallets.",
+            "⚠️".yellow(),
+            token_filter.bright_cyan()
+        );
         println!();
         return;
     }
 
     // Build adjacency and stats
-    let mut adjacency: HashMap<&str, Vec<(&str, f64, Option<i64>)>> = HashMap::new(); // (dest, amount, timestamp)
+    let mut adjacency: FlowAdjacency<'_> = HashMap::new(); // (dest, amount, timestamp)
     let mut all_wallets: HashSet<&str> = HashSet::new();
     let mut wallet_inflow: HashMap<&str, f64> = HashMap::new();
     let mut wallet_outflow: HashMap<&str, f64> = HashMap::new();
     let mut edge_count: HashMap<(&str, &str), usize> = HashMap::new();
 
-    let token_name = filtered.first().map(|t| t.token.as_str()).unwrap_or(token_filter);
+    let token_name = filtered
+        .first()
+        .map(|t| t.token.as_str())
+        .unwrap_or(token_filter);
 
     // First pass: aggregate edges and build stats
     let mut edge_totals: HashMap<(&str, &str), f64> = HashMap::new();
@@ -1908,12 +2433,16 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     // Build adjacency with aggregated amounts
     for ((from, to), total_amount) in &edge_totals {
         // Get earliest timestamp for this edge (parse from string to i64)
-        let timestamp: Option<i64> = filtered.iter()
+        let timestamp: Option<i64> = filtered
+            .iter()
             .filter(|tx| tx.from.as_str() == *from && tx.to.as_str() == *to)
             .filter_map(|tx| tx.timestamp.as_ref())
             .filter_map(|ts| ts.parse::<i64>().ok())
             .min();
-        adjacency.entry(*from).or_default().push((*to, *total_amount, timestamp));
+        adjacency
+            .entry(*from)
+            .or_default()
+            .push((*to, *total_amount, timestamp));
     }
 
     // Sort adjacency lists by amount descending
@@ -1926,17 +2455,34 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     let unique_pairs = edge_totals.len();
 
     // Header
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
-    println!("{} {} {}", "🌳 TOKEN FLOW TREE:".bold().cyan(), token_name.bright_cyan().bold(),
-        format!("({} transfers, {} pairs, {} total)", total_transfers, unique_pairs, format_amount(total_flow)).dimmed());
-    println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan());
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
+    println!(
+        "{} {} {}",
+        "🌳 TOKEN FLOW TREE:".bold().cyan(),
+        token_name.bright_cyan().bold(),
+        format!(
+            "({} transfers, {} pairs, {} total)",
+            total_transfers,
+            unique_pairs,
+            format_amount(total_flow)
+        )
+        .dimmed()
+    );
+    println!(
+        "{}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
+    );
     println!();
 
     // === TREE VISUALIZATION ===
     // Render tree starting from target wallet (the origin)
+    #[allow(clippy::too_many_arguments)]
     fn render_tree_node(
         node: &str,
-        adjacency: &HashMap<&str, Vec<(&str, f64, Option<i64>)>>,
+        adjacency: &FlowAdjacency<'_>,
         edge_count: &HashMap<(&str, &str), usize>,
         target: &str,
         token_name: &str,
@@ -1961,14 +2507,23 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
         let node_display = if node == target {
             format!("{}{}", node.bright_white().bold(), wallet_label)
         } else if node.len() > 12 {
-            format!("{}...{}{}", &node[..4], &node[node.len()-4..], wallet_label)
+            format!(
+                "{}...{}{}",
+                &node[..4],
+                &node[node.len() - 4..],
+                wallet_label
+            )
         } else {
             format!("{}{}", node, wallet_label)
         };
 
         if depth == 0 {
             // Root node
-            println!("  🏦 {} {}", "ORIGIN".bold().bright_yellow(), "(investigation target)".dimmed());
+            println!(
+                "  🏦 {} {}",
+                "ORIGIN".bold().bright_yellow(),
+                "(investigation target)".dimmed()
+            );
             println!("     {}", node_display);
         }
 
@@ -1976,7 +2531,8 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
 
         // Get children (outflows from this node)
         if let Some(children) = adjacency.get(node) {
-            let filtered_children: Vec<_> = children.iter()
+            let filtered_children: Vec<_> = children
+                .iter()
                 .filter(|(dest, _, _)| !visited.contains(*dest))
                 .take(5) // Limit branches per node
                 .collect();
@@ -1988,27 +2544,37 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
                 let is_last_child = i == child_count - 1 && omitted == 0;
 
                 // Build the connector
-                let connector = if is_last_child { "└─→" } else { "├─→" };
+                let connector = if is_last_child {
+                    "└─→"
+                } else {
+                    "├─→"
+                };
 
                 // Format amount
                 let amount_str = format_amount(*amount);
                 let tx_count = edge_count.get(&(node, *dest)).copied().unwrap_or(1);
-                let count_suffix = if tx_count > 1 { format!(" ({}x)", tx_count) } else { String::new() };
+                let count_suffix = if tx_count > 1 {
+                    format!(" ({}x)", tx_count)
+                } else {
+                    String::new()
+                };
 
                 // Format timestamp if available
-                let time_str = timestamp.map(|ts| {
-                    let dt = chrono::DateTime::from_timestamp(ts, 0)
-                        .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
-                        .unwrap_or_default();
-                    format!(" {}", dt.dimmed())
-                }).unwrap_or_default();
+                let time_str = timestamp
+                    .map(|ts| {
+                        let dt = chrono::DateTime::from_timestamp(ts, 0)
+                            .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
+                            .unwrap_or_default();
+                        format!(" {}", dt.dimmed())
+                    })
+                    .unwrap_or_default();
 
                 // Dest wallet display
                 let dest_label = classify_wallet(dest)
                     .map(|t| format!(" ({})", t).bright_blue().to_string())
                     .unwrap_or_default();
                 let dest_display = if dest.len() > 12 {
-                    format!("{}...{}{}", &dest[..4], &dest[dest.len()-4..], dest_label)
+                    format!("{}...{}{}", &dest[..4], &dest[dest.len() - 4..], dest_label)
                 } else {
                     format!("{}{}", dest, dest_label)
                 };
@@ -2018,7 +2584,8 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
                 let edge_prefix = if depth == 0 { "     " } else { prefix };
 
                 println!("{}│", edge_prefix);
-                println!("{}{} [{}{}{}] ──→ {}{}",
+                println!(
+                    "{}{} [{}{}{}] ──→ {}{}",
                     edge_prefix,
                     connector.cyan(),
                     amount_str.bright_yellow(),
@@ -2053,7 +2620,12 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
             if omitted > 0 {
                 let edge_prefix = if depth == 0 { "     " } else { prefix };
                 println!("{}│", edge_prefix);
-                println!("{}└── {} {} more destinations", edge_prefix, "...".dimmed(), omitted);
+                println!(
+                    "{}└── {} {} more destinations",
+                    edge_prefix,
+                    "...".dimmed(),
+                    omitted
+                );
             }
         }
     }
@@ -2088,7 +2660,11 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
 
     if let Some(inflows) = reverse_adj.get(target) {
         if !inflows.is_empty() {
-            println!("  📥 {} {}", "INFLOWS TO ORIGIN".bold().green(), "(who sent to target)".dimmed());
+            println!(
+                "  📥 {} {}",
+                "INFLOWS TO ORIGIN".bold().green(),
+                "(who sent to target)".dimmed()
+            );
             println!();
 
             for (i, (from, amount)) in inflows.iter().take(5).enumerate() {
@@ -2098,12 +2674,13 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
                     .map(|t| format!(" ({})", t).bright_blue().to_string())
                     .unwrap_or_default();
                 let from_display = if from.len() > 12 {
-                    format!("{}...{}{}", &from[..4], &from[from.len()-4..], from_label)
+                    format!("{}...{}{}", &from[..4], &from[from.len() - 4..], from_label)
                 } else {
                     format!("{}{}", from, from_label)
                 };
 
-                println!("     {} [{}{}] ──→ {}",
+                println!(
+                    "     {} [{}{}] ──→ {}",
                     from_display.bright_green(),
                     format_amount(*amount).bright_yellow(),
                     format!(" {}", token_name).dimmed(),
@@ -2112,7 +2689,11 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
             }
 
             if inflows.len() > 5 {
-                println!("     {} and {} more sources", "...".dimmed(), inflows.len() - 5);
+                println!(
+                    "     {} and {} more sources",
+                    "...".dimmed(),
+                    inflows.len() - 5
+                );
             }
             println!();
         }
@@ -2120,7 +2701,7 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
 
     // === SUMMARY BOX ===
     println!("  ┌─────────────────────────────────────────────────────────────────┐");
-    println!("  │ {} FLOW SUMMARY                                              │", "📊".to_string());
+    println!("  │ 📊 FLOW SUMMARY                                              │");
     println!("  ├─────────────────────────────────────────────────────────────────┤");
     println!("  │ Token: {:<55} │", token_name);
     println!("  │ Total Flow: {:<50} │", format_amount(total_flow));
@@ -2133,7 +2714,7 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     // === PATTERN DETECTION ===
     // Detect circular flows
     let mut adj_map: HashMap<&str, Vec<&str>> = HashMap::new();
-    for ((from, to), _) in &edge_totals {
+    for (from, to) in edge_totals.keys() {
         adj_map.entry(*from).or_default().push(*to);
     }
 
@@ -2191,13 +2772,28 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     }
 
     if !unique_cycles.is_empty() {
-        println!("  ⚠️  {} {}", "CIRCULAR FLOWS DETECTED".bold().yellow(),
-            format!("({} cycles - potential wash trading)", unique_cycles.len()).dimmed());
+        println!(
+            "  ⚠️  {} {}",
+            "CIRCULAR FLOWS DETECTED".bold().yellow(),
+            format!("({} cycles - potential wash trading)", unique_cycles.len()).dimmed()
+        );
         for (i, (cycle, flow)) in unique_cycles.iter().take(3).enumerate() {
-            let cycle_str: Vec<String> = cycle.iter()
-                .map(|w| if w.len() > 8 { format!("{}..{}", &w[..4], &w[w.len()-4..]) } else { w.to_string() })
+            let cycle_str: Vec<String> = cycle
+                .iter()
+                .map(|w| {
+                    if w.len() > 8 {
+                        format!("{}..{}", &w[..4], &w[w.len() - 4..])
+                    } else {
+                        w.to_string()
+                    }
+                })
                 .collect();
-            println!("     {}. {} {}", i + 1, cycle_str.join(" → ").yellow(), format!("[{}]", format_amount(*flow)).dimmed());
+            println!(
+                "     {}. {} {}",
+                i + 1,
+                cycle_str.join(" → ").yellow(),
+                format!("[{}]", format_amount(*flow)).dimmed()
+            );
         }
         println!();
     }
@@ -2205,7 +2801,10 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     // Detect hub wallets
     let mut hub_wallets: Vec<(&str, usize, f64)> = Vec::new();
     for (wallet, inflow) in &wallet_inflow {
-        let senders: usize = edge_totals.iter().filter(|((_, to), _)| to == wallet).count();
+        let senders: usize = edge_totals
+            .iter()
+            .filter(|((_, to), _)| to == wallet)
+            .count();
         if senders >= 3 && *inflow > total_flow * 0.1 {
             hub_wallets.push((*wallet, senders, *inflow));
         }
@@ -2213,17 +2812,29 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     hub_wallets.sort_by(|a, b| b.1.cmp(&a.1));
 
     if !hub_wallets.is_empty() {
-        println!("  🎯 {} {}", "HUB WALLETS".bold().magenta(), "(3+ sources)".dimmed());
+        println!(
+            "  🎯 {} {}",
+            "HUB WALLETS".bold().magenta(),
+            "(3+ sources)".dimmed()
+        );
         for (wallet, senders, amount) in hub_wallets.iter().take(3) {
-            let wallet_type = classify_wallet(wallet)
-                .unwrap_or(if *senders > 10 { "likely exchange" } else { "aggregator" });
+            let wallet_type = classify_wallet(wallet).unwrap_or(if *senders > 10 {
+                "likely exchange"
+            } else {
+                "aggregator"
+            });
             let wallet_short = if wallet.len() > 12 {
-                format!("{}...{}", &wallet[..4], &wallet[wallet.len()-4..])
+                format!("{}...{}", &wallet[..4], &wallet[wallet.len() - 4..])
             } else {
                 wallet.to_string()
             };
-            println!("     {} ← {} senders, {} ({})",
-                wallet_short.magenta(), senders, format_amount(*amount), wallet_type.bright_blue());
+            println!(
+                "     {} ← {} senders, {} ({})",
+                wallet_short.magenta(),
+                senders,
+                format_amount(*amount),
+                wallet_type.bright_blue()
+            );
         }
         println!();
     }
@@ -2231,8 +2842,11 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     // Detect flow patterns
     let patterns = detect_flow_patterns(transfers);
     if !patterns.is_empty() {
-        println!("  🔍 {} {}", "FLOW PATTERNS".bold().yellow(),
-            format!("({} detected)", patterns.len()).dimmed());
+        println!(
+            "  🔍 {} {}",
+            "FLOW PATTERNS".bold().yellow(),
+            format!("({} detected)", patterns.len()).dimmed()
+        );
         for (pattern_name, description, _) in patterns.iter().take(3) {
             let icon = match pattern_name.as_str() {
                 "Peel Chain" => "🔗",
@@ -2243,7 +2857,12 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
                 "Pass-Through" => "⏭️",
                 _ => "📊",
             };
-            println!("     {} {} - {}", icon, pattern_name.yellow(), description.dimmed());
+            println!(
+                "     {} {} - {}",
+                icon,
+                pattern_name.yellow(),
+                description.dimmed()
+            );
         }
         println!();
     }
@@ -2251,8 +2870,11 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     // Detect temporal patterns (bot detection, bursts, timing)
     let temporal_patterns = detect_temporal_patterns(transfers);
     if !temporal_patterns.is_empty() {
-        println!("  ⏱️  {} {}", "TEMPORAL PATTERNS".bold().magenta(),
-            format!("({} timing anomalies)", temporal_patterns.len()).dimmed());
+        println!(
+            "  ⏱️  {} {}",
+            "TEMPORAL PATTERNS".bold().magenta(),
+            format!("({} timing anomalies)", temporal_patterns.len()).dimmed()
+        );
         for (pattern_type, description, _, severity) in temporal_patterns.iter().take(5) {
             let icon = match pattern_type.as_str() {
                 "Rapid Burst" => "⚡",
@@ -2268,7 +2890,13 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
                 "MEDIUM" => format!("[{}]", severity).yellow().to_string(),
                 _ => format!("[{}]", severity).dimmed().to_string(),
             };
-            println!("     {} {} {} - {}", icon, sev_color, pattern_type.magenta(), description.dimmed());
+            println!(
+                "     {} {} {} - {}",
+                icon,
+                sev_color,
+                pattern_type.magenta(),
+                description.dimmed()
+            );
         }
         println!();
     }
@@ -2276,8 +2904,11 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
     // Detect entity clusters (wallets likely controlled by same entity)
     let entity_clusters = detect_wallet_entities(transfers);
     if !entity_clusters.is_empty() {
-        println!("  🔗 {} {}", "ENTITY CLUSTERS".bold().cyan(),
-            format!("({} groups of related wallets)", entity_clusters.len()).dimmed());
+        println!(
+            "  🔗 {} {}",
+            "ENTITY CLUSTERS".bold().cyan(),
+            format!("({} groups of related wallets)", entity_clusters.len()).dimmed()
+        );
         println!();
 
         for cluster in entity_clusters.iter().take(5) {
@@ -2299,7 +2930,8 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
                 _ => "🔗",
             };
 
-            println!("     {} {} {} [{}] {:.0}%",
+            println!(
+                "     {} {} {} [{}] {:.0}%",
                 type_icon,
                 cluster.entity_type.bold().cyan(),
                 format!("(Entity #{})", cluster.id).dimmed(),
@@ -2308,28 +2940,42 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
             );
 
             // Show member wallets
-            println!("       {} {}", "Wallets:".dimmed(),
-                format!("{} linked", cluster.wallets.len()).white());
+            println!(
+                "       {} {}",
+                "Wallets:".dimmed(),
+                format!("{} linked", cluster.wallets.len()).white()
+            );
             for (i, wallet) in cluster.wallets.iter().take(4).enumerate() {
                 let wallet_label = classify_wallet(wallet)
                     .map(|t| format!(" ({})", t).bright_blue().to_string())
                     .unwrap_or_default();
-                let prefix = if i == cluster.wallets.len().min(4) - 1 { "└─" } else { "├─" };
-                println!("         {} {}{}",
+                let prefix = if i == cluster.wallets.len().min(4) - 1 {
+                    "└─"
+                } else {
+                    "├─"
+                };
+                println!(
+                    "         {} {}{}",
                     prefix.dimmed(),
                     truncate_address(wallet).white(),
                     wallet_label
                 );
             }
             if cluster.wallets.len() > 4 {
-                println!("         {} {} more", "...".dimmed(),
-                    cluster.wallets.len() - 4);
+                println!(
+                    "         {} {} more",
+                    "...".dimmed(),
+                    cluster.wallets.len() - 4
+                );
             }
 
             // Show evidence
             if !cluster.evidence.is_empty() {
-                println!("       {} {}", "Evidence:".dimmed(),
-                    cluster.evidence.first().unwrap_or(&String::new()).dimmed());
+                println!(
+                    "       {} {}",
+                    "Evidence:".dimmed(),
+                    cluster.evidence.first().unwrap_or(&String::new()).dimmed()
+                );
                 for ev in cluster.evidence.iter().skip(1).take(2) {
                     println!("                 {}", ev.dimmed());
                 }
@@ -2338,7 +2984,11 @@ fn render_token_flow(target: &str, transfers: &[TransferRecord], token_filter: &
         }
 
         if entity_clusters.len() > 5 {
-            println!("     {} {} more clusters...", "...".dimmed(), entity_clusters.len() - 5);
+            println!(
+                "     {} {} more clusters...",
+                "...".dimmed(),
+                entity_clusters.len() - 5
+            );
             println!();
         }
     }
@@ -2372,11 +3022,19 @@ fn generate_ascii_graph_text(target: &str, transfers: &[TransferRecord]) -> Stri
 
     // Sort and take top 5
     let mut top_inflows: Vec<_> = inflows.into_iter().collect();
-    top_inflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
+    top_inflows.sort_by(|a, b| {
+        b.1 .0
+            .partial_cmp(&a.1 .0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     top_inflows.truncate(5);
 
     let mut top_outflows: Vec<_> = outflows.into_iter().collect();
-    top_outflows.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap_or(std::cmp::Ordering::Equal));
+    top_outflows.sort_by(|a, b| {
+        b.1 .0
+            .partial_cmp(&a.1 .0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     top_outflows.truncate(5);
 
     let max_lines = top_inflows.len().max(top_outflows.len()).max(3);
@@ -2391,9 +3049,16 @@ fn generate_ascii_graph_text(target: &str, transfers: &[TransferRecord]) -> Stri
         let left = if i < top_inflows.len() {
             let (addr, (_, tokens)) = &top_inflows[i];
             let addr_short = truncate_address(addr);
-            let tokens_short: Vec<String> = tokens.iter()
+            let tokens_short: Vec<String> = tokens
+                .iter()
                 .take(2)
-                .map(|t| if t.len() > 6 { format!("{}…", &t[..5]) } else { t.clone() })
+                .map(|t| {
+                    if t.len() > 6 {
+                        format!("{}…", &t[..5])
+                    } else {
+                        t.clone()
+                    }
+                })
                 .collect();
             let tokens_str = if tokens.len() > 2 {
                 format!("{},+{}", tokens_short[0], tokens.len() - 1)
@@ -2409,9 +3074,16 @@ fn generate_ascii_graph_text(target: &str, transfers: &[TransferRecord]) -> Stri
         let right = if i < top_outflows.len() {
             let (addr, (_, tokens)) = &top_outflows[i];
             let addr_short = truncate_address(addr);
-            let tokens_short: Vec<String> = tokens.iter()
+            let tokens_short: Vec<String> = tokens
+                .iter()
                 .take(2)
-                .map(|t| if t.len() > 6 { format!("{}…", &t[..5]) } else { t.clone() })
+                .map(|t| {
+                    if t.len() > 6 {
+                        format!("{}…", &t[..5])
+                    } else {
+                        t.clone()
+                    }
+                })
                 .collect();
             let tokens_str = if tokens.len() > 2 {
                 format!("{},+{}", tokens_short[0], tokens.len() - 1)
@@ -2437,8 +3109,11 @@ fn generate_ascii_graph_text(target: &str, transfers: &[TransferRecord]) -> Stri
         output.push_str(&format!("{:<28}  {}  {}\n", left, center, right));
     }
 
-    output.push_str(&format!("\n  ◀── {} sources    |    {} destinations ──▶\n",
-        top_inflows.len(), top_outflows.len()));
+    output.push_str(&format!(
+        "\n  ◀── {} sources    |    {} destinations ──▶\n",
+        top_inflows.len(),
+        top_outflows.len()
+    ));
 
     output
 }
@@ -2446,32 +3121,68 @@ fn generate_ascii_graph_text(target: &str, transfers: &[TransferRecord]) -> Stri
 /// Known wallet/program addresses for classification
 fn classify_wallet(address: &str) -> Option<&'static str> {
     // System programs
-    if address == "11111111111111111111111111111111" { return Some("System Program"); }
-    if address == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" { return Some("Token Program"); }
-    if address == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" { return Some("Associated Token"); }
-    if address == "ComputeBudget111111111111111111111111111111" { return Some("Compute Budget"); }
+    if address == "11111111111111111111111111111111" {
+        return Some("System Program");
+    }
+    if address == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
+        return Some("Token Program");
+    }
+    if address == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+        return Some("Associated Token");
+    }
+    if address == "ComputeBudget111111111111111111111111111111" {
+        return Some("Compute Budget");
+    }
 
     // DEX Programs
-    if address.starts_with("JUP") { return Some("Jupiter Aggregator"); }
-    if address == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" { return Some("Raydium AMM"); }
-    if address == "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" { return Some("Orca Whirlpool"); }
-    if address == "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP" { return Some("Orca Legacy"); }
-    if address == "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" { return Some("Raydium CLMM"); }
-    if address == "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX" { return Some("Serum DEX"); }
-    if address == "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" { return Some("Phoenix DEX"); }
-    if address == "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" { return Some("Meteora DLMM"); }
+    if address.starts_with("JUP") {
+        return Some("Jupiter Aggregator");
+    }
+    if address == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" {
+        return Some("Raydium AMM");
+    }
+    if address == "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" {
+        return Some("Orca Whirlpool");
+    }
+    if address == "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP" {
+        return Some("Orca Legacy");
+    }
+    if address == "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" {
+        return Some("Raydium CLMM");
+    }
+    if address == "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX" {
+        return Some("Serum DEX");
+    }
+    if address == "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" {
+        return Some("Phoenix DEX");
+    }
+    if address == "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" {
+        return Some("Meteora DLMM");
+    }
 
     // Staking/Lending
-    if address == "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD" { return Some("Marinade Staking"); }
-    if address.starts_with("So1") { return Some("Solend"); }
-    if address == "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA" { return Some("Marginfi"); }
+    if address == "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD" {
+        return Some("Marinade Staking");
+    }
+    if address.starts_with("So1") {
+        return Some("Solend");
+    }
+    if address == "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA" {
+        return Some("Marginfi");
+    }
 
     // NFT Marketplaces
-    if address == "M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K" { return Some("Magic Eden v2"); }
-    if address.starts_with("TSW") { return Some("Tensor"); }
+    if address == "M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K" {
+        return Some("Magic Eden v2");
+    }
+    if address.starts_with("TSW") {
+        return Some("Tensor");
+    }
 
     // Bridges
-    if address == "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb" { return Some("Wormhole"); }
+    if address == "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb" {
+        return Some("Wormhole");
+    }
 
     None
 }
@@ -2488,15 +3199,23 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
     }
 
     // Build comprehensive flow data
-    let mut outflows_by_sender: HashMap<&str, Vec<(&str, f64, Option<&str>)>> = HashMap::new(); // (dest, amount, token)
-    let mut inflows_by_receiver: HashMap<&str, Vec<(&str, f64, Option<&str>)>> = HashMap::new();
+    let mut outflows_by_sender: FlowWithToken<'_> = HashMap::new(); // (dest, amount, token)
+    let mut inflows_by_receiver: FlowWithToken<'_> = HashMap::new();
     let mut total_by_sender: HashMap<&str, f64> = HashMap::new();
     let mut total_by_receiver: HashMap<&str, f64> = HashMap::new();
     let mut token_counts: HashMap<&str, usize> = HashMap::new();
 
     for tx in transfers {
-        outflows_by_sender.entry(&tx.from).or_default().push((&tx.to, tx.amount, Some(tx.token.as_str())));
-        inflows_by_receiver.entry(&tx.to).or_default().push((&tx.from, tx.amount, Some(tx.token.as_str())));
+        outflows_by_sender.entry(&tx.from).or_default().push((
+            &tx.to,
+            tx.amount,
+            Some(tx.token.as_str()),
+        ));
+        inflows_by_receiver.entry(&tx.to).or_default().push((
+            &tx.from,
+            tx.amount,
+            Some(tx.token.as_str()),
+        ));
         *total_by_sender.entry(&tx.from).or_insert(0.0) += tx.amount;
         *total_by_receiver.entry(&tx.to).or_insert(0.0) += tx.amount;
         *token_counts.entry(&tx.token).or_insert(0) += 1;
@@ -2519,7 +3238,11 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
             if top_3_pct > 60.0 && small_tx_count >= 3 {
                 let largest = amounts.first().copied().unwrap_or(0.0);
                 let smallest = amounts.last().copied().unwrap_or(0.0);
-                let ratio = if smallest > 0.0 { largest / smallest } else { f64::MAX };
+                let ratio = if smallest > 0.0 {
+                    largest / smallest
+                } else {
+                    f64::MAX
+                };
 
                 patterns.push((
                     "Peel Chain".to_string(),
@@ -2541,13 +3264,18 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
             let scatter_total: f64 = recipients.iter().map(|(_, a, _)| a).sum();
 
             for (potential_gather, gatherers) in &inflows_by_receiver {
-                if *potential_gather == *sender { continue; }
+                if *potential_gather == *sender {
+                    continue;
+                }
 
-                let senders_to_gather: HashSet<&str> = gatherers.iter().map(|(s, _, _)| *s).collect();
-                let overlap: Vec<&&str> = recipient_addrs.intersection(&senders_to_gather).collect();
+                let senders_to_gather: HashSet<&str> =
+                    gatherers.iter().map(|(s, _, _)| *s).collect();
+                let overlap: Vec<&&str> =
+                    recipient_addrs.intersection(&senders_to_gather).collect();
 
                 if overlap.len() >= 2 {
-                    let gather_total: f64 = gatherers.iter()
+                    let gather_total: f64 = gatherers
+                        .iter()
                         .filter(|(s, _, _)| overlap.contains(&s))
                         .map(|(_, a, _)| a)
                         .sum();
@@ -2555,13 +3283,20 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
                     // Calculate how much was "lost" in transit (fees, skimmed, etc)
                     let loss_pct = if scatter_total > 0.0 {
                         ((scatter_total - gather_total) / scatter_total * 100.0).abs()
-                    } else { 0.0 };
+                    } else {
+                        0.0
+                    };
 
                     patterns.push((
                         "Scatter-Gather".to_string(),
-                        format!("{}→{} hops→{}: {:.2} scattered, {:.2} gathered ({:.1}% transit loss)",
-                            truncate_address(sender), overlap.len(), truncate_address(potential_gather),
-                            scatter_total, gather_total, loss_pct
+                        format!(
+                            "{}→{} hops→{}: {:.2} scattered, {:.2} gathered ({:.1}% transit loss)",
+                            truncate_address(sender),
+                            overlap.len(),
+                            truncate_address(potential_gather),
+                            scatter_total,
+                            gather_total,
+                            loss_pct
                         ),
                         overlap.iter().map(|w| truncate_address(w)).collect(),
                     ));
@@ -2577,18 +3312,28 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
             if let Some(return_flows) = outflows_by_sender.get(recipient) {
                 for (return_dest, return_amount, return_token) in return_flows {
                     if *return_dest == *sender && *return_amount > 0.0 {
-                        let diff_pct = ((*out_amount - *return_amount) / out_amount.max(0.001) * 100.0).abs();
+                        let diff_pct =
+                            ((*out_amount - *return_amount) / out_amount.max(0.001) * 100.0).abs();
                         let same_token = out_token == return_token;
-                        let suspicion = if same_token && diff_pct < 5.0 { "⚠️ HIGHLY SUSPICIOUS" }
-                            else if same_token { "suspicious" }
-                            else { "cross-token (possible swap)" };
+                        let suspicion = if same_token && diff_pct < 5.0 {
+                            "⚠️ HIGHLY SUSPICIOUS"
+                        } else if same_token {
+                            "suspicious"
+                        } else {
+                            "cross-token (possible swap)"
+                        };
 
                         patterns.push((
                             "Round-Trip".to_string(),
-                            format!("{}↔{}: {:.2}→{:.2} ({:.1}% diff) {} - {}",
-                                truncate_address(sender), truncate_address(recipient),
-                                out_amount, return_amount, diff_pct,
-                                out_token.unwrap_or("?"), suspicion
+                            format!(
+                                "{}↔{}: {:.2}→{:.2} ({:.1}% diff) {} - {}",
+                                truncate_address(sender),
+                                truncate_address(recipient),
+                                out_amount,
+                                return_amount,
+                                diff_pct,
+                                out_token.unwrap_or("?"),
+                                suspicion
                             ),
                             vec![sender.to_string(), recipient.to_string()],
                         ));
@@ -2606,10 +3351,13 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
             let avg = amounts.iter().sum::<f64>() / amounts.len() as f64;
 
             // Count how many are within 20% of average (suspiciously uniform)
-            let uniform_count = amounts.iter().filter(|a| {
-                let diff = ((**a - avg) / avg.max(0.001)).abs();
-                diff < 0.20
-            }).count();
+            let uniform_count = amounts
+                .iter()
+                .filter(|a| {
+                    let diff = ((**a - avg) / avg.max(0.001)).abs();
+                    diff < 0.20
+                })
+                .count();
 
             let uniform_pct = uniform_count as f64 / amounts.len() as f64 * 100.0;
 
@@ -2661,8 +3409,13 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
 
                 patterns.push((
                     "Pass-Through".to_string(),
-                    format!("{}: {:.2} in→{:.2} out ({:.0}% pass-through, {:.4} retained)",
-                        truncate_address(wallet), in_total, out_total, passthrough_pct, retention.max(0.0)
+                    format!(
+                        "{}: {:.2} in→{:.2} out ({:.0}% pass-through, {:.4} retained)",
+                        truncate_address(wallet),
+                        in_total,
+                        out_total,
+                        passthrough_pct,
+                        retention.max(0.0)
                     ),
                     vec![wallet.to_string()],
                 ));
@@ -2674,7 +3427,12 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
     let mut seen: HashSet<String> = HashSet::new();
     patterns.retain(|(name, desc, _)| {
         let key = format!("{}:{}", name, &desc[..desc.len().min(50)]);
-        if seen.contains(&key) { false } else { seen.insert(key); true }
+        if seen.contains(&key) {
+            false
+        } else {
+            seen.insert(key);
+            true
+        }
     });
 
     // Sort: Round-Trip first (most suspicious), then others
@@ -2696,7 +3454,9 @@ fn detect_flow_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Ve
 
 /// Temporal pattern analysis for detecting bot behavior, bursts, and scheduling
 /// Returns: (pattern_type, description, wallets_involved, severity)
-fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String, Vec<String>, String)> {
+fn detect_temporal_patterns(
+    transfers: &[TransferRecord],
+) -> Vec<(String, String, Vec<String>, String)> {
     use std::collections::HashMap;
 
     let mut patterns: Vec<(String, String, Vec<String>, String)> = Vec::new();
@@ -2731,14 +3491,20 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
     // === Pattern 1: RAPID BURSTS ===
     // Many transactions in a short time window indicates automation or panic selling
     for (wallet, timestamps) in &wallet_timestamps {
-        if timestamps.len() < 3 { continue; } // Lowered threshold
+        if timestamps.len() < 3 {
+            continue;
+        } // Lowered threshold
 
         // Sliding window: count txs within 60-second windows
         let mut max_burst = 0;
         let mut burst_start = 0;
         for i in 0..timestamps.len() {
             let window_end = timestamps[i] + 60; // 60-second window
-            let count = timestamps.iter().skip(i).take_while(|&&t| t <= window_end).count();
+            let count = timestamps
+                .iter()
+                .skip(i)
+                .take_while(|&&t| t <= window_end)
+                .count();
             if count > max_burst {
                 max_burst = count;
                 burst_start = timestamps[i];
@@ -2746,15 +3512,25 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
         }
 
         if max_burst >= 3 {
-            let severity = if max_burst >= 8 { "HIGH" } else if max_burst >= 5 { "MEDIUM" } else { "LOW" };
+            let severity = if max_burst >= 8 {
+                "HIGH"
+            } else if max_burst >= 5 {
+                "MEDIUM"
+            } else {
+                "LOW"
+            };
             let time_str = chrono::DateTime::from_timestamp(burst_start, 0)
                 .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
                 .unwrap_or_else(|| burst_start.to_string());
 
             patterns.push((
                 "Rapid Burst".to_string(),
-                format!("{}: {} txs within 60s at {} - likely bot/script",
-                    truncate_address(wallet), max_burst, time_str),
+                format!(
+                    "{}: {} txs within 60s at {} - likely bot/script",
+                    truncate_address(wallet),
+                    max_burst,
+                    time_str
+                ),
                 vec![wallet.to_string()],
                 severity.to_string(),
             ));
@@ -2764,21 +3540,28 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
     // === Pattern 2: REGULAR INTERVALS (Bot Behavior) ===
     // Consistent timing between transactions suggests automated scheduling
     for (wallet, timestamps) in &wallet_timestamps {
-        if timestamps.len() < 4 { continue; }
+        if timestamps.len() < 4 {
+            continue;
+        }
 
         // Calculate intervals between consecutive transactions
-        let intervals: Vec<i64> = timestamps.windows(2)
+        let intervals: Vec<i64> = timestamps
+            .windows(2)
             .map(|w| w[1] - w[0])
             .filter(|&i| i > 0 && i < 86400) // Filter out outliers (>1 day)
             .collect();
 
-        if intervals.len() < 3 { continue; }
+        if intervals.len() < 3 {
+            continue;
+        }
 
         // Calculate mean and standard deviation
         let mean: f64 = intervals.iter().sum::<i64>() as f64 / intervals.len() as f64;
-        let variance: f64 = intervals.iter()
+        let variance: f64 = intervals
+            .iter()
             .map(|&i| (i as f64 - mean).powi(2))
-            .sum::<f64>() / intervals.len() as f64;
+            .sum::<f64>()
+            / intervals.len() as f64;
         let std_dev = variance.sqrt();
 
         // Low coefficient of variation (std/mean < 0.3) suggests regularity
@@ -2793,12 +3576,23 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
                 format!("{:.1}h", mean / 3600.0)
             };
 
-            let severity = if cv < 0.1 { "HIGH" } else if cv < 0.2 { "MEDIUM" } else { "LOW" };
+            let severity = if cv < 0.1 {
+                "HIGH"
+            } else if cv < 0.2 {
+                "MEDIUM"
+            } else {
+                "LOW"
+            };
 
             patterns.push((
                 "Regular Intervals".to_string(),
-                format!("{}: avg {}, CV={:.2} ({}x) - 🤖 BOT DETECTED",
-                    truncate_address(wallet), avg_interval_str, cv, intervals.len()),
+                format!(
+                    "{}: avg {}, CV={:.2} ({}x) - 🤖 BOT DETECTED",
+                    truncate_address(wallet),
+                    avg_interval_str,
+                    cv,
+                    intervals.len()
+                ),
                 vec![wallet.to_string()],
                 severity.to_string(),
             ));
@@ -2808,15 +3602,20 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
     // === Pattern 3: TIME-OF-DAY CLUSTERING ===
     // Transactions clustered at specific hours (e.g., always at midnight UTC)
     for (wallet, timestamps) in &wallet_timestamps {
-        if timestamps.len() < 5 { continue; }
+        if timestamps.len() < 5 {
+            continue;
+        }
 
         // Extract hours (0-23) from each timestamp
-        let hours: Vec<u32> = timestamps.iter()
+        let hours: Vec<u32> = timestamps
+            .iter()
             .filter_map(|&ts| chrono::DateTime::from_timestamp(ts, 0))
             .map(|dt| dt.format("%H").to_string().parse::<u32>().unwrap_or(0))
             .collect();
 
-        if hours.is_empty() { continue; }
+        if hours.is_empty() {
+            continue;
+        }
 
         // Count occurrences per hour
         let mut hour_counts: HashMap<u32, usize> = HashMap::new();
@@ -2832,10 +3631,20 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
             if pct > 40.0 && peak_count >= 3 {
                 patterns.push((
                     "Time Clustering".to_string(),
-                    format!("{}: {:.0}% of txs at {:02}:00 UTC ({}/{}) - scheduled activity",
-                        truncate_address(wallet), pct, peak_hour, peak_count, hours.len()),
+                    format!(
+                        "{}: {:.0}% of txs at {:02}:00 UTC ({}/{}) - scheduled activity",
+                        truncate_address(wallet),
+                        pct,
+                        peak_hour,
+                        peak_count,
+                        hours.len()
+                    ),
                     vec![wallet.to_string()],
-                    if pct > 70.0 { "HIGH".to_string() } else { "MEDIUM".to_string() },
+                    if pct > 70.0 {
+                        "HIGH".to_string()
+                    } else {
+                        "MEDIUM".to_string()
+                    },
                 ));
             }
         }
@@ -2844,12 +3653,12 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
     // === Pattern 4: DORMANCY FOLLOWED BY BURST ===
     // Long period of inactivity then sudden activity
     for (wallet, timestamps) in &wallet_timestamps {
-        if timestamps.len() < 3 { continue; }
+        if timestamps.len() < 3 {
+            continue;
+        }
 
         // Find the longest gap between transactions
-        let gaps: Vec<i64> = timestamps.windows(2)
-            .map(|w| w[1] - w[0])
-            .collect();
+        let gaps: Vec<i64> = timestamps.windows(2).map(|w| w[1] - w[0]).collect();
 
         if let Some(&max_gap) = gaps.iter().max() {
             let max_gap_days = max_gap as f64 / 86400.0;
@@ -2863,7 +3672,8 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
                     if txs_after_gap >= 3 {
                         // Calculate burst rate after dormancy
                         let post_gap_timestamps = &timestamps[gap_idx + 1..];
-                        let post_duration = post_gap_timestamps.last().unwrap_or(&0) - post_gap_timestamps.first().unwrap_or(&0);
+                        let post_duration = post_gap_timestamps.last().unwrap_or(&0)
+                            - post_gap_timestamps.first().unwrap_or(&0);
                         let rate = if post_duration > 0 {
                             post_gap_timestamps.len() as f64 / (post_duration as f64 / 3600.0)
                         } else {
@@ -2872,10 +3682,19 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
 
                         patterns.push((
                             "Dormancy Burst".to_string(),
-                            format!("{}: {:.0} days dormant → {} txs burst ({:.1}/hr) - reactivation",
-                                truncate_address(wallet), max_gap_days, txs_after_gap, rate),
+                            format!(
+                                "{}: {:.0} days dormant → {} txs burst ({:.1}/hr) - reactivation",
+                                truncate_address(wallet),
+                                max_gap_days,
+                                txs_after_gap,
+                                rate
+                            ),
                             vec![wallet.to_string()],
-                            if max_gap_days > 30.0 { "HIGH".to_string() } else { "MEDIUM".to_string() },
+                            if max_gap_days > 30.0 {
+                                "HIGH".to_string()
+                            } else {
+                                "MEDIUM".to_string()
+                            },
                         ));
                     }
                 }
@@ -2886,15 +3705,20 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
     // === Pattern 5: WEEKEND/WEEKDAY CONCENTRATION ===
     // Transactions only during business hours or only weekends
     for (wallet, timestamps) in &wallet_timestamps {
-        if timestamps.len() < 5 { continue; }
+        if timestamps.len() < 5 {
+            continue;
+        }
 
         // Extract day-of-week (0=Sunday, 6=Saturday)
-        let weekdays: Vec<u32> = timestamps.iter()
+        let weekdays: Vec<u32> = timestamps
+            .iter()
             .filter_map(|&ts| chrono::DateTime::from_timestamp(ts, 0))
             .map(|dt| dt.format("%w").to_string().parse::<u32>().unwrap_or(0))
             .collect();
 
-        if weekdays.is_empty() { continue; }
+        if weekdays.is_empty() {
+            continue;
+        }
 
         let weekend_count = weekdays.iter().filter(|&&d| d == 0 || d == 6).count();
         let weekday_count = weekdays.len() - weekend_count;
@@ -2905,16 +3729,22 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
         if weekday_count >= 4 && weekend_pct < 10.0 {
             patterns.push((
                 "Weekday Only".to_string(),
-                format!("{}: {:.0}% weekday txs - business hours activity",
-                    truncate_address(wallet), 100.0 - weekend_pct),
+                format!(
+                    "{}: {:.0}% weekday txs - business hours activity",
+                    truncate_address(wallet),
+                    100.0 - weekend_pct
+                ),
                 vec![wallet.to_string()],
                 "LOW".to_string(),
             ));
         } else if weekend_count >= 3 && weekend_pct > 80.0 {
             patterns.push((
                 "Weekend Only".to_string(),
-                format!("{}: {:.0}% weekend txs - unusual timing",
-                    truncate_address(wallet), weekend_pct),
+                format!(
+                    "{}: {:.0}% weekend txs - unusual timing",
+                    truncate_address(wallet),
+                    weekend_pct
+                ),
                 vec![wallet.to_string()],
                 "MEDIUM".to_string(),
             ));
@@ -2923,7 +3753,12 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
 
     // Sort by severity (HIGH first)
     patterns.sort_by(|(_, _, _, sev_a), (_, _, _, sev_b)| {
-        let priority = |s: &str| match s { "HIGH" => 0, "MEDIUM" => 1, "LOW" => 2, _ => 3 };
+        let priority = |s: &str| match s {
+            "HIGH" => 0,
+            "MEDIUM" => 1,
+            "LOW" => 2,
+            _ => 3,
+        };
         priority(sev_a).cmp(&priority(sev_b))
     });
 
@@ -2931,7 +3766,12 @@ fn detect_temporal_patterns(transfers: &[TransferRecord]) -> Vec<(String, String
     let mut seen = std::collections::HashSet::new();
     patterns.retain(|(name, desc, _, _)| {
         let key = format!("{}:{}", name, &desc[..desc.len().min(40)]);
-        if seen.contains(&key) { false } else { seen.insert(key); true }
+        if seen.contains(&key) {
+            false
+        } else {
+            seen.insert(key);
+            true
+        }
     });
 
     patterns
@@ -2947,114 +3787,226 @@ struct CrossTokenSwap {
     amount_out: f64,
     timestamp: String,
     time_diff_secs: i64,
-    confidence: f64,  // 0.0 - 1.0
-    swap_type: String,  // "DEX Swap", "Atomic Swap", "Multi-hop", "Probable Swap"
-    dex_name: Option<String>,  // "Jupiter", "Raydium", "Orca", etc.
+    confidence: f64,          // 0.0 - 1.0
+    swap_type: String,        // "DEX Swap", "Atomic Swap", "Multi-hop", "Probable Swap"
+    dex_name: Option<String>, // "Jupiter", "Raydium", "Orca", etc.
 }
 
 /// Identify DEX from wallet address
 fn identify_dex(address: &str) -> Option<&'static str> {
     // Jupiter variants (most common aggregator)
-    if address.starts_with("JUP") { return Some("Jupiter"); }
-    if address == "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" { return Some("Jupiter"); }
-    if address == "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" { return Some("Jupiter v4"); }
-    if address == "JUP6i4ozu5ydDCnLiMogSckDPpbtr7BJ4FtzYWkb5Rk" { return Some("Jupiter v6"); }
-    if address == "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo" { return Some("Jupiter v2"); }
-    if address == "JUP3c2Uh3WA4Ng34tw6kPd2G4C5BB21Xo36Je1s32Ph" { return Some("Jupiter v3"); }
+    if address.starts_with("JUP") {
+        return Some("Jupiter");
+    }
+    if address == "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" {
+        return Some("Jupiter");
+    }
+    if address == "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" {
+        return Some("Jupiter v4");
+    }
+    if address == "JUP6i4ozu5ydDCnLiMogSckDPpbtr7BJ4FtzYWkb5Rk" {
+        return Some("Jupiter v6");
+    }
+    if address == "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo" {
+        return Some("Jupiter v2");
+    }
+    if address == "JUP3c2Uh3WA4Ng34tw6kPd2G4C5BB21Xo36Je1s32Ph" {
+        return Some("Jupiter v3");
+    }
 
     // Raydium variants (largest Solana AMM)
-    if address == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" { return Some("Raydium AMM"); }
-    if address == "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" { return Some("Raydium CLMM"); }
-    if address == "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS" { return Some("Raydium Router"); }
-    if address == "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h" { return Some("Raydium"); }
-    if address == "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" { return Some("Raydium v4"); }
-    if address == "RVKd61ztZW9GUwhRbbLoYVRE5Xf1B2tVscKqwZqXgEr" { return Some("Raydium CPMM"); }
-    if address.starts_with("Rayd") { return Some("Raydium"); }
+    if address == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" {
+        return Some("Raydium AMM");
+    }
+    if address == "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" {
+        return Some("Raydium CLMM");
+    }
+    if address == "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS" {
+        return Some("Raydium Router");
+    }
+    if address == "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h" {
+        return Some("Raydium");
+    }
+    if address == "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" {
+        return Some("Raydium v4");
+    }
+    if address == "RVKd61ztZW9GUwhRbbLoYVRE5Xf1B2tVscKqwZqXgEr" {
+        return Some("Raydium CPMM");
+    }
+    if address.starts_with("Rayd") {
+        return Some("Raydium");
+    }
 
     // Orca (second largest DEX)
-    if address == "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" { return Some("Orca Whirlpool"); }
-    if address == "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP" { return Some("Orca Legacy"); }
-    if address == "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1" { return Some("Orca v1"); }
-    if address.starts_with("Orca") { return Some("Orca"); }
+    if address == "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" {
+        return Some("Orca Whirlpool");
+    }
+    if address == "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP" {
+        return Some("Orca Legacy");
+    }
+    if address == "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1" {
+        return Some("Orca v1");
+    }
+    if address.starts_with("Orca") {
+        return Some("Orca");
+    }
 
     // Meteora (dynamic pools)
-    if address == "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" { return Some("Meteora DLMM"); }
-    if address == "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" { return Some("Meteora Vault"); }
-    if address == "24Uqj9JCLxUeoC3hGfh5W3s9FM9uCHDS2SG3LYwBpyTi" { return Some("Meteora Pool"); }
-    if address.starts_with("Meteo") { return Some("Meteora"); }
+    if address == "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" {
+        return Some("Meteora DLMM");
+    }
+    if address == "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" {
+        return Some("Meteora Vault");
+    }
+    if address == "24Uqj9JCLxUeoC3hGfh5W3s9FM9uCHDS2SG3LYwBpyTi" {
+        return Some("Meteora Pool");
+    }
+    if address.starts_with("Meteo") {
+        return Some("Meteora");
+    }
 
     // Phoenix (order book DEX)
-    if address == "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" { return Some("Phoenix"); }
-    if address == "phnxNHfGNVjpVVuHkceK3MgwZ1bW25ijfWACKhF1mk1" { return Some("Phoenix v2"); }
+    if address == "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" {
+        return Some("Phoenix");
+    }
+    if address == "phnxNHfGNVjpVVuHkceK3MgwZ1bW25ijfWACKhF1mk1" {
+        return Some("Phoenix v2");
+    }
 
     // OpenBook/Serum (order book)
-    if address == "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX" { return Some("Serum DEX"); }
-    if address == "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb" { return Some("OpenBook"); }
-    if address == "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin" { return Some("Serum v3"); }
-    if address.starts_with("opnb") { return Some("OpenBook"); }
+    if address == "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX" {
+        return Some("Serum DEX");
+    }
+    if address == "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb" {
+        return Some("OpenBook");
+    }
+    if address == "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin" {
+        return Some("Serum v3");
+    }
+    if address.starts_with("opnb") {
+        return Some("OpenBook");
+    }
 
     // Lifinity (proactive market maker)
-    if address == "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S" { return Some("Lifinity v1"); }
-    if address == "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" { return Some("Lifinity v2"); }
-    if address.starts_with("Lifi") { return Some("Lifinity"); }
+    if address == "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S" {
+        return Some("Lifinity v1");
+    }
+    if address == "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" {
+        return Some("Lifinity v2");
+    }
+    if address.starts_with("Lifi") {
+        return Some("Lifinity");
+    }
 
     // Aldrin DEX
-    if address == "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6" { return Some("Aldrin"); }
-    if address == "CURVGoZn8zycx6FXwwevgBTB2gVvdbGTEpvMJDbgs2t4" { return Some("Aldrin v2"); }
+    if address == "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6" {
+        return Some("Aldrin");
+    }
+    if address == "CURVGoZn8zycx6FXwwevgBTB2gVvdbGTEpvMJDbgs2t4" {
+        return Some("Aldrin v2");
+    }
 
     // Saber (stablecoin swaps)
-    if address == "SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ" { return Some("Saber"); }
-    if address == "Crt7UoUR6QgrFrN7j8rmSQpUTNWNSitSwWvWqGZNXTSK" { return Some("Saber Quarry"); }
-    if address == "DecZY86MU5Gj7kppfUCEmd4LbXXuyZH1yHaP2NTqdiZB" { return Some("Saber Decimal"); }
+    if address == "SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ" {
+        return Some("Saber");
+    }
+    if address == "Crt7UoUR6QgrFrN7j8rmSQpUTNWNSitSwWvWqGZNXTSK" {
+        return Some("Saber Quarry");
+    }
+    if address == "DecZY86MU5Gj7kppfUCEmd4LbXXuyZH1yHaP2NTqdiZB" {
+        return Some("Saber Decimal");
+    }
 
     // Crema Finance
-    if address == "CLMM9tUoggJu2wagPkkqs9eFG4BWhVBZWkP1qv3Sp7tR" { return Some("Crema"); }
+    if address == "CLMM9tUoggJu2wagPkkqs9eFG4BWhVBZWkP1qv3Sp7tR" {
+        return Some("Crema");
+    }
 
     // Step Finance (DEX aggregator)
-    if address == "SSwpMgqNDsyV7mAgN9ady4bDVu5ySjmmXejXvy2vLt1" { return Some("Step Finance"); }
+    if address == "SSwpMgqNDsyV7mAgN9ady4bDVu5ySjmmXejXvy2vLt1" {
+        return Some("Step Finance");
+    }
 
     // GooseFX
-    if address == "GFXsSL5sSaDfNFQUYsHekbWBW1TsFdjDYzACh62tEHxn" { return Some("GooseFX"); }
-    if address == "7WduLbRfYhTJktjLw5FDEyrqoEv61aTTCuGAetgLjzN5" { return Some("GooseFX SSL"); }
+    if address == "GFXsSL5sSaDfNFQUYsHekbWBW1TsFdjDYzACh62tEHxn" {
+        return Some("GooseFX");
+    }
+    if address == "7WduLbRfYhTJktjLw5FDEyrqoEv61aTTCuGAetgLjzN5" {
+        return Some("GooseFX SSL");
+    }
 
     // Cykura (concentrated liquidity)
-    if address == "cysPXAjehMpVKUapzbMCCnpFxUFFryEWEaLgnb9NLR8" { return Some("Cykura"); }
+    if address == "cysPXAjehMpVKUapzbMCCnpFxUFFryEWEaLgnb9NLR8" {
+        return Some("Cykura");
+    }
 
     // Invariant (concentrated liquidity)
-    if address == "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXZcEbRaJutt" { return Some("Invariant"); }
+    if address == "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXZcEbRaJutt" {
+        return Some("Invariant");
+    }
 
     // Sanctum (LST aggregator)
-    if address == "5ocnV1qiCgaQR8Jb8xWnVbApfaygJ8tNoZfgPwsgx9kx" { return Some("Sanctum Router"); }
-    if address == "stkitrT1Uoy18Dk1fTrgPw8W6MVzoCfYoAFT4MLsmhq" { return Some("Sanctum Stake"); }
+    if address == "5ocnV1qiCgaQR8Jb8xWnVbApfaygJ8tNoZfgPwsgx9kx" {
+        return Some("Sanctum Router");
+    }
+    if address == "stkitrT1Uoy18Dk1fTrgPw8W6MVzoCfYoAFT4MLsmhq" {
+        return Some("Sanctum Stake");
+    }
 
     // Marinade (liquid staking, shows as swap)
-    if address == "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD" { return Some("Marinade"); }
-    if address == "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" { return Some("Marinade mSOL"); }
+    if address == "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD" {
+        return Some("Marinade");
+    }
+    if address == "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" {
+        return Some("Marinade mSOL");
+    }
 
     // Jito (MEV/staking)
-    if address == "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb" { return Some("Jito"); }
-    if address == "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" { return Some("Jito jitoSOL"); }
+    if address == "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb" {
+        return Some("Jito");
+    }
+    if address == "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" {
+        return Some("Jito jitoSOL");
+    }
 
     // Tensor (NFT marketplace - trades show as swaps)
-    if address == "TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hAsbdwmHbN" { return Some("Tensor"); }
-    if address == "TCMPhJdwDryooaGtiocG1u3xcYbRpiJzb283XfCZsDp" { return Some("Tensor cNFT"); }
+    if address == "TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hAsbdwmHbN" {
+        return Some("Tensor");
+    }
+    if address == "TCMPhJdwDryooaGtiocG1u3xcYbRpiJzb283XfCZsDp" {
+        return Some("Tensor cNFT");
+    }
 
     // Magic Eden (NFT marketplace)
-    if address == "M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K" { return Some("Magic Eden v2"); }
-    if address == "CMZYPASGWeTz7RNGHaRJfCq2XQ5pYK6nDvVQxzkH51zb" { return Some("Magic Eden AMM"); }
+    if address == "M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K" {
+        return Some("Magic Eden v2");
+    }
+    if address == "CMZYPASGWeTz7RNGHaRJfCq2XQ5pYK6nDvVQxzkH51zb" {
+        return Some("Magic Eden AMM");
+    }
 
     // Pump.fun bonding curve program
-    if address == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" { return Some("Pump.fun"); }
-    if address == "Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1" { return Some("Pump.fun"); } // Migration
+    if address == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" {
+        return Some("Pump.fun");
+    }
+    if address == "Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1" {
+        return Some("Pump.fun");
+    } // Migration
 
     // Moonshot (token launchpad)
-    if address == "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG" { return Some("Moonshot"); }
+    if address == "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG" {
+        return Some("Moonshot");
+    }
 
     // FluxBeam (aggregator)
-    if address == "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X" { return Some("FluxBeam"); }
+    if address == "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X" {
+        return Some("FluxBeam");
+    }
 
     // 1Sol (aggregator)
-    if address == "1So1vRKV2PvhVjLBxUAMXqTHUQm9ZCJwDmrX2DPhMfk" { return Some("1Sol"); }
+    if address == "1So1vRKV2PvhVjLBxUAMXqTHUQm9ZCJwDmrX2DPhMfk" {
+        return Some("1Sol");
+    }
 
     None
 }
@@ -3068,73 +4020,183 @@ fn resolve_token_symbol(mint: &str) -> String {
     }
 
     // Common stablecoins
-    if mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" { return "USDC".to_string(); }
-    if mint == "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" { return "USDT".to_string(); }
-    if mint == "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX" { return "USDH".to_string(); }
-    if mint == "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj" { return "stSOL".to_string(); }
-    if mint == "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" { return "mSOL".to_string(); }
-    if mint == "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" { return "jitoSOL".to_string(); }
-    if mint == "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1" { return "bSOL".to_string(); }
-    if mint == "5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm" { return "INF".to_string(); }
+    if mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" {
+        return "USDC".to_string();
+    }
+    if mint == "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" {
+        return "USDT".to_string();
+    }
+    if mint == "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX" {
+        return "USDH".to_string();
+    }
+    if mint == "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj" {
+        return "stSOL".to_string();
+    }
+    if mint == "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" {
+        return "mSOL".to_string();
+    }
+    if mint == "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" {
+        return "jitoSOL".to_string();
+    }
+    if mint == "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1" {
+        return "bSOL".to_string();
+    }
+    if mint == "5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm" {
+        return "INF".to_string();
+    }
 
     // Major tokens
-    if mint == "So11111111111111111111111111111111111111112" { return "wSOL".to_string(); }
-    if mint == "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN" { return "JUP".to_string(); }
-    if mint == "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" { return "BONK".to_string(); }
-    if mint == "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm" { return "WIF".to_string(); }
-    if mint == "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3" { return "PYTH".to_string(); }
-    if mint == "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof" { return "RENDER".to_string(); }
-    if mint == "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux" { return "HNT".to_string(); }
-    if mint == "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R" { return "RAY".to_string(); }
-    if mint == "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE" { return "ORCA".to_string(); }
-    if mint == "SRMuApVNdxXokk5GT7XD5cUUgXMBCoAz2LHeuAoKWRt" { return "SRM".to_string(); }
-    if mint == "MNDEFzGvMt87ueuHvVU9VcTqsAP5b3fTGPsHuuPA5ey" { return "MNDE".to_string(); }
-    if mint == "kinXdEcpDQeHPEuQnqmUgtYykqKGVFq6CeVX5iAHJq6" { return "KIN".to_string(); }
-    if mint == "SHDWyBxihqiCj6YekG2GUr7wqKLeLAMK1gHZck9pL6y" { return "SHDW".to_string(); }
-    if mint == "AFbX8oGjGpmVFywbVouvhQSRmiW2aR1mohfahi4Y2AdB" { return "GST".to_string(); }
-    if mint == "7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx" { return "GMT".to_string(); }
-    if mint == "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" { return "BAT".to_string(); }
+    if mint == "So11111111111111111111111111111111111111112" {
+        return "wSOL".to_string();
+    }
+    if mint == "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN" {
+        return "JUP".to_string();
+    }
+    if mint == "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" {
+        return "BONK".to_string();
+    }
+    if mint == "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm" {
+        return "WIF".to_string();
+    }
+    if mint == "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3" {
+        return "PYTH".to_string();
+    }
+    if mint == "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof" {
+        return "RENDER".to_string();
+    }
+    if mint == "hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux" {
+        return "HNT".to_string();
+    }
+    if mint == "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R" {
+        return "RAY".to_string();
+    }
+    if mint == "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE" {
+        return "ORCA".to_string();
+    }
+    if mint == "SRMuApVNdxXokk5GT7XD5cUUgXMBCoAz2LHeuAoKWRt" {
+        return "SRM".to_string();
+    }
+    if mint == "MNDEFzGvMt87ueuHvVU9VcTqsAP5b3fTGPsHuuPA5ey" {
+        return "MNDE".to_string();
+    }
+    if mint == "kinXdEcpDQeHPEuQnqmUgtYykqKGVFq6CeVX5iAHJq6" {
+        return "KIN".to_string();
+    }
+    if mint == "SHDWyBxihqiCj6YekG2GUr7wqKLeLAMK1gHZck9pL6y" {
+        return "SHDW".to_string();
+    }
+    if mint == "AFbX8oGjGpmVFywbVouvhQSRmiW2aR1mohfahi4Y2AdB" {
+        return "GST".to_string();
+    }
+    if mint == "7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx" {
+        return "GMT".to_string();
+    }
+    if mint == "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" {
+        return "BAT".to_string();
+    }
 
     // Popular memecoins
-    if mint == "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5" { return "MEW".to_string(); }
-    if mint == "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump" { return "PNUT".to_string(); }
-    if mint == "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82" { return "BOME".to_string(); }
-    if mint == "CzLSujWBLFsSjncfkh59rUFqvafWcY5tzedWJSuypump" { return "GOAT".to_string(); }
-    if mint == "ED5nyyWEzpPPiWimP8vYm7sD7TD3LAt3Q3gRTWHzPJBY" { return "MOODENG".to_string(); }
-    if mint == "GJAFwWjJ3vnTsrQVabjBVK2TYB1YtRCQXRDfDgUnpump" { return "ACT".to_string(); }
+    if mint == "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5" {
+        return "MEW".to_string();
+    }
+    if mint == "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump" {
+        return "PNUT".to_string();
+    }
+    if mint == "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82" {
+        return "BOME".to_string();
+    }
+    if mint == "CzLSujWBLFsSjncfkh59rUFqvafWcY5tzedWJSuypump" {
+        return "GOAT".to_string();
+    }
+    if mint == "ED5nyyWEzpPPiWimP8vYm7sD7TD3LAt3Q3gRTWHzPJBY" {
+        return "MOODENG".to_string();
+    }
+    if mint == "GJAFwWjJ3vnTsrQVabjBVK2TYB1YtRCQXRDfDgUnpump" {
+        return "ACT".to_string();
+    }
 
     // DeFi tokens
-    if mint == "METAewgxyPbgwsseH8T16a39CQ5VyVxZi9zXiDPY18m" { return "MPLX".to_string(); }
-    if mint == "SLNDpmoWTVADgEdndyvWzroNL7zSi1dF9PC3xHGtPwp" { return "SLND".to_string(); }
-    if mint == "HxhWkVpk5NS4Ltg5nij2G671CKXFRKPK8vy271Ub4uEK" { return "HXRO".to_string(); }
-    if mint == "StepAscQoEioFxxWGnh2sLBDFp9d8rvKz2Yp39iDpyT" { return "STEP".to_string(); }
-    if mint == "SAMUmmSvrE87wreT4SqwHq6FLMKnBdEhMpNx17tr1oS" { return "SAMO".to_string(); }
-    if mint == "FoXyMu5xwXre7zEoSvzViRk3nGawHUp9kUh97y2NDhcq" { return "FOXY".to_string(); }
-    if mint == "nosXBVoaCTtYdLvKY6Csb4AC8JCdQKKAaWYtx2ZMoo7" { return "NOS".to_string(); }
-    if mint == "TNSRxcUxoT9xBG3de7PiJyTDYu7kskLqcpddxnEJAS6" { return "TNSR".to_string(); }
-    if mint == "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL" { return "JTO".to_string(); }
-    if mint == "WENWENvqqNya429ubCdR81ZmD69brwQaaBYY6p3LCpk" { return "WEN".to_string(); }
-    if mint == "DriFtupJYLTosbwoN8koMbEYSx54aFAVLddWsbksjwg7" { return "DRIFT".to_string(); }
-    if mint == "BLZEEuZUBVqFhj8adcCFPJvPVCiCyVmh3hkJMrU8KuJA" { return "BLZE".to_string(); }
-    if mint == "MEANeD3XDdUmNMsRGjASkSWdC8prLYsoRJ61pPeHctD" { return "MEAN".to_string(); }
+    if mint == "METAewgxyPbgwsseH8T16a39CQ5VyVxZi9zXiDPY18m" {
+        return "MPLX".to_string();
+    }
+    if mint == "SLNDpmoWTVADgEdndyvWzroNL7zSi1dF9PC3xHGtPwp" {
+        return "SLND".to_string();
+    }
+    if mint == "HxhWkVpk5NS4Ltg5nij2G671CKXFRKPK8vy271Ub4uEK" {
+        return "HXRO".to_string();
+    }
+    if mint == "StepAscQoEioFxxWGnh2sLBDFp9d8rvKz2Yp39iDpyT" {
+        return "STEP".to_string();
+    }
+    if mint == "SAMUmmSvrE87wreT4SqwHq6FLMKnBdEhMpNx17tr1oS" {
+        return "SAMO".to_string();
+    }
+    if mint == "FoXyMu5xwXre7zEoSvzViRk3nGawHUp9kUh97y2NDhcq" {
+        return "FOXY".to_string();
+    }
+    if mint == "nosXBVoaCTtYdLvKY6Csb4AC8JCdQKKAaWYtx2ZMoo7" {
+        return "NOS".to_string();
+    }
+    if mint == "TNSRxcUxoT9xBG3de7PiJyTDYu7kskLqcpddxnEJAS6" {
+        return "TNSR".to_string();
+    }
+    if mint == "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL" {
+        return "JTO".to_string();
+    }
+    if mint == "WENWENvqqNya429ubCdR81ZmD69brwQaaBYY6p3LCpk" {
+        return "WEN".to_string();
+    }
+    if mint == "DriFtupJYLTosbwoN8koMbEYSx54aFAVLddWsbksjwg7" {
+        return "DRIFT".to_string();
+    }
+    if mint == "BLZEEuZUBVqFhj8adcCFPJvPVCiCyVmh3hkJMrU8KuJA" {
+        return "BLZE".to_string();
+    }
+    if mint == "MEANeD3XDdUmNMsRGjASkSWdC8prLYsoRJ61pPeHctD" {
+        return "MEAN".to_string();
+    }
 
     // Gaming/NFT tokens
-    if mint == "DUSTawucrTsGU8hcqRdHDCbuYhCPADMLM2VcCb8VnFnQ" { return "DUST".to_string(); }
-    if mint == "FLAMEp11rqGUSBv7LvfpnXqS6rPLqgVfT2LTNyGEk34" { return "FLAME".to_string(); }
-    if mint == "PRSMNsEPqhGVCH1TtWiJqPjJyh2cKrLostPZTNy1o5x" { return "PRISM".to_string(); }
-    if mint == "AURYydfxJib1ZkTir1Jn1J9ECYUtjb6rKQVmtYaixWPP" { return "AURY".to_string(); }
-    if mint == "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx" { return "ATLAS".to_string(); }
-    if mint == "poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk" { return "POLIS".to_string(); }
+    if mint == "DUSTawucrTsGU8hcqRdHDCbuYhCPADMLM2VcCb8VnFnQ" {
+        return "DUST".to_string();
+    }
+    if mint == "FLAMEp11rqGUSBv7LvfpnXqS6rPLqgVfT2LTNyGEk34" {
+        return "FLAME".to_string();
+    }
+    if mint == "PRSMNsEPqhGVCH1TtWiJqPjJyh2cKrLostPZTNy1o5x" {
+        return "PRISM".to_string();
+    }
+    if mint == "AURYydfxJib1ZkTir1Jn1J9ECYUtjb6rKQVmtYaixWPP" {
+        return "AURY".to_string();
+    }
+    if mint == "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx" {
+        return "ATLAS".to_string();
+    }
+    if mint == "poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk" {
+        return "POLIS".to_string();
+    }
 
     // Bridged tokens
-    if mint == "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E" { return "BTC".to_string(); }
-    if mint == "2FPyTwcZLUg1MDrwsyoP4D6s1tM7hAkHYRjkNb5w6Pxk" { return "ETH".to_string(); }
-    if mint == "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs" { return "wETH".to_string(); }
+    if mint == "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E" {
+        return "BTC".to_string();
+    }
+    if mint == "2FPyTwcZLUg1MDrwsyoP4D6s1tM7hAkHYRjkNb5w6Pxk" {
+        return "ETH".to_string();
+    }
+    if mint == "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs" {
+        return "wETH".to_string();
+    }
 
     // AI tokens
-    if mint == "GRIFCchW6BTqgGq7XshRXhQPn6hbTcJL47S4HF4zopv" { return "GRIFFAIN".to_string(); }
-    if mint == "ai16z" { return "AI16Z".to_string(); }
-    if mint == "ENL66P8y8d8LXkM5JFZaJTDZ8jh4YKdJjTNDmoon39ye" { return "ZEREBRO".to_string(); }
+    if mint == "GRIFCchW6BTqgGq7XshRXhQPn6hbTcJL47S4HF4zopv" {
+        return "GRIFFAIN".to_string();
+    }
+    if mint == "ai16z" {
+        return "AI16Z".to_string();
+    }
+    if mint == "ENL66P8y8d8LXkM5JFZaJTDZ8jh4YKdJjTNDmoon39ye" {
+        return "ZEREBRO".to_string();
+    }
 
     // If not found, return truncated address
     if mint.len() > 10 {
@@ -3160,7 +4222,9 @@ fn detect_cross_token_swaps(transfers: &[TransferRecord]) -> Vec<CrossTokenSwap>
 
     // For each wallet, look for paired opposite-direction transfers
     for (wallet, txs) in &wallet_transfers {
-        if txs.len() < 2 { continue; }
+        if txs.len() < 2 {
+            continue;
+        }
 
         // Separate inflows and outflows for this wallet
         let inflows: Vec<_> = txs.iter().filter(|tx| tx.to == *wallet).collect();
@@ -3170,14 +4234,20 @@ fn detect_cross_token_swaps(transfers: &[TransferRecord]) -> Vec<CrossTokenSwap>
         for inflow in &inflows {
             for outflow in &outflows {
                 // Skip if same token
-                if inflow.token == outflow.token { continue; }
+                if inflow.token == outflow.token {
+                    continue;
+                }
 
                 // Parse timestamps (Option<String>)
-                let in_ts = inflow.timestamp.as_ref()
+                let in_ts = inflow
+                    .timestamp
+                    .as_ref()
                     .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
                     .map(|dt| dt.timestamp())
                     .unwrap_or(0);
-                let out_ts = outflow.timestamp.as_ref()
+                let out_ts = outflow
+                    .timestamp
+                    .as_ref()
                     .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
                     .map(|dt| dt.timestamp())
                     .unwrap_or(0);
@@ -3241,12 +4311,16 @@ fn detect_cross_token_swaps(transfers: &[TransferRecord]) -> Vec<CrossTokenSwap>
     let mut deduped = Vec::new();
 
     // Sort by confidence descending
-    swaps.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    swaps.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     for swap in swaps {
         let key = format!("{}:{}:{}", swap.wallet, swap.token_in, swap.token_out);
-        if !seen.contains_key(&key) {
-            seen.insert(key, deduped.len());
+        if let std::collections::hash_map::Entry::Vacant(e) = seen.entry(key) {
+            e.insert(deduped.len());
             deduped.push(swap);
         }
     }
@@ -3262,9 +4336,9 @@ fn detect_cross_token_swaps(transfers: &[TransferRecord]) -> Vec<CrossTokenSwap>
 struct EntityCluster {
     id: usize,
     wallets: Vec<String>,
-    confidence: f64,  // 0.0 - 1.0
+    confidence: f64, // 0.0 - 1.0
     evidence: Vec<String>,
-    entity_type: String,  // "Bot Swarm", "Same Owner", "Coordinated", "Unknown"
+    entity_type: String, // "Bot Swarm", "Same Owner", "Coordinated", "Unknown"
 }
 
 /// Detect wallet entities - groups of wallets likely controlled by same entity
@@ -3284,7 +4358,8 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
         return Vec::new();
     }
 
-    let wallet_idx: HashMap<&str, usize> = wallets.iter()
+    let wallet_idx: HashMap<&str, usize> = wallets
+        .iter()
         .enumerate()
         .map(|(i, w)| (w.as_str(), i))
         .collect();
@@ -3293,14 +4368,14 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
     let mut parent: Vec<usize> = (0..wallets.len()).collect();
     let mut rank: Vec<usize> = vec![0; wallets.len()];
 
-    fn find(parent: &mut Vec<usize>, i: usize) -> usize {
+    fn find(parent: &mut [usize], i: usize) -> usize {
         if parent[i] != i {
             parent[i] = find(parent, parent[i]);
         }
         parent[i]
     }
 
-    fn union(parent: &mut Vec<usize>, rank: &mut Vec<usize>, x: usize, y: usize) {
+    fn union(parent: &mut [usize], rank: &mut [usize], x: usize, y: usize) {
         let root_x = find(parent, x);
         let root_y = find(parent, y);
         if root_x != root_y {
@@ -3340,16 +4415,21 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
         if funded_wallets.len() >= 2 {
             // Link all wallets funded by same source
             for i in 0..funded_wallets.len() {
-                for j in (i+1)..funded_wallets.len() {
+                for j in (i + 1)..funded_wallets.len() {
                     if let (Some(&idx_i), Some(&idx_j)) = (
                         wallet_idx.get(funded_wallets[i]),
-                        wallet_idx.get(funded_wallets[j])
+                        wallet_idx.get(funded_wallets[j]),
                     ) {
                         union(&mut parent, &mut rank, idx_i, idx_j);
-                        let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
-                        linkage_evidence.entry(key).or_default().push(
-                            format!("Common funder: {}", truncate_address(funder))
-                        );
+                        let key = if idx_i < idx_j {
+                            (idx_i, idx_j)
+                        } else {
+                            (idx_j, idx_i)
+                        };
+                        linkage_evidence
+                            .entry(key)
+                            .or_default()
+                            .push(format!("Common funder: {}", truncate_address(funder)));
                     }
                 }
             }
@@ -3376,7 +4456,7 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
     // Find synchronized pairs (multiple txs within 60s window)
     let wallet_keys: Vec<&str> = wallet_timestamps.keys().copied().collect();
     for i in 0..wallet_keys.len() {
-        for j in (i+1)..wallet_keys.len() {
+        for j in (i + 1)..wallet_keys.len() {
             let w1 = wallet_keys[i];
             let w2 = wallet_keys[j];
 
@@ -3406,10 +4486,15 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
             if min_txs >= 3 && sync_count as f64 / min_txs as f64 > 0.3 {
                 if let (Some(&idx_i), Some(&idx_j)) = (wallet_idx.get(w1), wallet_idx.get(w2)) {
                     union(&mut parent, &mut rank, idx_i, idx_j);
-                    let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
-                    linkage_evidence.entry(key).or_default().push(
-                        format!("Sync timing: {}/{} txs within 60s", sync_count, min_txs)
-                    );
+                    let key = if idx_i < idx_j {
+                        (idx_i, idx_j)
+                    } else {
+                        (idx_j, idx_i)
+                    };
+                    linkage_evidence.entry(key).or_default().push(format!(
+                        "Sync timing: {}/{} txs within 60s",
+                        sync_count, min_txs
+                    ));
                 }
             }
         }
@@ -3419,17 +4504,27 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
     // Wallets that interact with the same set of counterparties
     let mut wallet_counterparties: HashMap<&str, HashSet<&str>> = HashMap::new();
     for tx in transfers {
-        wallet_counterparties.entry(&tx.from).or_default().insert(&tx.to);
-        wallet_counterparties.entry(&tx.to).or_default().insert(&tx.from);
+        wallet_counterparties
+            .entry(&tx.from)
+            .or_default()
+            .insert(&tx.to);
+        wallet_counterparties
+            .entry(&tx.to)
+            .or_default()
+            .insert(&tx.from);
     }
 
     for i in 0..wallet_keys.len() {
-        for j in (i+1)..wallet_keys.len() {
+        for j in (i + 1)..wallet_keys.len() {
             let w1 = wallet_keys[i];
             let w2 = wallet_keys[j];
 
             // Skip if w1 and w2 are counterparties of each other
-            if wallet_counterparties.get(w1).map(|s| s.contains(w2)).unwrap_or(false) {
+            if wallet_counterparties
+                .get(w1)
+                .map(|s| s.contains(w2))
+                .unwrap_or(false)
+            {
                 continue;
             }
 
@@ -3444,10 +4539,15 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
                 if union_size >= 3 && intersection as f64 / union_size as f64 > 0.5 {
                     if let (Some(&idx_i), Some(&idx_j)) = (wallet_idx.get(w1), wallet_idx.get(w2)) {
                         union(&mut parent, &mut rank, idx_i, idx_j);
-                        let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
-                        linkage_evidence.entry(key).or_default().push(
-                            format!("Shared counterparties: {}/{} overlap", intersection, union_size)
-                        );
+                        let key = if idx_i < idx_j {
+                            (idx_i, idx_j)
+                        } else {
+                            (idx_j, idx_i)
+                        };
+                        linkage_evidence.entry(key).or_default().push(format!(
+                            "Shared counterparties: {}/{} overlap",
+                            intersection, union_size
+                        ));
                     }
                 }
             }
@@ -3462,7 +4562,7 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
     }
 
     for i in 0..wallet_keys.len() {
-        for j in (i+1)..wallet_keys.len() {
+        for j in (i + 1)..wallet_keys.len() {
             let w1 = wallet_keys[i];
             let w2 = wallet_keys[j];
 
@@ -3486,12 +4586,20 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
 
                     let total_pairs = a1.len() * a2.len();
                     if similar_count as f64 / total_pairs as f64 > 0.3 {
-                        if let (Some(&idx_i), Some(&idx_j)) = (wallet_idx.get(w1), wallet_idx.get(w2)) {
+                        if let (Some(&idx_i), Some(&idx_j)) =
+                            (wallet_idx.get(w1), wallet_idx.get(w2))
+                        {
                             union(&mut parent, &mut rank, idx_i, idx_j);
-                            let key = if idx_i < idx_j { (idx_i, idx_j) } else { (idx_j, idx_i) };
-                            linkage_evidence.entry(key).or_default().push(
-                                format!("Similar amounts: {}/{} matches", similar_count, total_pairs.min(20))
-                            );
+                            let key = if idx_i < idx_j {
+                                (idx_i, idx_j)
+                            } else {
+                                (idx_j, idx_i)
+                            };
+                            linkage_evidence.entry(key).or_default().push(format!(
+                                "Similar amounts: {}/{} matches",
+                                similar_count,
+                                total_pairs.min(20)
+                            ));
                         }
                     }
                 }
@@ -3508,20 +4616,26 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
     }
 
     // Find wallets that are >90% pass-through
-    let pass_wallets: Vec<&str> = passthrough.iter()
+    let pass_wallets: Vec<&str> = passthrough
+        .iter()
         .filter(|(_, (in_amt, out_amt))| {
-            *in_amt > 0.0 && *out_amt > 0.0 && (*out_amt / *in_amt) > 0.9 && (*out_amt / *in_amt) < 1.1
+            *in_amt > 0.0
+                && *out_amt > 0.0
+                && (*out_amt / *in_amt) > 0.9
+                && (*out_amt / *in_amt) < 1.1
         })
         .map(|(w, _)| *w)
         .collect();
 
     // Link pass-through wallets to their sources and destinations
     for pass_wallet in &pass_wallets {
-        let sources: Vec<&str> = transfers.iter()
+        let sources: Vec<&str> = transfers
+            .iter()
             .filter(|tx| tx.to == *pass_wallet)
             .map(|tx| tx.from.as_str())
             .collect();
-        let dests: Vec<&str> = transfers.iter()
+        let dests: Vec<&str> = transfers
+            .iter()
             .filter(|tx| tx.from == *pass_wallet)
             .map(|tx| tx.to.as_str())
             .collect();
@@ -3532,10 +4646,16 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
                 if let (Some(&idx_s), Some(&idx_d)) = (wallet_idx.get(*src), wallet_idx.get(*dst)) {
                     if idx_s != idx_d {
                         union(&mut parent, &mut rank, idx_s, idx_d);
-                        let key = if idx_s < idx_d { (idx_s, idx_d) } else { (idx_d, idx_s) };
-                        linkage_evidence.entry(key).or_default().push(
-                            format!("Pass-through: {} via {}", truncate_address(pass_wallet), truncate_address(pass_wallet))
-                        );
+                        let key = if idx_s < idx_d {
+                            (idx_s, idx_d)
+                        } else {
+                            (idx_d, idx_s)
+                        };
+                        linkage_evidence.entry(key).or_default().push(format!(
+                            "Pass-through: {} via {}",
+                            truncate_address(pass_wallet),
+                            truncate_address(pass_wallet)
+                        ));
                     }
                 }
             }
@@ -3558,14 +4678,13 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
             continue;
         }
 
-        let cluster_wallets: Vec<String> = members.iter()
-            .map(|&idx| wallets[idx].clone())
-            .collect();
+        let cluster_wallets: Vec<String> =
+            members.iter().map(|&idx| wallets[idx].clone()).collect();
 
         // Collect all evidence for this cluster
         let mut evidence: HashSet<String> = HashSet::new();
         for i in 0..members.len() {
-            for j in (i+1)..members.len() {
+            for j in (i + 1)..members.len() {
                 let key = if members[i] < members[j] {
                     (members[i], members[j])
                 } else {
@@ -3590,7 +4709,8 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
             + if has_funding { 0.2 } else { 0.0 }
             + if has_timing { 0.2 } else { 0.0 }
             + if has_counterparty { 0.1 } else { 0.0 }
-            + if has_amounts { 0.1 } else { 0.0 }).min(1.0);
+            + if has_amounts { 0.1 } else { 0.0 })
+        .min(1.0);
 
         // Determine entity type
         let entity_type = if has_timing && evidence.iter().any(|e| e.contains("60s")) {
@@ -3617,39 +4737,54 @@ fn detect_wallet_entities(transfers: &[TransferRecord]) -> Vec<EntityCluster> {
     }
 
     // Sort by confidence descending
-    clusters.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    clusters.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     clusters
 }
 
 /// Generate token flow tree visualization as markdown-compatible text
-fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord], token_filter: &str) -> String {
+fn generate_token_flow_tree_markdown(
+    target: &str,
+    transfers: &[TransferRecord],
+    token_filter: &str,
+) -> String {
     use std::collections::{HashMap, HashSet};
 
     let mut output = String::new();
 
     // Filter transfers for the specific token
     let token_lower = token_filter.to_lowercase();
-    let filtered: Vec<&TransferRecord> = transfers.iter()
+    let filtered: Vec<&TransferRecord> = transfers
+        .iter()
         .filter(|tx| {
             let tx_token_lower = tx.token.to_lowercase();
-            tx_token_lower == token_lower ||
-            tx_token_lower.contains(&token_lower) ||
-            tx.token == token_filter
+            tx_token_lower == token_lower
+                || tx_token_lower.contains(&token_lower)
+                || tx.token == token_filter
         })
         .collect();
 
     if filtered.is_empty() {
-        output.push_str(&format!("No transfers found for token '{}'\n", token_filter));
+        output.push_str(&format!(
+            "No transfers found for token '{}'\n",
+            token_filter
+        ));
         return output;
     }
 
     // Build adjacency and stats
-    let mut adjacency: HashMap<&str, Vec<(&str, f64, Option<i64>)>> = HashMap::new();
+    let mut adjacency: FlowAdjacency<'_> = HashMap::new();
     let mut edge_totals: HashMap<(&str, &str), f64> = HashMap::new();
     let mut edge_count: HashMap<(&str, &str), usize> = HashMap::new();
 
-    let token_name = filtered.first().map(|t| t.token.as_str()).unwrap_or(token_filter);
+    let token_name = filtered
+        .first()
+        .map(|t| t.token.as_str())
+        .unwrap_or(token_filter);
 
     // First pass: aggregate edges
     for tx in &filtered {
@@ -3660,12 +4795,16 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
 
     // Build adjacency with aggregated amounts
     for ((from, to), total_amount) in &edge_totals {
-        let timestamp: Option<i64> = filtered.iter()
+        let timestamp: Option<i64> = filtered
+            .iter()
             .filter(|tx| tx.from.as_str() == *from && tx.to.as_str() == *to)
             .filter_map(|tx| tx.timestamp.as_ref())
             .filter_map(|ts| ts.parse::<i64>().ok())
             .min();
-        adjacency.entry(*from).or_default().push((*to, *total_amount, timestamp));
+        adjacency
+            .entry(*from)
+            .or_default()
+            .push((*to, *total_amount, timestamp));
     }
 
     // Sort adjacency lists by amount descending
@@ -3678,13 +4817,19 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
     let unique_pairs = edge_totals.len();
 
     // Header
-    output.push_str(&format!("Token: {} | {} transfers | {} unique pairs | {} total\n\n",
-        token_name, total_transfers, unique_pairs, format_amount(total_flow)));
+    output.push_str(&format!(
+        "Token: {} | {} transfers | {} unique pairs | {} total\n\n",
+        token_name,
+        total_transfers,
+        unique_pairs,
+        format_amount(total_flow)
+    ));
 
     // Tree rendering helper
+    #[allow(clippy::too_many_arguments)]
     fn render_tree_node_md(
         node: &str,
-        adjacency: &HashMap<&str, Vec<(&str, f64, Option<i64>)>>,
+        adjacency: &FlowAdjacency<'_>,
         edge_count: &HashMap<(&str, &str), usize>,
         target: &str,
         token_name: &str,
@@ -3694,7 +4839,9 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
         max_depth: usize,
         output: &mut String,
     ) {
-        if depth > max_depth { return; }
+        if depth > max_depth {
+            return;
+        }
 
         // Get wallet type label
         let wallet_label = classify_wallet(node)
@@ -3705,7 +4852,12 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
         let node_display = if node == target {
             format!("`{}`{}", node, wallet_label)
         } else if node.len() > 12 {
-            format!("`{}...{}`{}", &node[..4], &node[node.len()-4..], wallet_label)
+            format!(
+                "`{}...{}`{}",
+                &node[..4],
+                &node[node.len() - 4..],
+                wallet_label
+            )
         } else {
             format!("`{}`{}", node, wallet_label)
         };
@@ -3719,7 +4871,8 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
 
         // Get children (outflows from this node)
         if let Some(children) = adjacency.get(node) {
-            let filtered_children: Vec<_> = children.iter()
+            let filtered_children: Vec<_> = children
+                .iter()
                 .filter(|(dest, _, _)| !visited.contains(*dest))
                 .take(5)
                 .collect();
@@ -3729,31 +4882,54 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
 
             for (i, (dest, amount, timestamp)) in filtered_children.iter().enumerate() {
                 let is_last_child = i == child_count - 1 && omitted == 0;
-                let connector = if is_last_child { "└─→" } else { "├─→" };
+                let connector = if is_last_child {
+                    "└─→"
+                } else {
+                    "├─→"
+                };
 
                 let amount_str = format_amount(*amount);
                 let tx_count = edge_count.get(&(node, *dest)).copied().unwrap_or(1);
-                let count_suffix = if tx_count > 1 { format!(" ({}x)", tx_count) } else { String::new() };
+                let count_suffix = if tx_count > 1 {
+                    format!(" ({}x)", tx_count)
+                } else {
+                    String::new()
+                };
 
-                let time_str = timestamp.map(|ts| {
-                    chrono::DateTime::from_timestamp(ts, 0)
-                        .map(|d| format!(" @ {}", d.format("%Y-%m-%d %H:%M")))
-                        .unwrap_or_default()
-                }).unwrap_or_default();
+                let time_str = timestamp
+                    .map(|ts| {
+                        chrono::DateTime::from_timestamp(ts, 0)
+                            .map(|d| format!(" @ {}", d.format("%Y-%m-%d %H:%M")))
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default();
 
                 let dest_label = classify_wallet(dest)
                     .map(|t| format!(" ({})", t))
                     .unwrap_or_default();
                 let dest_display = if dest.len() > 12 {
-                    format!("`{}...{}`{}", &dest[..4], &dest[dest.len()-4..], dest_label)
+                    format!(
+                        "`{}...{}`{}",
+                        &dest[..4],
+                        &dest[dest.len() - 4..],
+                        dest_label
+                    )
                 } else {
                     format!("`{}`{}", dest, dest_label)
                 };
 
                 let edge_prefix = if depth == 0 { "   " } else { prefix };
                 output.push_str(&format!("{}│\n", edge_prefix));
-                output.push_str(&format!("{}{} [**{}** {}{}] ──→ {}{}\n",
-                    edge_prefix, connector, amount_str, token_name, count_suffix, dest_display, time_str));
+                output.push_str(&format!(
+                    "{}{} [**{}** {}{}] ──→ {}{}\n",
+                    edge_prefix,
+                    connector,
+                    amount_str,
+                    token_name,
+                    count_suffix,
+                    dest_display,
+                    time_str
+                ));
 
                 let child_prefix = if is_last_child {
                     format!("{}      ", edge_prefix)
@@ -3762,21 +4938,43 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
                 };
 
                 render_tree_node_md(
-                    dest, adjacency, edge_count, target, token_name, &child_prefix,
-                    visited, depth + 1, max_depth, output,
+                    dest,
+                    adjacency,
+                    edge_count,
+                    target,
+                    token_name,
+                    &child_prefix,
+                    visited,
+                    depth + 1,
+                    max_depth,
+                    output,
                 );
             }
 
             if omitted > 0 {
                 let edge_prefix = if depth == 0 { "   " } else { prefix };
                 output.push_str(&format!("{}│\n", edge_prefix));
-                output.push_str(&format!("{}└── *...and {} more destinations*\n", edge_prefix, omitted));
+                output.push_str(&format!(
+                    "{}└── *...and {} more destinations*\n",
+                    edge_prefix, omitted
+                ));
             }
         }
     }
 
     let mut visited: HashSet<String> = HashSet::new();
-    render_tree_node_md(target, &adjacency, &edge_count, target, token_name, "", &mut visited, 0, 4, &mut output);
+    render_tree_node_md(
+        target,
+        &adjacency,
+        &edge_count,
+        target,
+        token_name,
+        "",
+        &mut visited,
+        0,
+        4,
+        &mut output,
+    );
 
     // Reverse tree (inflows)
     let reverse_adj: HashMap<&str, Vec<(&str, f64)>> = {
@@ -3800,15 +4998,28 @@ fn generate_token_flow_tree_markdown(target: &str, transfers: &[TransferRecord],
                     .map(|t| format!(" ({})", t))
                     .unwrap_or_default();
                 let from_display = if from.len() > 12 {
-                    format!("`{}...{}`{}", &from[..4], &from[from.len()-4..], from_label)
+                    format!(
+                        "`{}...{}`{}",
+                        &from[..4],
+                        &from[from.len() - 4..],
+                        from_label
+                    )
                 } else {
                     format!("`{}`{}", from, from_label)
                 };
-                output.push_str(&format!("   {} [**{}** {}] {} TARGET\n",
-                    from_display, format_amount(*amount), token_name, connector));
+                output.push_str(&format!(
+                    "   {} [**{}** {}] {} TARGET\n",
+                    from_display,
+                    format_amount(*amount),
+                    token_name,
+                    connector
+                ));
             }
             if inflows.len() > 5 {
-                output.push_str(&format!("\n   *...and {} more sources*\n", inflows.len() - 5));
+                output.push_str(&format!(
+                    "\n   *...and {} more sources*\n",
+                    inflows.len() - 5
+                ));
             }
         }
     }
@@ -3828,9 +5039,12 @@ fn generate_auto_report(
 ) -> String {
     let mut report = String::new();
 
-    report.push_str(&format!("# Wallet Investigation Report\n\n"));
+    report.push_str("# Wallet Investigation Report\n\n");
     report.push_str(&format!("**Target:** `{}`\n\n", wallet));
-    report.push_str(&format!("**Generated:** {}\n\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+    report.push_str(&format!(
+        "**Generated:** {}\n\n",
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+    ));
 
     if let Some(q) = query {
         report.push_str(&format!("**Query/Hypothesis:** {}\n\n", q));
@@ -3838,15 +5052,19 @@ fn generate_auto_report(
 
     report.push_str("---\n\n");
     report.push_str("## Summary\n\n");
-    report.push_str(&format!("| Metric | Value |\n"));
-    report.push_str(&format!("|--------|-------|\n"));
+    report.push_str("| Metric | Value |\n");
+    report.push_str("|--------|-------|\n");
     report.push_str(&format!("| Wallets Fetched | {} |\n", fetched_count));
     report.push_str(&format!("| Wallets Discovered | {} |\n", discovered.len()));
     report.push_str(&format!("| Total Transfers | {} |\n", transfers.len()));
-    report.push_str(&format!("| Exploration Time | {:.2}s |\n\n", duration.as_secs_f64()));
+    report.push_str(&format!(
+        "| Exploration Time | {:.2}s |\n\n",
+        duration.as_secs_f64()
+    ));
 
     // Token breakdown
-    let mut token_volumes: std::collections::HashMap<String, (f64, f64)> = std::collections::HashMap::new();
+    let mut token_volumes: std::collections::HashMap<String, (f64, f64)> =
+        std::collections::HashMap::new();
     for tx in transfers {
         let entry = token_volumes.entry(tx.token.clone()).or_insert((0.0, 0.0));
         if tx.direction == "IN" {
@@ -3860,14 +5078,25 @@ fn generate_auto_report(
     report.push_str("| Token | Inflows | Outflows |\n");
     report.push_str("|-------|---------|----------|\n");
     for (token, (inflow, outflow)) in &token_volumes {
-        let token_display = if token.len() > 10 { format!("{}…", &token[..9]) } else { token.clone() };
-        report.push_str(&format!("| {} | {:.4} | {:.4} |\n", token_display, inflow, outflow));
+        let token_display = if token.len() > 10 {
+            format!("{}…", &token[..9])
+        } else {
+            token.clone()
+        };
+        report.push_str(&format!(
+            "| {} | {:.4} | {:.4} |\n",
+            token_display, inflow, outflow
+        ));
     }
-    report.push_str("\n");
+    report.push('\n');
 
     // Token flow tree visualizations for top 3 tokens
     let mut sorted_tokens: Vec<_> = token_volumes.iter().collect();
-    sorted_tokens.sort_by(|a, b| (b.1.0 + b.1.1).partial_cmp(&(a.1.0 + a.1.1)).unwrap_or(std::cmp::Ordering::Equal));
+    sorted_tokens.sort_by(|a, b| {
+        (b.1 .0 + b.1 .1)
+            .partial_cmp(&(a.1 .0 + a.1 .1))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     for (i, (token, _)) in sorted_tokens.iter().take(3).enumerate() {
         report.push_str(&format!("### {} Flow Tree (Token #{})\n\n", token, i + 1));
@@ -3902,12 +5131,20 @@ fn generate_auto_report(
         report.push_str("| Wallet | Senders | Amount | Type |\n");
         report.push_str("|--------|---------|--------|------|\n");
         for (addr, senders, amount) in hub_data.iter().take(10) {
-            let wallet_type = classify_wallet(addr)
-                .unwrap_or(if *senders > 10 { "Likely Exchange/Pool" } else { "Aggregator" });
-            report.push_str(&format!("| `{}` | {} | {:.2} | {} |\n",
-                truncate_address(addr), senders, amount, wallet_type));
+            let wallet_type = classify_wallet(addr).unwrap_or(if *senders > 10 {
+                "Likely Exchange/Pool"
+            } else {
+                "Aggregator"
+            });
+            report.push_str(&format!(
+                "| `{}` | {} | {:.2} | {} |\n",
+                truncate_address(addr),
+                senders,
+                amount,
+                wallet_type
+            ));
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     // Flow patterns detection for report
@@ -3948,16 +5185,22 @@ fn generate_auto_report(
                 "MEDIUM" => "*MEDIUM*",
                 _ => "LOW",
             };
-            report.push_str(&format!("| {} {} | {} | {} |\n",
-                icon, pattern_type, severity_badge, description));
+            report.push_str(&format!(
+                "| {} {} | {} | {} |\n",
+                icon, pattern_type, severity_badge, description
+            ));
         }
         if temporal_patterns.len() > 15 {
-            report.push_str(&format!("\n*...and {} more timing anomalies*\n", temporal_patterns.len() - 15));
+            report.push_str(&format!(
+                "\n*...and {} more timing anomalies*\n",
+                temporal_patterns.len() - 15
+            ));
         }
-        report.push_str("\n");
+        report.push('\n');
 
         // Add details for high severity patterns
-        let high_severity: Vec<_> = temporal_patterns.iter()
+        let high_severity: Vec<_> = temporal_patterns
+            .iter()
             .filter(|(_, _, _, sev)| sev == "HIGH")
             .take(5)
             .collect();
@@ -3968,7 +5211,7 @@ fn generate_auto_report(
                 if !wallets.is_empty() {
                     report.push_str(&format!("- Involved: `{}`\n", wallets.join("`, `")));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
         }
     }
@@ -3988,8 +5231,12 @@ fn generate_auto_report(
                 _ => "🔗",
             };
 
-            report.push_str(&format!("### {} {} (Confidence: {:.0}%)\n\n",
-                type_icon, cluster.entity_type, cluster.confidence * 100.0));
+            report.push_str(&format!(
+                "### {} {} (Confidence: {:.0}%)\n\n",
+                type_icon,
+                cluster.entity_type,
+                cluster.confidence * 100.0
+            ));
 
             report.push_str("**Member Wallets:**\n");
             for wallet in cluster.wallets.iter().take(10) {
@@ -3999,7 +5246,10 @@ fn generate_auto_report(
                 report.push_str(&format!("- `{}`{}\n", wallet, wallet_label));
             }
             if cluster.wallets.len() > 10 {
-                report.push_str(&format!("- *...and {} more wallets*\n", cluster.wallets.len() - 10));
+                report.push_str(&format!(
+                    "- *...and {} more wallets*\n",
+                    cluster.wallets.len() - 10
+                ));
             }
 
             if !cluster.evidence.is_empty() {
@@ -4008,29 +5258,50 @@ fn generate_auto_report(
                     report.push_str(&format!("- {}\n", evidence));
                 }
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         if entity_clusters.len() > 10 {
-            report.push_str(&format!("*...and {} more entity clusters*\n\n", entity_clusters.len() - 10));
+            report.push_str(&format!(
+                "*...and {} more entity clusters*\n\n",
+                entity_clusters.len() - 10
+            ));
         }
     }
 
     // Cross-token correlation (improved swap detection)
     let cross_token_swaps = detect_cross_token_swaps(transfers);
-    let high_conf_swaps: Vec<_> = cross_token_swaps.iter().filter(|s| s.confidence >= 0.50).collect();
+    let high_conf_swaps: Vec<_> = cross_token_swaps
+        .iter()
+        .filter(|s| s.confidence >= 0.50)
+        .collect();
 
     if !high_conf_swaps.is_empty() {
         report.push_str("## Cross-Token Swaps (DEX Trades)\n\n");
-        report.push_str("🔄 Correlated token movements indicating DEX swaps or token exchanges.\n\n");
+        report
+            .push_str("🔄 Correlated token movements indicating DEX swaps or token exchanges.\n\n");
 
         // Summary counts
-        let atomic_count = high_conf_swaps.iter().filter(|s| s.swap_type == "Atomic Swap").count();
-        let dex_count = high_conf_swaps.iter().filter(|s| s.swap_type == "DEX Swap").count();
-        let multihop_count = high_conf_swaps.iter().filter(|s| s.swap_type == "Multi-hop").count();
+        let atomic_count = high_conf_swaps
+            .iter()
+            .filter(|s| s.swap_type == "Atomic Swap")
+            .count();
+        let dex_count = high_conf_swaps
+            .iter()
+            .filter(|s| s.swap_type == "DEX Swap")
+            .count();
+        let multihop_count = high_conf_swaps
+            .iter()
+            .filter(|s| s.swap_type == "Multi-hop")
+            .count();
 
-        report.push_str(&format!("**Summary:** {} swaps detected ({} atomic, {} DEX, {} multi-hop)\n\n",
-            high_conf_swaps.len(), atomic_count, dex_count, multihop_count));
+        report.push_str(&format!(
+            "**Summary:** {} swaps detected ({} atomic, {} DEX, {} multi-hop)\n\n",
+            high_conf_swaps.len(),
+            atomic_count,
+            dex_count,
+            multihop_count
+        ));
 
         report.push_str("| Type | DEX | Wallet | Token In | Token Out | Confidence | Timing |\n");
         report.push_str("|------|-----|--------|----------|-----------|------------|--------|\n");
@@ -4074,9 +5345,10 @@ fn generate_auto_report(
             };
 
             // DEX name (or unknown)
-            let dex_name = swap.dex_name.as_ref().map(|s| s.as_str()).unwrap_or("-");
+            let dex_name = swap.dex_name.as_deref().unwrap_or("-");
 
-            report.push_str(&format!("| {} {} | {} | `{}` | {} {} | {} {} | {:.0}% | {} |\n",
+            report.push_str(&format!(
+                "| {} {} | {} | `{}` | {} {} | {} {} | {:.0}% | {} |\n",
                 type_icon,
                 swap.swap_type,
                 dex_name,
@@ -4086,23 +5358,29 @@ fn generate_auto_report(
                 fmt_out,
                 token_out,
                 swap.confidence * 100.0,
-                time_str));
+                time_str
+            ));
         }
 
         if high_conf_swaps.len() > 15 {
-            report.push_str(&format!("\n*...and {} more swaps detected*\n", high_conf_swaps.len() - 15));
+            report.push_str(&format!(
+                "\n*...and {} more swaps detected*\n",
+                high_conf_swaps.len() - 15
+            ));
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     // Findings
     if !findings.is_empty() {
         report.push_str("## Notable Findings\n\n");
         for finding in findings {
-            report.push_str(&format!("- **[{}]** {} - {}\n",
-                finding.severity, finding.category, finding.description));
+            report.push_str(&format!(
+                "- **[{}]** {} - {}\n",
+                finding.severity, finding.category, finding.description
+            ));
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     // Classified wallets
@@ -4118,7 +5396,7 @@ fn generate_auto_report(
         for (addr, name) in &classified {
             report.push_str(&format!("- `{}` - **{}**\n", truncate_address(addr), name));
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     // Discovered wallets
@@ -4127,7 +5405,10 @@ fn generate_auto_report(
         report.push_str(&format!("{}. `{}`\n", i + 1, w));
     }
     if discovered.len() > 20 {
-        report.push_str(&format!("\n*...and {} more wallets*\n", discovered.len() - 20));
+        report.push_str(&format!(
+            "\n*...and {} more wallets*\n",
+            discovered.len() - 20
+        ));
     }
 
     report.push_str("\n---\n");
@@ -4152,7 +5433,12 @@ pub async fn run_research_demo() -> Result<()> {
     let _ = mcp_service.load_config();
     let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
 
-    let agent = ResearchAgent::new(ai_service, ovsm_service, Arc::clone(&mcp_arc), demo_wallet.to_string());
+    let agent = ResearchAgent::new(
+        ai_service,
+        ovsm_service,
+        Arc::clone(&mcp_arc),
+        demo_wallet.to_string(),
+    );
 
     crate::tui_log!("📊 Demonstrating iterative investigation with self-evaluation:\n");
 
@@ -4202,7 +5488,9 @@ async fn handle_web_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     println!(
         "{} {}",
         "🚀 Web terminal started at:".bright_green(),
-        format!("http://localhost:{}", port).bright_cyan().underline()
+        format!("http://localhost:{}", port)
+            .bright_cyan()
+            .underline()
     );
     println!(
         "{}",
@@ -4211,20 +5499,25 @@ async fn handle_web_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     println!();
     println!(
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .cyan()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
     );
     println!();
 
     // Send startup message to web
-    sender.println("\x1b[38;5;33m╔══════════════════════════════════════════════════════════════╗\x1b[0m");
+    sender.println(
+        "\x1b[38;5;33m╔══════════════════════════════════════════════════════════════╗\x1b[0m",
+    );
     sender.println("\x1b[38;5;33m║\x1b[0m  \x1b[1;36m🔍 OSVM RESEARCH SESSION STARTED\x1b[0m                              \x1b[38;5;33m║\x1b[0m");
     sender.println(&format!(
         "\x1b[38;5;33m║\x1b[0m  \x1b[90mTarget: {}\x1b[0m{}",
         &wallet[..wallet.len().min(44)],
-        if wallet.len() > 44 { "..." } else { "" }.to_string() + &" ".repeat(56 - wallet.len().min(44)) + "\x1b[38;5;33m║\x1b[0m"
+        if wallet.len() > 44 { "..." } else { "" }.to_string()
+            + &" ".repeat(56 - wallet.len().min(44))
+            + "\x1b[38;5;33m║\x1b[0m"
     ));
-    sender.println("\x1b[38;5;33m╚══════════════════════════════════════════════════════════════╝\x1b[0m");
+    sender.println(
+        "\x1b[38;5;33m╚══════════════════════════════════════════════════════════════╝\x1b[0m",
+    );
     sender.println("");
 
     // Create a writer that outputs to both stdout and web stream
@@ -4248,10 +5541,10 @@ async fn run_auto_research_with_web(
     wallet: &str,
     sender: crate::utils::web_terminal::WebTerminalSender,
 ) -> Result<()> {
+    use crate::services::opensvm_api::OpenSvmApi;
     use colored::Colorize;
     use std::collections::{HashSet, VecDeque};
     use std::io::Write;
-    use crate::services::opensvm_api::OpenSvmApi;
 
     // Macro to print to both console and web
     macro_rules! web_println {
@@ -4282,8 +5575,7 @@ async fn run_auto_research_with_web(
     web_println!(
         sender,
         "{}",
-        "╔══════════════════════════════════════════════════════════════════════════════╗"
-            .cyan()
+        "╔══════════════════════════════════════════════════════════════════════════════╗".cyan()
     );
     web_println!(
         sender,
@@ -4295,8 +5587,7 @@ async fn run_auto_research_with_web(
     web_println!(
         sender,
         "{}",
-        "╚══════════════════════════════════════════════════════════════════════════════╝"
-            .cyan()
+        "╚══════════════════════════════════════════════════════════════════════════════╝".cyan()
     );
     web_println!(sender, "");
 
@@ -4402,8 +5693,7 @@ async fn run_auto_research_with_web(
     web_println!(
         sender,
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .cyan()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
     );
     web_println!(
         sender,
@@ -4413,8 +5703,7 @@ async fn run_auto_research_with_web(
     web_println!(
         sender,
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .cyan()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
     );
     web_println!(sender, "");
 
@@ -4500,8 +5789,11 @@ async fn run_auto_research_with_web(
                     let new_wallets = txs
                         .iter()
                         .filter(|tx| {
-                            let connected =
-                                if tx.direction == "IN" { &tx.from } else { &tx.to };
+                            let connected = if tx.direction == "IN" {
+                                &tx.from
+                            } else {
+                                &tx.to
+                            };
                             !discovered.contains(connected) && current_depth + 1 < depth
                         })
                         .count();
@@ -4525,9 +5817,7 @@ async fn run_auto_research_with_web(
                         if let Some(ref filter) = token_filter {
                             let filter_lower = filter.to_lowercase();
                             let token_lower = tx.token.to_lowercase();
-                            if !token_lower.contains(&filter_lower)
-                                && !tx.token.contains(filter)
-                            {
+                            if !token_lower.contains(&filter_lower) && !tx.token.contains(filter) {
                                 continue;
                             }
                         }
@@ -4535,8 +5825,11 @@ async fn run_auto_research_with_web(
                         all_transfers.push(tx.clone());
 
                         // Queue connected wallets
-                        let connected =
-                            if tx.direction == "IN" { &tx.from } else { &tx.to };
+                        let connected = if tx.direction == "IN" {
+                            &tx.from
+                        } else {
+                            &tx.to
+                        };
                         if !discovered.contains(connected) && current_depth + 1 < depth {
                             discovered.insert(connected.clone());
                             queue.push_back((connected.clone(), current_depth + 1));
@@ -4574,15 +5867,13 @@ async fn run_auto_research_with_web(
     web_println!(
         sender,
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .cyan()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
     );
     web_println!(sender, "{}", "📊 INVESTIGATION SUMMARY".bold().cyan());
     web_println!(
         sender,
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .cyan()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
     );
     web_println!(sender, "");
     web_println!(
@@ -4629,16 +5920,23 @@ async fn run_auto_research_with_web(
         });
 
         let mut report = String::new();
-        report.push_str(&format!("OSVM Research Report\n"));
+        report.push_str("OSVM Research Report\n");
         report.push_str(&format!("Target: {}\n", wallet));
-        report.push_str(&format!("Date: {}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+        report.push_str(&format!(
+            "Date: {}\n",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
         report.push_str(&format!("Wallets explored: {}\n", fetched_count));
         report.push_str(&format!("Transfers found: {}\n\n", all_transfers.len()));
 
         for tx in &all_transfers {
             report.push_str(&format!(
                 "{} {} -> {} : {} {}\n",
-                tx.timestamp.as_deref().unwrap_or("unknown"), tx.from, tx.to, tx.amount, tx.token
+                tx.timestamp.as_deref().unwrap_or("unknown"),
+                tx.from,
+                tx.to,
+                tx.amount,
+                tx.token
             ));
         }
 
@@ -4742,7 +6040,9 @@ async fn run_agent_research_with_web(
         }
     }
 
-    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(registry, false, false)));
+    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(
+        registry, false, false,
+    )));
     web_println!(sender, "{}", "✅ OVSM initialized".green());
 
     // Create research agent
@@ -4757,19 +6057,13 @@ async fn run_agent_research_with_web(
     web_println!(
         sender,
         "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .cyan()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
     );
+    web_println!(sender, "{}", "🔍 RUNNING INVESTIGATION...".bold().cyan());
     web_println!(
         sender,
         "{}",
-        "🔍 RUNNING INVESTIGATION...".bold().cyan()
-    );
-    web_println!(
-        sender,
-        "{}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            .cyan()
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".cyan()
     );
     web_println!(sender, "");
 

@@ -2,8 +2,8 @@
 //!
 //! Run with: cargo run --example tui_demo
 
-use osvm::utils::tui::{OsvmApp, WalletGraph};
 use osvm::utils::tui::graph::{TransferData, WalletNodeType};
+use osvm::utils::tui::{OsvmApp, WalletGraph};
 
 fn main() -> anyhow::Result<()> {
     // Create TUI app with test wallet

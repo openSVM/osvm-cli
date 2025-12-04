@@ -28,9 +28,9 @@
 //! ;; Without bidirectional typing, x would get type `?T` (unknown)
 //! ```
 
+use super::{Type, TypeContext, TypeError, TypedField, TypedStructDef};
+use crate::parser::{Argument, BinaryOp, Expression, UnaryOp};
 use std::collections::HashMap;
-use super::{Type, TypeContext, TypedStructDef, TypedField, TypeError};
-use crate::parser::{Expression, Argument, BinaryOp, UnaryOp};
 
 /// Bidirectional type checker with synthesis and checking modes
 pub struct BidirectionalChecker {
@@ -56,7 +56,10 @@ pub struct TypeScheme {
 impl TypeScheme {
     /// Create a monomorphic scheme (no quantified variables)
     pub fn mono(ty: Type) -> Self {
-        TypeScheme { vars: Vec::new(), ty }
+        TypeScheme {
+            vars: Vec::new(),
+            ty,
+        }
     }
 
     /// Instantiate a scheme with fresh type variables
@@ -66,9 +69,7 @@ impl TypeScheme {
         }
 
         // Create fresh variables and substitute
-        let subst: HashMap<u32, Type> = self.vars.iter()
-            .map(|&v| (v, ctx.fresh_var()))
-            .collect();
+        let subst: HashMap<u32, Type> = self.vars.iter().map(|&v| (v, ctx.fresh_var())).collect();
 
         substitute(&self.ty, &subst)
     }
@@ -82,9 +83,7 @@ fn substitute(ty: &Type, subst: &HashMap<u32, Type>) -> Type {
             element: Box::new(substitute(element, subst)),
             size: *size,
         },
-        Type::Tuple(types) => Type::Tuple(
-            types.iter().map(|t| substitute(t, subst)).collect()
-        ),
+        Type::Tuple(types) => Type::Tuple(types.iter().map(|t| substitute(t, subst)).collect()),
         Type::Ptr(t) => Type::Ptr(Box::new(substitute(t, subst))),
         Type::Ref(t) => Type::Ref(Box::new(substitute(t, subst))),
         Type::RefMut(t) => Type::RefMut(Box::new(substitute(t, subst))),
@@ -152,9 +151,10 @@ impl BidirectionalChecker {
                         if self.gradual {
                             Type::Any
                         } else {
-                            self.ctx.record_error(TypeError::new(
-                                format!("undefined variable: {}", name)
-                            ));
+                            self.ctx.record_error(TypeError::new(format!(
+                                "undefined variable: {}",
+                                name
+                            )));
                             Type::Unknown
                         }
                     }
@@ -175,21 +175,15 @@ impl BidirectionalChecker {
             }
 
             // === Function application: synthesize function, check arguments ===
-            Expression::ToolCall { name, args } => {
-                self.synth_application(name, args)
-            }
+            Expression::ToolCall { name, args } => self.synth_application(name, args),
 
             // === Arrays: synthesize element types, unify ===
-            Expression::ArrayLiteral(elements) => {
-                self.synth_array(elements)
-            }
+            Expression::ArrayLiteral(elements) => self.synth_array(elements),
 
             // === Lambdas without expected type: create fresh variables ===
             Expression::Lambda { params, body } => {
                 // Without an expected type, we create fresh type variables
-                let param_types: Vec<Type> = params.iter()
-                    .map(|_| self.ctx.fresh_var())
-                    .collect();
+                let param_types: Vec<Type> = params.iter().map(|_| self.ctx.fresh_var()).collect();
 
                 self.ctx.push_scope();
                 for (param, ty) in params.iter().zip(param_types.iter()) {
@@ -207,7 +201,11 @@ impl BidirectionalChecker {
             }
 
             // === Conditionals: synthesize branches, unify ===
-            Expression::Ternary { condition, then_expr, else_expr } => {
+            Expression::Ternary {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
                 // Check condition is boolean
                 self.check(condition, &Type::Bool);
 
@@ -233,10 +231,15 @@ impl BidirectionalChecker {
                     Type::Array { element, .. } => *element,
                     Type::Any => Type::Any,
                     _ => {
-                        self.ctx.record_error(TypeError::new(
-                            format!("cannot index into type {}", arr_ty)
-                        ));
-                        if self.gradual { Type::Any } else { Type::Unknown }
+                        self.ctx.record_error(TypeError::new(format!(
+                            "cannot index into type {}",
+                            arr_ty
+                        )));
+                        if self.gradual {
+                            Type::Any
+                        } else {
+                            Type::Unknown
+                        }
                     }
                 }
             }
@@ -245,7 +248,10 @@ impl BidirectionalChecker {
             Expression::Range { start, end } => {
                 self.check(start, &Type::I64);
                 self.check(end, &Type::I64);
-                Type::Array { element: Box::new(Type::I64), size: 0 }
+                Type::Array {
+                    element: Box::new(Type::I64),
+                    size: 0,
+                }
             }
 
             // === Objects ===
@@ -257,7 +263,10 @@ impl BidirectionalChecker {
             // === Macros ===
             Expression::Quasiquote(_) => Type::Any,
             Expression::Unquote(inner) => self.synth(inner),
-            Expression::UnquoteSplice(_) => Type::Array { element: Box::new(Type::Any), size: 0 },
+            Expression::UnquoteSplice(_) => Type::Array {
+                element: Box::new(Type::Any),
+                size: 0,
+            },
 
             // === Control flow ===
             Expression::Loop(_) => Type::Any,
@@ -301,9 +310,14 @@ impl BidirectionalChecker {
             }
 
             // === Typed Lambdas: use explicit type annotations ===
-            Expression::TypedLambda { typed_params, return_type, body } => {
+            Expression::TypedLambda {
+                typed_params,
+                return_type,
+                body,
+            } => {
                 // Extract parameter types from annotations
-                let param_types: Vec<Type> = typed_params.iter()
+                let param_types: Vec<Type> = typed_params
+                    .iter()
                     .map(|(_, maybe_type)| {
                         match maybe_type {
                             Some(type_expr) => self.parse_type_expr(type_expr),
@@ -337,7 +351,11 @@ impl BidirectionalChecker {
             }
 
             // === Refinement Type Expressions ===
-            Expression::RefinedTypeExpr { var, base_type, predicate } => {
+            Expression::RefinedTypeExpr {
+                var,
+                base_type,
+                predicate,
+            } => {
                 // Parse the base type
                 let base = self.parse_type_expr(base_type);
 
@@ -385,12 +403,14 @@ impl BidirectionalChecker {
 
         match expr {
             // === Lambdas are checked, not synthesized ===
-            Expression::Lambda { params, body } => {
-                self.check_lambda(params, body, &expected)
-            }
+            Expression::Lambda { params, body } => self.check_lambda(params, body, &expected),
 
             // === Conditionals: check both branches against expected ===
-            Expression::Ternary { condition, then_expr, else_expr } => {
+            Expression::Ternary {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
                 self.check(condition, &Type::Bool);
                 let then_ok = self.check(then_expr, &expected);
                 let else_ok = self.check(else_expr, &expected);
@@ -399,7 +419,11 @@ impl BidirectionalChecker {
 
             // === Arrays: check elements against expected element type ===
             Expression::ArrayLiteral(elements) => {
-                if let Type::Array { element: expected_elem, .. } = &expected {
+                if let Type::Array {
+                    element: expected_elem,
+                    ..
+                } = &expected
+                {
                     for elem in elements {
                         self.check(elem, expected_elem);
                     }
@@ -425,12 +449,16 @@ impl BidirectionalChecker {
     /// Check a lambda against an expected function type
     fn check_lambda(&mut self, params: &[String], body: &Expression, expected: &Type) -> bool {
         match expected {
-            Type::Fn { params: expected_params, ret: expected_ret } => {
+            Type::Fn {
+                params: expected_params,
+                ret: expected_ret,
+            } => {
                 // Arity check
                 if params.len() != expected_params.len() {
                     self.ctx.record_error(TypeError::new(format!(
                         "lambda has {} parameters but expected {}",
-                        params.len(), expected_params.len()
+                        params.len(),
+                        expected_params.len()
                     )));
                     return false;
                 }
@@ -541,8 +569,16 @@ impl BidirectionalChecker {
         // Structural subtyping for compound types
         match (&actual, &expected) {
             // Array covariance: [A; n] <: [B; n] if A <: B
-            (Type::Array { element: a_elem, size: a_size },
-             Type::Array { element: e_elem, size: e_size }) => {
+            (
+                Type::Array {
+                    element: a_elem,
+                    size: a_size,
+                },
+                Type::Array {
+                    element: e_elem,
+                    size: e_size,
+                },
+            ) => {
                 // Sizes must match (or expected is 0 for "any size")
                 if *e_size != 0 && a_size != e_size {
                     self.ctx.record_error(TypeError::new(format!(
@@ -555,12 +591,21 @@ impl BidirectionalChecker {
             }
 
             // Function contravariance in params, covariance in return
-            (Type::Fn { params: a_params, ret: a_ret },
-             Type::Fn { params: e_params, ret: e_ret }) => {
+            (
+                Type::Fn {
+                    params: a_params,
+                    ret: a_ret,
+                },
+                Type::Fn {
+                    params: e_params,
+                    ret: e_ret,
+                },
+            ) => {
                 if a_params.len() != e_params.len() {
                     self.ctx.record_error(TypeError::new(format!(
                         "function arity mismatch: {} vs {}",
-                        a_params.len(), e_params.len()
+                        a_params.len(),
+                        e_params.len()
                     )));
                     return false;
                 }
@@ -588,11 +633,15 @@ impl BidirectionalChecker {
                 if a_tys.len() != e_tys.len() {
                     return false;
                 }
-                a_tys.iter().zip(e_tys.iter()).all(|(a, e)| self.subtype(a, e))
+                a_tys
+                    .iter()
+                    .zip(e_tys.iter())
+                    .all(|(a, e)| self.subtype(a, e))
             }
 
             _ => {
-                self.ctx.record_error(TypeError::mismatch(expected.clone(), actual.clone()));
+                self.ctx
+                    .record_error(TypeError::mismatch(expected.clone(), actual.clone()));
                 false
             }
         }
@@ -661,8 +710,12 @@ impl BidirectionalChecker {
     fn synth_binary_op(&mut self, op: &BinaryOp, left: &Type, right: &Type) -> Type {
         match op {
             // Arithmetic
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div |
-            BinaryOp::Mod | BinaryOp::Pow => {
+            BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::Div
+            | BinaryOp::Mod
+            | BinaryOp::Pow => {
                 if !left.is_numeric() && !matches!(left, Type::Any) {
                     self.ctx.record_error(TypeError::new(format!(
                         "arithmetic requires numeric type, found {}",
@@ -679,8 +732,12 @@ impl BidirectionalChecker {
             }
 
             // Comparison (result is always bool)
-            BinaryOp::Eq | BinaryOp::NotEq | BinaryOp::Lt | BinaryOp::Gt |
-            BinaryOp::LtEq | BinaryOp::GtEq => {
+            BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Lt
+            | BinaryOp::Gt
+            | BinaryOp::LtEq
+            | BinaryOp::GtEq => {
                 // Operands should be comparable
                 if !matches!(left, Type::Any) && !matches!(right, Type::Any) {
                     self.join(left, right); // Just for error reporting
@@ -804,10 +861,8 @@ impl BidirectionalChecker {
                     }
                     Type::Any
                 } else {
-                    self.ctx.record_error(TypeError::new(format!(
-                        "unknown function: {}",
-                        name
-                    )));
+                    self.ctx
+                        .record_error(TypeError::new(format!("unknown function: {}", name)));
                     Type::Unknown
                 }
             }
@@ -834,7 +889,8 @@ impl BidirectionalChecker {
                 Expression::Variable(var_name),
                 Expression::Variable(colon),
                 Expression::Variable(type_name),
-            ) = (&args[0].value, &args[1].value, &args[2].value) {
+            ) = (&args[0].value, &args[1].value, &args[2].value)
+            {
                 if colon == ":" {
                     let declared_type = Type::from_name(type_name).unwrap_or(Type::Any);
 
@@ -842,7 +898,8 @@ impl BidirectionalChecker {
                     self.check(&args[3].value, &declared_type);
 
                     self.ctx.define_var(var_name, declared_type.clone());
-                    self.schemes.insert(var_name.clone(), TypeScheme::mono(declared_type.clone()));
+                    self.schemes
+                        .insert(var_name.clone(), TypeScheme::mono(declared_type.clone()));
 
                     return declared_type;
                 }
@@ -924,7 +981,9 @@ impl BidirectionalChecker {
     fn synth_struct_get(&mut self, args: &[Argument]) -> Type {
         if let Expression::Variable(struct_name) = &args[0].value {
             if let Expression::Variable(field_name) = &args[2].value {
-                let field_type = self.ctx.lookup_struct(struct_name)
+                let field_type = self
+                    .ctx
+                    .lookup_struct(struct_name)
                     .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                     .map(|f| f.field_type.clone());
 
@@ -945,7 +1004,9 @@ impl BidirectionalChecker {
     fn synth_struct_set(&mut self, args: &[Argument]) -> Type {
         if let Expression::Variable(struct_name) = &args[0].value {
             if let Expression::Variable(field_name) = &args[2].value {
-                let field_type = self.ctx.lookup_struct(struct_name)
+                let field_type = self
+                    .ctx
+                    .lookup_struct(struct_name)
                     .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                     .map(|f| f.field_type.clone());
 
@@ -966,7 +1027,9 @@ impl BidirectionalChecker {
     fn synth_zerocopy_load(&mut self, args: &[Argument]) -> Type {
         if let Expression::Variable(struct_name) = &args[0].value {
             if let Expression::Variable(field_name) = &args[2].value {
-                let field_type = self.ctx.lookup_struct(struct_name)
+                let field_type = self
+                    .ctx
+                    .lookup_struct(struct_name)
                     .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                     .map(|f| f.field_type.clone());
 
@@ -982,7 +1045,9 @@ impl BidirectionalChecker {
     fn synth_zerocopy_store(&mut self, args: &[Argument]) -> Type {
         if let Expression::Variable(struct_name) = &args[0].value {
             if let Expression::Variable(field_name) = &args[2].value {
-                let field_type = self.ctx.lookup_struct(struct_name)
+                let field_type = self
+                    .ctx
+                    .lookup_struct(struct_name)
                     .and_then(|def| def.fields.iter().find(|f| f.name == *field_name))
                     .map(|f| f.field_type.clone());
 
@@ -999,7 +1064,7 @@ impl BidirectionalChecker {
         match obj_ty {
             Type::Struct(struct_name) => {
                 if let Some(struct_def) = self.ctx.lookup_struct(struct_name) {
-                    if let Some(f) = struct_def.fields.iter().find(|f| &f.name == field) {
+                    if let Some(f) = struct_def.fields.iter().find(|f| f.name == field) {
                         return f.field_type.clone();
                     } else {
                         self.ctx.record_error(TypeError::new(format!(
@@ -1016,7 +1081,11 @@ impl BidirectionalChecker {
                     "cannot access field '{}' on type {}",
                     field, obj_ty
                 )));
-                if self.gradual { Type::Any } else { Type::Unknown }
+                if self.gradual {
+                    Type::Any
+                } else {
+                    Type::Unknown
+                }
             }
         }
     }
@@ -1024,7 +1093,10 @@ impl BidirectionalChecker {
     /// Synthesize type for array literal
     fn synth_array(&mut self, elements: &[Expression]) -> Type {
         if elements.is_empty() {
-            return Type::Array { element: Box::new(Type::Any), size: 0 };
+            return Type::Array {
+                element: Box::new(Type::Any),
+                size: 0,
+            };
         }
 
         // Infer element type from first element, then check others
@@ -1046,14 +1118,26 @@ impl BidirectionalChecker {
             let arr_ty = self.synth(&args[0].value);
             let fn_ty = self.synth(&args[1].value);
 
-            if let Type::Array { element: elem_ty, .. } = arr_ty {
+            if let Type::Array {
+                element: elem_ty, ..
+            } = arr_ty
+            {
                 if let Type::Fn { ret, .. } = fn_ty {
-                    return Type::Array { element: ret, size: 0 };
+                    return Type::Array {
+                        element: ret,
+                        size: 0,
+                    };
                 }
-                return Type::Array { element: elem_ty, size: 0 };
+                return Type::Array {
+                    element: elem_ty,
+                    size: 0,
+                };
             }
         }
-        Type::Array { element: Box::new(Type::Any), size: 0 }
+        Type::Array {
+            element: Box::new(Type::Any),
+            size: 0,
+        }
     }
 
     /// Synthesize type for reduce
@@ -1176,9 +1260,8 @@ impl BidirectionalChecker {
                         if self.gradual {
                             Type::Any
                         } else {
-                            self.ctx.record_error(TypeError::new(format!(
-                                "unknown type: {}", name
-                            )));
+                            self.ctx
+                                .record_error(TypeError::new(format!("unknown type: {}", name)));
                             Type::Unknown
                         }
                     }
@@ -1189,7 +1272,7 @@ impl BidirectionalChecker {
             Expression::ToolCall { name, args } if name == "->" => {
                 if args.is_empty() {
                     self.ctx.record_error(TypeError::new(
-                        "function type requires at least a return type".to_string()
+                        "function type requires at least a return type".to_string(),
                     ));
                     return Type::Fn {
                         params: vec![],
@@ -1198,7 +1281,8 @@ impl BidirectionalChecker {
                 }
 
                 // Last arg is return type, rest are parameters
-                let param_types: Vec<Type> = args.iter()
+                let param_types: Vec<Type> = args
+                    .iter()
                     .take(args.len() - 1)
                     .map(|arg| self.parse_type_expr(&arg.value))
                     .collect();
@@ -1216,7 +1300,10 @@ impl BidirectionalChecker {
                 match name.as_str() {
                     "Array" | "array" if !args.is_empty() => {
                         let elem_ty = self.parse_type_expr(&args[0].value);
-                        Type::Array { element: Box::new(elem_ty), size: 0 }
+                        Type::Array {
+                            element: Box::new(elem_ty),
+                            size: 0,
+                        }
                     }
                     "Ptr" | "ptr" if !args.is_empty() => {
                         let inner = self.parse_type_expr(&args[0].value);
@@ -1231,7 +1318,8 @@ impl BidirectionalChecker {
                         Type::RefMut(Box::new(inner))
                     }
                     "Tuple" | "tuple" => {
-                        let types: Vec<Type> = args.iter()
+                        let types: Vec<Type> = args
+                            .iter()
                             .map(|arg| self.parse_type_expr(&arg.value))
                             .collect();
                         Type::Tuple(types)
@@ -1242,7 +1330,8 @@ impl BidirectionalChecker {
                             Type::Any
                         } else {
                             self.ctx.record_error(TypeError::new(format!(
-                                "unknown type constructor: {}", name
+                                "unknown type constructor: {}",
+                                name
                             )));
                             Type::Unknown
                         }
@@ -1255,9 +1344,7 @@ impl BidirectionalChecker {
 
             // Arrays could be tuple types
             Expression::ArrayLiteral(elements) => {
-                let types: Vec<Type> = elements.iter()
-                    .map(|e| self.parse_type_expr(e))
-                    .collect();
+                let types: Vec<Type> = elements.iter().map(|e| self.parse_type_expr(e)).collect();
                 Type::Tuple(types)
             }
 
@@ -1267,7 +1354,8 @@ impl BidirectionalChecker {
                     Type::Any
                 } else {
                     self.ctx.record_error(TypeError::new(format!(
-                        "invalid type expression: {:?}", type_expr
+                        "invalid type expression: {:?}",
+                        type_expr
                     )));
                     Type::Unknown
                 }
@@ -1365,8 +1453,14 @@ mod tests {
         let annotated = Expression::ToolCall {
             name: ":".to_string(),
             args: vec![
-                Argument { name: None, value: Expression::IntLiteral(42) },
-                Argument { name: None, value: Expression::Variable("i64".to_string()) },
+                Argument {
+                    name: None,
+                    value: Expression::IntLiteral(42),
+                },
+                Argument {
+                    name: None,
+                    value: Expression::Variable("i64".to_string()),
+                },
             ],
         };
 
@@ -1501,8 +1595,14 @@ mod tests {
         // Test TypedLambda with explicit parameter types
         let typed_lambda = Expression::TypedLambda {
             typed_params: vec![
-                ("x".to_string(), Some(Box::new(Expression::Variable("i64".to_string())))),
-                ("y".to_string(), Some(Box::new(Expression::Variable("i64".to_string())))),
+                (
+                    "x".to_string(),
+                    Some(Box::new(Expression::Variable("i64".to_string()))),
+                ),
+                (
+                    "y".to_string(),
+                    Some(Box::new(Expression::Variable("i64".to_string()))),
+                ),
             ],
             return_type: Some(Box::new(Expression::Variable("i64".to_string()))),
             body: Box::new(Expression::Binary {
@@ -1531,7 +1631,10 @@ mod tests {
         // TypedLambda with only some parameters annotated
         let typed_lambda = Expression::TypedLambda {
             typed_params: vec![
-                ("x".to_string(), Some(Box::new(Expression::Variable("i64".to_string())))),
+                (
+                    "x".to_string(),
+                    Some(Box::new(Expression::Variable("i64".to_string()))),
+                ),
                 ("y".to_string(), None), // No annotation - should get fresh var
             ],
             return_type: None, // Infer return type from body

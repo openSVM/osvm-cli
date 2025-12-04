@@ -4,9 +4,11 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::utils::bbs::models::{FederatedMessageDb, NewFederatedMessage, KnownPeerDb, NewKnownPeer};
-use crate::utils::bbs::schema::{federated_messages, known_peers};
 use super::Result;
+use crate::utils::bbs::models::{
+    FederatedMessageDb, KnownPeerDb, NewFederatedMessage, NewKnownPeer,
+};
+use crate::utils::bbs::schema::{federated_messages, known_peers};
 
 // ============================================
 // Federated Messages
@@ -57,7 +59,8 @@ pub fn message_exists(conn: &mut SqliteConnection, message_id: &str) -> bool {
         .filter(federated_messages::message_id.eq(message_id))
         .count()
         .get_result::<i64>(conn)
-        .unwrap_or(0) > 0
+        .unwrap_or(0)
+        > 0
 }
 
 /// Get a single message by message_id
@@ -225,10 +228,7 @@ pub fn remove_peer(conn: &mut SqliteConnection, node_id: &str) -> Result<bool> {
 
 /// Count known peers
 pub fn peer_count(conn: &mut SqliteConnection) -> i64 {
-    known_peers::table
-        .count()
-        .get_result(conn)
-        .unwrap_or(0)
+    known_peers::table.count().get_result(conn).unwrap_or(0)
 }
 
 // ============================================
@@ -253,8 +253,8 @@ mod tests {
         let db_file = tmp_dir.path().join("test-federation.db");
         let db_url = db_file.to_str().unwrap();
 
-        let mut conn = SqliteConnection::establish(db_url)
-            .expect("Failed to connect to test database");
+        let mut conn =
+            SqliteConnection::establish(db_url).expect("Failed to connect to test database");
 
         crate::utils::bbs::db::initialize_database(&mut conn)
             .expect("Failed to initialize database");
@@ -277,7 +277,8 @@ mod tests {
             None,
             1700000000,
             None,
-        ).expect("Failed to store message");
+        )
+        .expect("Failed to store message");
 
         assert_eq!(msg.message_id, "!node123:1");
         assert_eq!(msg.board, "GENERAL");
@@ -303,7 +304,8 @@ mod tests {
             "http://localhost:8080",
             Some("Test Peer"),
             false,
-        ).expect("Failed to upsert peer");
+        )
+        .expect("Failed to upsert peer");
 
         assert_eq!(peer.node_id, "!peer0001");
         assert_eq!(peer.address, "http://localhost:8080");

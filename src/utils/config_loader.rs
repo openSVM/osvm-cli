@@ -109,9 +109,8 @@ impl Config {
         }
 
         let content = fs::read_to_string(&expanded_path)?;
-        serde_yaml::from_str(&content).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })
+        serde_yaml::from_str(&content)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
     }
 
     /// Save config to a file path
@@ -123,9 +122,8 @@ impl Config {
             fs::create_dir_all(parent)?;
         }
 
-        let content = serde_yaml::to_string(self).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })?;
+        let content = serde_yaml::to_string(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
         fs::write(path, content)
     }
@@ -161,10 +159,7 @@ mod tests {
             websocket_url: String::new(),
             ..Default::default()
         };
-        assert_eq!(
-            config.websocket_url(),
-            "wss://api.mainnet-beta.solana.com"
-        );
+        assert_eq!(config.websocket_url(), "wss://api.mainnet-beta.solana.com");
     }
 
     #[test]

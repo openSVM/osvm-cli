@@ -1,11 +1,11 @@
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
 use crate::services::ai_service::AiService;
 use crate::services::ovsm_service::OvsmService;
+use anyhow::{Context, Result};
+use ovsm::runtime::Value;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ovsm::runtime::Value;
 
 /// Represents a self-directed investigation agent with recursive questioning
 #[derive(Clone)]
@@ -92,13 +92,13 @@ pub struct Question {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QuestionType {
-    Exploratory,      // "What else might be happening?"
-    Verificatory,     // "Is this actually true?"
-    Contradictory,   // "What evidence contradicts this?"
-    Causal,          // "Why is this happening?"
-    Predictive,      // "What will happen next?"
-    Comparative,     // "How does this compare to...?"
-    Anomalistic,     // "Why is this unusual?"
+    Exploratory,   // "What else might be happening?"
+    Verificatory,  // "Is this actually true?"
+    Contradictory, // "What evidence contradicts this?"
+    Causal,        // "Why is this happening?"
+    Predictive,    // "What will happen next?"
+    Comparative,   // "How does this compare to...?"
+    Anomalistic,   // "Why is this unusual?"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,12 +123,12 @@ pub struct MetaCognition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InvestigationStrategy {
-    BreadthFirst,     // Explore many shallow paths
-    DepthFirst,       // Deep dive into promising leads
-    Opportunistic,    // Follow anomalies and surprises
-    Systematic,       // Methodical coverage
-    Adversarial,      // Actively seek contradictions
-    Creative,         // Generate novel hypotheses
+    BreadthFirst,  // Explore many shallow paths
+    DepthFirst,    // Deep dive into promising leads
+    Opportunistic, // Follow anomalies and surprises
+    Systematic,    // Methodical coverage
+    Adversarial,   // Actively seek contradictions
+    Creative,      // Generate novel hypotheses
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,17 +183,15 @@ impl AgenticResearcher {
             nodes: HashMap::new(),
             edges: Vec::new(),
             active_branches: VecDeque::new(),
-            unexplored_questions: VecDeque::from([
-                Question {
-                    id: Uuid::new_v4().to_string(),
-                    content: format!("What is the primary activity pattern of {}?", target),
-                    priority: 1.0,
-                    question_type: QuestionType::Exploratory,
-                    parent_node: None,
-                    exploration_depth: 0,
-                    expected_impact: 0.9,
-                },
-            ]),
+            unexplored_questions: VecDeque::from([Question {
+                id: Uuid::new_v4().to_string(),
+                content: format!("What is the primary activity pattern of {}?", target),
+                priority: 1.0,
+                question_type: QuestionType::Exploratory,
+                parent_node: None,
+                exploration_depth: 0,
+                expected_impact: 0.9,
+            }]),
             convergence_points: Vec::new(),
         };
 
@@ -234,7 +232,10 @@ impl AgenticResearcher {
 
             // 1. Self-reflect on current state
             let reflection = self.metacognitive_reflection().await?;
-            println!("💭 Reflection: {}", &reflection[..reflection.len().min(200)]);
+            println!(
+                "💭 Reflection: {}",
+                &reflection[..reflection.len().min(200)]
+            );
 
             // 2. Generate new questions based on current knowledge
             let new_questions = self.generate_questions().await?;
@@ -313,7 +314,9 @@ impl AgenticResearcher {
         let graph = self.investigation_graph.lock().await;
 
         // Build context from recent discoveries
-        let recent_nodes: Vec<_> = graph.nodes.values()
+        let recent_nodes: Vec<_> = graph
+            .nodes
+            .values()
             .filter(|n| matches!(n.node_type, NodeType::Observation | NodeType::Pattern))
             .take(5)
             .collect();
@@ -354,7 +357,8 @@ impl AgenticResearcher {
         }
 
         // Score questions based on strategy
-        let scored_questions: Vec<_> = graph.unexplored_questions
+        let scored_questions: Vec<_> = graph
+            .unexplored_questions
             .iter()
             .map(|q| {
                 let mut score = q.priority * q.expected_impact;
@@ -410,11 +414,12 @@ impl AgenticResearcher {
 
         // Execute OVSM script
         let mut ovsm = self.ovsm_service.lock().await;
-        let result = ovsm.execute_code(&ovsm_script)
+        let result = ovsm
+            .execute_code(&ovsm_script)
             .context("Failed to execute investigation script")?;
 
         // Convert to JSON
-        let json_result = self.value_to_json(result)?;
+        let json_result = value_to_json(result)?;
 
         // Interpret findings with AI
         let interpretation = self.interpret_findings(&json_result, question).await?;
@@ -430,7 +435,10 @@ impl AgenticResearcher {
     }
 
     /// Actively seek evidence that contradicts current findings
-    async fn seek_contradictions(&self, findings: &serde_json::Value) -> Result<Vec<serde_json::Value>> {
+    async fn seek_contradictions(
+        &self,
+        findings: &serde_json::Value,
+    ) -> Result<Vec<serde_json::Value>> {
         let contradiction_prompt = format!(
             "Given these findings:\n{}\n\n\
             Generate OVSM queries that would find contradictory evidence.\n\
@@ -452,7 +460,7 @@ impl AgenticResearcher {
         for query in self.parse_ovsm_queries(contradiction_queries).await? {
             let mut ovsm = self.ovsm_service.lock().await;
             if let Ok(result) = ovsm.execute_code(&query) {
-                contradictions.push(self.value_to_json(result)?);
+                contradictions.push(value_to_json(result)?);
             }
         }
 
@@ -475,7 +483,9 @@ impl AgenticResearcher {
             5. Emergent patterns\n\n\
             Rate each anomaly's significance (0-1) and suggest investigation approach.",
             graph.nodes.len(),
-            graph.nodes.values()
+            graph
+                .nodes
+                .values()
                 .filter(|n| matches!(n.node_type, NodeType::Pattern))
                 .take(3)
                 .collect::<Vec<_>>()
@@ -521,10 +531,12 @@ impl AgenticResearcher {
         let meta = self.metacognition.lock().await;
 
         // Count high-confidence hypotheses
-        let strong_hypotheses = graph.nodes.values()
+        let strong_hypotheses = graph
+            .nodes
+            .values()
             .filter(|n| {
-                matches!(n.node_type, NodeType::Hypothesis) &&
-                n.confidence > meta.confidence_thresholds.hypothesis_acceptance
+                matches!(n.node_type, NodeType::Hypothesis)
+                    && n.confidence > meta.confidence_thresholds.hypothesis_acceptance
             })
             .count();
 
@@ -587,7 +599,8 @@ impl AgenticResearcher {
                 .as_secs(),
             derived_questions: Vec::new(),
             supporting_evidence: Vec::new(),
-            contradicting_evidence: contradictions.iter()
+            contradicting_evidence: contradictions
+                .iter()
                 .map(|c| Uuid::new_v4().to_string())
                 .collect(),
         };
@@ -643,8 +656,16 @@ impl AgenticResearcher {
             4. Suggests future investigation directions\n\
             5. Highlights surprising or anomalous findings",
             graph.nodes.len(),
-            graph.nodes.values().filter(|n| matches!(n.node_type, NodeType::Hypothesis)).count(),
-            graph.nodes.values().filter(|n| matches!(n.node_type, NodeType::Contradiction)).count(),
+            graph
+                .nodes
+                .values()
+                .filter(|n| matches!(n.node_type, NodeType::Hypothesis))
+                .count(),
+            graph
+                .nodes
+                .values()
+                .filter(|n| matches!(n.node_type, NodeType::Contradiction))
+                .count(),
             graph.unexplored_questions.len(),
             meta.dead_ends.len(),
             graph.convergence_points.len(),
@@ -682,9 +703,7 @@ impl AgenticResearcher {
                   (define conflicts (identifyConflicts counter))
                   {:contradictions conflicts})"
             }
-            _ => {
-                "(do (define data (getData)) {:result data})"
-            }
+            _ => "(do (define data (getData)) {:result data})",
         };
 
         Ok(script_template.to_string())
@@ -759,17 +778,17 @@ impl AgenticResearcher {
 
     async fn parse_anomalies(&self, response: String) -> Result<Vec<Anomaly>> {
         // Parse anomalies from AI response
-        Ok(vec![
-            Anomaly {
-                description: "Placeholder anomaly".to_string(),
-                significance: 0.5,
-                focus: "general".to_string(),
-            }
-        ])
+        Ok(vec![Anomaly {
+            description: "Placeholder anomaly".to_string(),
+            significance: 0.5,
+            focus: "general".to_string(),
+        }])
     }
 
     fn extract_key_findings(&self, graph: &InvestigationGraph) -> Result<String> {
-        let key_findings: Vec<_> = graph.nodes.values()
+        let key_findings: Vec<_> = graph
+            .nodes
+            .values()
             .filter(|n| n.confidence > 0.6)
             .take(5)
             .map(|n| format!("- {:?}: confidence={:.2}", n.node_type, n.confidence))
@@ -778,33 +797,34 @@ impl AgenticResearcher {
         Ok(key_findings.join("\n"))
     }
 
-    fn value_to_json(&self, value: Value) -> Result<serde_json::Value> {
-        use serde_json::json;
+}
 
-        let json = match value {
-            Value::Null => json!(null),
-            Value::Bool(b) => json!(b),
-            Value::Int(i) => json!(i),
-            Value::Float(f) => json!(f),
-            Value::String(s) => json!(s),
-            Value::Array(arr) => {
-                let json_array: Result<Vec<_>> = arr.iter()
-                    .map(|v| self.value_to_json(v.clone()))
-                    .collect();
-                json!(json_array?)
-            }
-            Value::Object(map) => {
-                let mut json_map = serde_json::Map::new();
-                for (k, v) in map.iter() {
-                    json_map.insert(k.clone(), self.value_to_json(v.clone())?);
-                }
-                json!(json_map)
-            }
-            _ => json!(format!("{:?}", value))
-        };
+/// Convert OVSM Value to JSON (free function to avoid clippy only_used_in_recursion)
+fn value_to_json(value: Value) -> Result<serde_json::Value> {
+    use serde_json::json;
 
-        Ok(json)
-    }
+    let json = match value {
+        Value::Null => json!(null),
+        Value::Bool(b) => json!(b),
+        Value::Int(i) => json!(i),
+        Value::Float(f) => json!(f),
+        Value::String(s) => json!(s),
+        Value::Array(arr) => {
+            let json_array: Result<Vec<_>> =
+                arr.iter().map(|v| value_to_json(v.clone())).collect();
+            json!(json_array?)
+        }
+        Value::Object(map) => {
+            let mut json_map = serde_json::Map::new();
+            for (k, v) in map.iter() {
+                json_map.insert(k.clone(), value_to_json(v.clone())?);
+            }
+            json!(json_map)
+        }
+        _ => json!(format!("{:?}", value)),
+    };
+
+    Ok(json)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -827,8 +847,10 @@ impl SubInvestigator {
             // Generate focused questions
             let question = Question {
                 id: Uuid::new_v4().to_string(),
-                content: format!("In context of {}, what is happening at depth {}?",
-                    self.focus_area, depth),
+                content: format!(
+                    "In context of {}, what is happening at depth {}?",
+                    self.focus_area, depth
+                ),
                 priority: 0.8,
                 question_type: QuestionType::Exploratory,
                 parent_node: None,

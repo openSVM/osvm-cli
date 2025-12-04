@@ -39,7 +39,6 @@
 ///       (async-call process-transfer event)  ; Dispatches to thread pool, returns immediately
 ///       null))
 /// ```
-
 use crate::error::{Error, Result};
 use crate::runtime::Value;
 use futures_util::{SinkExt, StreamExt};
@@ -115,7 +114,11 @@ pub fn stream_connect(args: &[Value]) -> Result<Value> {
     // Extract URL
     let url = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::runtime("stream-connect: URL must be a string".to_string())),
+        _ => {
+            return Err(Error::runtime(
+                "stream-connect: URL must be a string".to_string(),
+            ))
+        }
     };
 
     // Parse keyword arguments
@@ -192,13 +195,9 @@ pub fn stream_connect(args: &[Value]) -> Result<Value> {
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            if let Err(e) = websocket_client_loop(
-                &url_clone,
-                buffer_clone,
-                connected_clone,
-                filters_clone,
-            )
-            .await
+            if let Err(e) =
+                websocket_client_loop(&url_clone, buffer_clone, connected_clone, filters_clone)
+                    .await
             {
                 eprintln!("WebSocket error: {}", e);
             }
@@ -271,12 +270,18 @@ async fn websocket_client_loop(
 /// Returns: Array of event objects
 pub fn stream_poll(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
-        return Err(Error::runtime("stream-poll requires stream-id argument".to_string()));
+        return Err(Error::runtime(
+            "stream-poll requires stream-id argument".to_string(),
+        ));
     }
 
     let stream_id = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::runtime("stream-poll: stream-id must be a string".to_string())),
+        _ => {
+            return Err(Error::runtime(
+                "stream-poll: stream-id must be a string".to_string(),
+            ))
+        }
     };
 
     // Parse limit keyword argument
@@ -296,17 +301,18 @@ pub fn stream_poll(args: &[Value]) -> Result<Value> {
     // Get stream handle
     let handle = {
         let registry = STREAM_REGISTRY.lock().unwrap();
-        registry
-            .get(&stream_id)
-            .cloned()
-            .ok_or_else(|| Error::runtime(format!("stream-poll: stream not found: {}", stream_id)))?
+        registry.get(&stream_id).cloned().ok_or_else(|| {
+            Error::runtime(format!("stream-poll: stream not found: {}", stream_id))
+        })?
     };
 
     // Check if still connected
     {
         let connected = handle.is_connected.lock().unwrap();
         if !*connected {
-            return Err(Error::runtime("stream-poll: WebSocket connection closed".to_string()));
+            return Err(Error::runtime(
+                "stream-poll: WebSocket connection closed".to_string(),
+            ));
         }
     }
 
@@ -337,12 +343,18 @@ pub fn stream_poll(args: &[Value]) -> Result<Value> {
 /// Returns: Event object or null if timeout
 pub fn stream_wait(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
-        return Err(Error::runtime("stream-wait requires stream-id argument".to_string()));
+        return Err(Error::runtime(
+            "stream-wait requires stream-id argument".to_string(),
+        ));
     }
 
     let stream_id = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::runtime("stream-wait: stream-id must be a string".to_string())),
+        _ => {
+            return Err(Error::runtime(
+                "stream-wait: stream-id must be a string".to_string(),
+            ))
+        }
     };
 
     // Parse timeout keyword argument
@@ -362,10 +374,9 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
     // Get stream handle
     let handle = {
         let registry = STREAM_REGISTRY.lock().unwrap();
-        registry
-            .get(&stream_id)
-            .cloned()
-            .ok_or_else(|| Error::runtime(format!("stream-wait: stream not found: {}", stream_id)))?
+        registry.get(&stream_id).cloned().ok_or_else(|| {
+            Error::runtime(format!("stream-wait: stream not found: {}", stream_id))
+        })?
     };
 
     // Wait for event with timeout
@@ -386,7 +397,9 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
         {
             let connected = handle.is_connected.lock().unwrap();
             if !*connected {
-                return Err(Error::runtime("stream-wait: WebSocket connection closed".to_string()));
+                return Err(Error::runtime(
+                    "stream-wait: WebSocket connection closed".to_string(),
+                ));
             }
         }
 
@@ -408,12 +421,18 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
 /// Returns: Boolean indicating success
 pub fn stream_close(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
-        return Err(Error::runtime("stream-close requires stream-id argument".to_string()));
+        return Err(Error::runtime(
+            "stream-close requires stream-id argument".to_string(),
+        ));
     }
 
     let stream_id = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::runtime("stream-close: stream-id must be a string".to_string())),
+        _ => {
+            return Err(Error::runtime(
+                "stream-close: stream-id must be a string".to_string(),
+            ))
+        }
     };
 
     // Remove from registry
@@ -633,7 +652,9 @@ fn find_available_port() -> Result<u16> {
         }
     }
 
-    Err(Error::runtime("Could not find available port for internal stream server".to_string()))
+    Err(Error::runtime(
+        "Could not find available port for internal stream server".to_string(),
+    ))
 }
 
 /// Spawn internal stream server in background thread
@@ -646,7 +667,10 @@ fn spawn_internal_server(
     thread::spawn(move || {
         // This would need to call the actual stream server code
         // For now, this is a placeholder that shows the architecture
-        eprintln!("Internal stream server would start on port {} with filters:", port);
+        eprintln!(
+            "Internal stream server would start on port {} with filters:",
+            port
+        );
         eprintln!("  Programs: {:?}", programs);
         eprintln!("  Tokens: {:?}", tokens);
         eprintln!("  Accounts: {:?}", accounts);
@@ -794,9 +818,7 @@ pub fn await_async(handle: Value) -> Result<Value> {
                 .lock()
                 .unwrap()
                 .take()
-                .ok_or_else(|| {
-                    Error::runtime(format!("AsyncHandle {} already awaited", id))
-                })?;
+                .ok_or_else(|| Error::runtime(format!("AsyncHandle {} already awaited", id)))?;
 
             // Block until result available (poll in busy-wait since blocking_recv
             // doesn't work inside tokio runtime)

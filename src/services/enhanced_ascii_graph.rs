@@ -8,31 +8,31 @@
 //! - Interactive node expansion/collapse
 //! - Unicode art for sophisticated visualization
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use anyhow::Result;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Advanced Canvas with gradient and animation support
 pub struct EnhancedCanvas {
     cells: Vec<Vec<Cell>>,
     width: usize,
     height: usize,
-    frame: usize,  // For animation
+    frame: usize, // For animation
 }
 
 #[derive(Clone, Debug)]
 struct Cell {
     ch: char,
     style: CellStyle,
-    depth: u8,  // 0-10 for depth-based shading
+    depth: u8, // 0-10 for depth-based shading
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum CellStyle {
     Normal,
-    Bold,       // For primary paths
-    Dimmed,     // For secondary paths
-    Highlighted, // For selected nodes
-    Warning,    // For suspicious activity
+    Bold,                // For primary paths
+    Dimmed,              // For secondary paths
+    Highlighted,         // For selected nodes
+    Warning,             // For suspicious activity
     Flow(FlowDirection), // Animated flow
 }
 
@@ -48,7 +48,17 @@ enum FlowDirection {
 impl EnhancedCanvas {
     pub fn new(width: usize, height: usize) -> Self {
         Self {
-            cells: vec![vec![Cell { ch: ' ', style: CellStyle::Normal, depth: 0 }; width]; height],
+            cells: vec![
+                vec![
+                    Cell {
+                        ch: ' ',
+                        style: CellStyle::Normal,
+                        depth: 0
+                    };
+                    width
+                ];
+                height
+            ],
             width,
             height,
             frame: 0,
@@ -56,17 +66,31 @@ impl EnhancedCanvas {
     }
 
     /// Draw a sophisticated wallet node with gradient border
-    pub fn draw_enhanced_box(&mut self, x: usize, y: usize, width: usize, height: usize,
-                             title: &str, content: Vec<String>, depth: u8, is_selected: bool) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_enhanced_box(
+        &mut self,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+        title: &str,
+        content: Vec<String>,
+        depth: u8,
+        is_selected: bool,
+    ) {
         // Use different box styles based on depth for 3D effect
         let (tl, tr, bl, br, h, v) = match depth {
-            0..=2 => ('╔', '╗', '╚', '╝', '═', '║'),  // Heavy box for near nodes
-            3..=5 => ('┏', '┓', '┗', '┛', '━', '┃'),  // Medium box
-            6..=8 => ('┌', '┐', '└', '┘', '─', '│'),  // Light box
-            _ => ('╭', '╮', '╰', '╯', '─', '│'),      // Rounded for distant nodes
+            0..=2 => ('╔', '╗', '╚', '╝', '═', '║'), // Heavy box for near nodes
+            3..=5 => ('┏', '┓', '┗', '┛', '━', '┃'), // Medium box
+            6..=8 => ('┌', '┐', '└', '┘', '─', '│'), // Light box
+            _ => ('╭', '╮', '╰', '╯', '─', '│'),     // Rounded for distant nodes
         };
 
-        let style = if is_selected { CellStyle::Highlighted } else { CellStyle::Normal };
+        let style = if is_selected {
+            CellStyle::Highlighted
+        } else {
+            CellStyle::Normal
+        };
 
         // Top border with title
         self.put_styled(x, y, tl, style, depth);
@@ -90,7 +114,9 @@ impl EnhancedCanvas {
         // Content lines
         for (idx, line) in content.iter().enumerate() {
             let line_y = y + 1 + idx;
-            if line_y >= y + height - 1 { break; }
+            if line_y >= y + height - 1 {
+                break;
+            }
 
             self.put_styled(x, line_y, v, style, depth);
             let padded = format!(" {:<width$} ", line, width = width - 3);
@@ -112,26 +138,50 @@ impl EnhancedCanvas {
     }
 
     /// Draw an animated flow arrow with volume-based thickness
-    pub fn draw_flow_arrow(&mut self, x_start: usize, y_start: usize,
-                          x_end: usize, y_end: usize,
-                          volume: f64, bidirectional: bool, depth: u8) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_flow_arrow(
+        &mut self,
+        x_start: usize,
+        y_start: usize,
+        x_end: usize,
+        y_end: usize,
+        volume: f64,
+        bidirectional: bool,
+        depth: u8,
+    ) {
         // Choose arrow style based on volume (thickness)
         let (line_char, arrow_head) = match volume {
             v if v > 1_000_000.0 => {
                 // Massive flow - triple line
-                if bidirectional { ('═', '⇔') } else { ('═', '⇒') }
+                if bidirectional {
+                    ('═', '⇔')
+                } else {
+                    ('═', '⇒')
+                }
             }
             v if v > 100_000.0 => {
                 // Large flow - double line
-                if bidirectional { ('═', '↔') } else { ('═', '→') }
+                if bidirectional {
+                    ('═', '↔')
+                } else {
+                    ('═', '→')
+                }
             }
             v if v > 10_000.0 => {
                 // Medium flow - thick line
-                if bidirectional { ('━', '↔') } else { ('━', '→') }
+                if bidirectional {
+                    ('━', '↔')
+                } else {
+                    ('━', '→')
+                }
             }
             _ => {
                 // Small flow - thin line
-                if bidirectional { ('─', '↔') } else { ('─', '→') }
+                if bidirectional {
+                    ('─', '↔')
+                } else {
+                    ('─', '→')
+                }
             }
         };
 
@@ -154,7 +204,11 @@ impl EnhancedCanvas {
                     self.put_styled(x, y_start, arrow_head, CellStyle::Bold, depth);
                 } else {
                     // Add animated dots based on frame
-                    let ch = if (x + self.frame) % 4 == 0 { '•' } else { line_char };
+                    let ch = if (x + self.frame).is_multiple_of(4) {
+                        '•'
+                    } else {
+                        line_char
+                    };
                     self.put_styled(x, y_start, ch, flow_style, depth);
                 }
             }
@@ -175,7 +229,11 @@ impl EnhancedCanvas {
                     let arrow = if y_end > y_start { '↓' } else { '↑' };
                     self.put_styled(x_start, y, arrow, CellStyle::Bold, depth);
                 } else {
-                    let ch = if (y + self.frame) % 4 == 0 { '•' } else { '│' };
+                    let ch = if (y + self.frame).is_multiple_of(4) {
+                        '•'
+                    } else {
+                        '│'
+                    };
                     self.put_styled(x_start, y, ch, flow_style, depth);
                 }
             }
@@ -183,7 +241,11 @@ impl EnhancedCanvas {
         // Draw L-shaped flow (horizontal then vertical)
         else {
             // First horizontal segment
-            let h_end = if x_end > x_start { x_end - 1 } else { x_end + 1 };
+            let h_end = if x_end > x_start {
+                x_end - 1
+            } else {
+                x_end + 1
+            };
             self.draw_flow_arrow(x_start, y_start, h_end, y_start, volume, false, depth);
 
             // Corner
@@ -201,7 +263,14 @@ impl EnhancedCanvas {
     }
 
     /// Draw a gradient background for depth perception
-    pub fn draw_depth_gradient(&mut self, x: usize, y: usize, width: usize, height: usize, depth: u8) {
+    pub fn draw_depth_gradient(
+        &mut self,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+        depth: u8,
+    ) {
         let gradient_chars = [' ', '·', '∙', '•', '○', '●'];
         let gradient_level = (depth as usize).min(gradient_chars.len() - 1);
 
@@ -209,9 +278,19 @@ impl EnhancedCanvas {
             for dx in 0..width {
                 if self.cells[y + dy][x + dx].ch == ' ' {
                     // Only fill empty spaces
-                    let fade = if dx < 3 || dx > width - 3 { gradient_level + 1 } else { gradient_level };
+                    let fade = if dx < 3 || dx > width - 3 {
+                        gradient_level + 1
+                    } else {
+                        gradient_level
+                    };
                     if fade < gradient_chars.len() && fade > 0 {
-                        self.put_styled(x + dx, y + dy, gradient_chars[fade], CellStyle::Dimmed, depth);
+                        self.put_styled(
+                            x + dx,
+                            y + dy,
+                            gradient_chars[fade],
+                            CellStyle::Dimmed,
+                            depth,
+                        );
                     }
                 }
             }
@@ -219,9 +298,14 @@ impl EnhancedCanvas {
     }
 
     /// Draw sophisticated wallet clustering visualization
-    pub fn draw_wallet_cluster(&mut self, x: usize, y: usize,
-                              wallets: Vec<(&str, f64)>, // (address, volume)
-                              cluster_type: &str, depth: u8) {
+    pub fn draw_wallet_cluster(
+        &mut self,
+        x: usize,
+        y: usize,
+        wallets: Vec<(&str, f64)>, // (address, volume)
+        cluster_type: &str,
+        depth: u8,
+    ) {
         // Cluster frame
         let width = 60;
         let height = 4 + wallets.len() * 2;
@@ -234,16 +318,23 @@ impl EnhancedCanvas {
             _ => "📊",
         };
 
-        self.draw_enhanced_box(x, y, width, height,
-                              &format!("{} CLUSTER: {}", cluster_icon, cluster_type),
-                              vec![], depth, false);
+        self.draw_enhanced_box(
+            x,
+            y,
+            width,
+            height,
+            &format!("{} CLUSTER: {}", cluster_icon, cluster_type),
+            vec![],
+            depth,
+            false,
+        );
 
         // Draw wallets in cluster with connections
         for (idx, (wallet, volume)) in wallets.iter().enumerate() {
             let wallet_y = y + 2 + idx * 2;
 
             // Mini wallet representation
-            let wallet_display = format!("{}...{}", &wallet[..6], &wallet[wallet.len()-4..]);
+            let wallet_display = format!("{}...{}", &wallet[..6], &wallet[wallet.len() - 4..]);
             let volume_bar = self.create_volume_bar(*volume);
 
             self.put_styled(x + 2, wallet_y, '◆', CellStyle::Bold, depth);
@@ -262,11 +353,11 @@ impl EnhancedCanvas {
     /// Create a visual volume bar using block characters
     fn create_volume_bar(&self, volume: f64) -> String {
         let normalized = (volume.log10() as usize).min(20);
-        let blocks = vec!['░', '▒', '▓', '█'];
+        let blocks = ['░', '▒', '▓', '█'];
 
-        (0..normalized).map(|i| {
-            blocks[(i * blocks.len() / 20).min(blocks.len() - 1)]
-        }).collect()
+        (0..normalized)
+            .map(|i| blocks[(i * blocks.len() / 20).min(blocks.len() - 1)])
+            .collect()
     }
 
     /// Put a styled character at position
@@ -290,12 +381,12 @@ impl EnhancedCanvas {
                 if use_colors {
                     // Add ANSI color codes based on style and depth
                     let color_code = match (&cell.style, cell.depth) {
-                        (CellStyle::Bold, _) => "\x1b[1m",           // Bold
-                        (CellStyle::Dimmed, _) => "\x1b[2m",         // Dim
-                        (CellStyle::Highlighted, _) => "\x1b[7m",    // Reverse
-                        (CellStyle::Warning, _) => "\x1b[33m",       // Yellow
+                        (CellStyle::Bold, _) => "\x1b[1m",              // Bold
+                        (CellStyle::Dimmed, _) => "\x1b[2m",            // Dim
+                        (CellStyle::Highlighted, _) => "\x1b[7m",       // Reverse
+                        (CellStyle::Warning, _) => "\x1b[33m",          // Yellow
                         (CellStyle::Flow(_), d) if d < 3 => "\x1b[36m", // Cyan for near flows
-                        (CellStyle::Flow(_), _) => "\x1b[34m",       // Blue for far flows
+                        (CellStyle::Flow(_), _) => "\x1b[34m",          // Blue for far flows
                         _ => "",
                     };
 
@@ -328,7 +419,7 @@ pub struct GraphLayoutEngine {
 pub struct NodePosition {
     pub x: f64,
     pub y: f64,
-    pub vx: f64,  // Velocity for physics simulation
+    pub vx: f64, // Velocity for physics simulation
     pub vy: f64,
     pub fixed: bool,
     pub depth: usize,
@@ -350,6 +441,12 @@ struct ForceSimulation {
     centering_strength: f64,
 }
 
+impl Default for GraphLayoutEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GraphLayoutEngine {
     pub fn new() -> Self {
         Self {
@@ -359,7 +456,7 @@ impl GraphLayoutEngine {
                 repulsion_strength: 1000.0,
                 attraction_strength: 0.1,
                 centering_strength: 0.01,
-            }
+            },
         }
     }
 
@@ -375,7 +472,7 @@ impl GraphLayoutEngine {
         // Reset velocities
         for node in self.nodes.values_mut() {
             if !node.fixed {
-                node.vx *= 0.9;  // Damping
+                node.vx *= 0.9; // Damping
                 node.vy *= 0.9;
             }
         }
@@ -383,7 +480,7 @@ impl GraphLayoutEngine {
         // Apply repulsion between all nodes
         let node_ids: Vec<_> = self.nodes.keys().cloned().collect();
         for i in 0..node_ids.len() {
-            for j in (i+1)..node_ids.len() {
+            for j in (i + 1)..node_ids.len() {
                 let (n1, n2) = (&node_ids[i], &node_ids[j]);
 
                 let dx = self.nodes[n2].x - self.nodes[n1].x;
@@ -432,8 +529,8 @@ impl GraphLayoutEngine {
                 node.y += node.vy;
 
                 // Constrain to bounds
-                node.x = node.x.max(0.0).min(400.0);
-                node.y = node.y.max(0.0).min(200.0);
+                node.x = node.x.clamp(0.0, 400.0);
+                node.y = node.y.clamp(0.0, 200.0);
             }
         }
     }
@@ -460,8 +557,16 @@ mod tests {
     fn test_enhanced_canvas() {
         let mut canvas = EnhancedCanvas::new(100, 50);
 
-        canvas.draw_enhanced_box(5, 5, 40, 8, "Test Wallet",
-                                vec!["Address: ABC...XYZ".to_string()], 2, false);
+        canvas.draw_enhanced_box(
+            5,
+            5,
+            40,
+            8,
+            "Test Wallet",
+            vec!["Address: ABC...XYZ".to_string()],
+            2,
+            false,
+        );
 
         let output = canvas.render(false);
         assert!(output.contains("Test Wallet"));
@@ -488,6 +593,9 @@ mod tests {
         // Animation should change bullet positions
         // At frame=0: bullets at positions where (x + 0) % 4 == 0
         // At frame=1: bullets at positions where (x + 1) % 4 == 0
-        assert_ne!(output1, output2, "Bullet positions should differ between frames");
+        assert_ne!(
+            output1, output2,
+            "Bullet positions should differ between frames"
+        );
     }
 }

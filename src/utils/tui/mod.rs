@@ -1,21 +1,32 @@
 // TUI module for OSVM - Beautiful terminal interface
 pub mod app;
+pub mod events;
 pub mod graph;
 pub mod graph_forensics;
-pub mod widgets;
-pub mod events;
 pub mod logger;
 pub mod screenshot_test;
+pub mod widgets;
 
 pub use app::OsvmApp;
-pub use graph::{WalletGraph, WalletNodeType, TransferData};
+pub use graph::{TransferData, WalletGraph, WalletNodeType};
 pub use logger::{init_file_logger, log};
 pub use screenshot_test::{
-    TuiScreenshot, ScreenshotDiff, ScreenshotTestRunner,
-    ColorRegion, ColorSummary, ColorAssertions, ColorAssertionError,
+    ColorAssertionError,
+    ColorAssertions,
+    ColorRegion,
+    ColorSummary,
+    PaneValidation,
+    ScreenshotDiff,
+    ScreenshotTestRunner,
     // Tmux tiling support (btop-style)
-    TileLayout, TmuxTiledSession, TmuxPane, TiledCaptureResult,
-    TiledTestBuilder, TiledTestScenario, TiledTestResult, PaneValidation,
+    TileLayout,
+    TiledCaptureResult,
+    TiledTestBuilder,
+    TiledTestResult,
+    TiledTestScenario,
     // Basic tmux capture
     TmuxCapture,
+    TmuxPane,
+    TmuxTiledSession,
+    TuiScreenshot,
 };

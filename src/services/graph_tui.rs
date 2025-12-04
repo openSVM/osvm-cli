@@ -9,11 +9,9 @@
 //! - Integration with existing OSVM themes
 
 use anyhow::Result;
-use cursive::traits::*;
-use cursive::views::{
-    Dialog, LinearLayout, Panel, ScrollView, SelectView, TextView,
-};
 use cursive::event::Key;
+use cursive::traits::*;
+use cursive::views::{Dialog, LinearLayout, Panel, ScrollView, SelectView, TextView};
 use cursive::{Cursive, CursiveExt};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -49,7 +47,8 @@ impl GraphViewerState {
     /// Toggle collapse state of a node
     pub fn toggle_collapse(&mut self, address: &str) {
         let is_collapsed = self.collapsed_nodes.get(address).copied().unwrap_or(false);
-        self.collapsed_nodes.insert(address.to_string(), !is_collapsed);
+        self.collapsed_nodes
+            .insert(address.to_string(), !is_collapsed);
     }
 
     /// Check if a node is collapsed
@@ -62,11 +61,7 @@ impl GraphViewerState {
         self.graph
             .nodes
             .values()
-            .filter(|node| {
-                node.outgoing
-                    .iter()
-                    .any(|transfer| transfer.to == address)
-            })
+            .filter(|node| node.outgoing.iter().any(|transfer| transfer.to == address))
             .count()
     }
 }
@@ -97,8 +92,18 @@ fn render_tree_node(
 
     visited.insert(addr.to_string());
 
-    let is_origin = state.graph.origin.as_ref().map(|o| o == addr).unwrap_or(false);
-    let is_target = state.graph.target.as_ref().map(|t| t == addr).unwrap_or(false);
+    let is_origin = state
+        .graph
+        .origin
+        .as_ref()
+        .map(|o| o == addr)
+        .unwrap_or(false);
+    let is_target = state
+        .graph
+        .target
+        .as_ref()
+        .map(|t| t == addr)
+        .unwrap_or(false);
     let is_collapsed = state.is_collapsed(addr);
 
     let node = match state.graph.nodes.get(addr) {
@@ -187,9 +192,13 @@ fn build_tree_view(state: &GraphViewerState) -> String {
     let mut output = String::new();
 
     // Header
-    output.push_str("╔══════════════════════════════════════════════════════════════════════════╗\n");
-    output.push_str("║              INTERACTIVE WALLET TRANSFER GRAPH VIEWER                    ║\n");
-    output.push_str("╚══════════════════════════════════════════════════════════════════════════╝\n\n");
+    output
+        .push_str("╔══════════════════════════════════════════════════════════════════════════╗\n");
+    output
+        .push_str("║              INTERACTIVE WALLET TRANSFER GRAPH VIEWER                    ║\n");
+    output.push_str(
+        "╚══════════════════════════════════════════════════════════════════════════╝\n\n",
+    );
 
     // Instructions
     output.push_str("📖 Controls:\n");
@@ -198,7 +207,9 @@ fn build_tree_view(state: &GraphViewerState) -> String {
     output.push_str("  /           - Search (coming soon)\n");
     output.push_str("  q or Esc    - Exit viewer\n\n");
 
-    output.push_str("═══════════════════════════════════════════════════════════════════════════\n\n");
+    output.push_str(
+        "═══════════════════════════════════════════════════════════════════════════\n\n",
+    );
 
     // Find origin
     let origin_addr = match &state.graph.origin {
@@ -210,9 +221,11 @@ fn build_tree_view(state: &GraphViewerState) -> String {
                 .nodes
                 .keys()
                 .find(|addr| {
-                    !state.graph.nodes.values().any(|node| {
-                        node.outgoing.iter().any(|t| &t.to == *addr)
-                    })
+                    !state
+                        .graph
+                        .nodes
+                        .values()
+                        .any(|node| node.outgoing.iter().any(|t| &t.to == *addr))
                 })
                 .cloned()
                 .unwrap_or_default()
@@ -232,7 +245,9 @@ fn build_tree_view(state: &GraphViewerState) -> String {
         output.push('\n');
     }
 
-    output.push_str("\n═══════════════════════════════════════════════════════════════════════════\n");
+    output.push_str(
+        "\n═══════════════════════════════════════════════════════════════════════════\n",
+    );
 
     // Stats
     let total_nodes = state.graph.nodes.len();
@@ -244,7 +259,7 @@ fn build_tree_view(state: &GraphViewerState) -> String {
         .filter(|addr| state.count_convergence(addr) > 1)
         .collect();
 
-    output.push_str(&format!("\n📊 Graph Statistics:\n"));
+    output.push_str("\n📊 Graph Statistics:\n");
     output.push_str(&format!("  Total Nodes:       {}\n", total_nodes));
     output.push_str(&format!("  Total Transfers:   {}\n", total_transfers));
     output.push_str(&format!(

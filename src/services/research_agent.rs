@@ -1,12 +1,12 @@
+use crate::services::ai_service::AiService;
+use crate::services::mcp_service::McpService;
+use crate::services::ovsm_service::OvsmService;
 use anyhow::{Context, Result};
+use ovsm::runtime::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use crate::services::ai_service::AiService;
-use crate::services::ovsm_service::OvsmService;
-use crate::services::mcp_service::McpService;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ovsm::runtime::Value;
 
 /// Represents the state of our investigation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,7 +68,7 @@ pub enum RelationshipType {
     RoundTrip,      // Bidirectional transfers (high confidence same owner)
     SimpleTransfer, // Pure SOL/SPL without DeFi
     DeFiInteraction,
-    Coordinated,    // Same-block or sequential activity
+    Coordinated, // Same-block or sequential activity
 }
 
 /// Path-based visualization structures
@@ -91,8 +91,8 @@ pub struct PathHop {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathType {
-    Inflow,   // Funding source → Target
-    Outflow,  // Target → Receiver
+    Inflow,    // Funding source → Target
+    Outflow,   // Target → Receiver
     RoundTrip, // Bidirectional
 }
 
@@ -175,81 +175,87 @@ pub struct TransferGraph {
     pub render_config: RenderConfig,
 }
 
-    struct Canvas {
-        cells: Vec<Vec<char>>,
-        width: usize,
-        height: usize,
-    }
+struct Canvas {
+    cells: Vec<Vec<char>>,
+    width: usize,
+    height: usize,
+}
 
-    impl Canvas {
-        fn new(width: usize, height: usize) -> Self {
-            Canvas {
-                cells: vec![vec![' '; width]; height],
-                width,
-                height,
-            }
-        }
-
-        fn put(&mut self, x: usize, y: usize, ch: char) {
-            if y < self.height && x < self.width {
-                self.cells[y][x] = ch;
-            }
-        }
-
-        fn put_str(&mut self, x: usize, y: usize, s: &str) {
-            for (i, ch) in s.chars().enumerate() {
-                self.put(x + i, y, ch);
-            }
-        }
-
-        fn draw_box(&mut self, x: usize, y: usize, width: usize, lines: &[String]) {
-            // Top
-            self.put(x, y, '┌');
-            for i in 1..width-1 {
-                self.put(x + i, y, '─');
-            }
-            self.put(x + width - 1, y, '┐');
-
-            // Content
-            for (idx, line) in lines.iter().enumerate() {
-                let line_y = y + 1 + idx;
-                self.put(x, line_y, '│');
-                self.put_str(x + 1, line_y, line);
-                self.put(x + width - 1, line_y, '│');
-            }
-
-            // Bottom
-            let bottom_y = y + 1 + lines.len();
-            self.put(x, bottom_y, '└');
-            for i in 1..width-1 {
-                self.put(x + i, bottom_y, '─');
-            }
-            self.put(x + width - 1, bottom_y, '┘');
-        }
-
-        fn draw_v_line(&mut self, x: usize, y_start: usize, y_end: usize) {
-            for y in y_start..=y_end {
-                if self.cells[y][x] == ' ' {
-                    self.put(x, y, '│');
-                }
-            }
-        }
-
-        fn draw_h_arrow(&mut self, x_start: usize, x_end: usize, y: usize) {
-            for x in x_start..x_end {
-                self.put(x, y, '─');
-            }
-            self.put(x_end, y, '→');
-        }
-
-        fn to_string(&self) -> String {
-            self.cells.iter()
-                .map(|row| row.iter().collect::<String>().trim_end().to_string())
-                .collect::<Vec<_>>()
-                .join("\n")
+impl Canvas {
+    fn new(width: usize, height: usize) -> Self {
+        Canvas {
+            cells: vec![vec![' '; width]; height],
+            width,
+            height,
         }
     }
 
+    fn put(&mut self, x: usize, y: usize, ch: char) {
+        if y < self.height && x < self.width {
+            self.cells[y][x] = ch;
+        }
+    }
+
+    fn put_str(&mut self, x: usize, y: usize, s: &str) {
+        for (i, ch) in s.chars().enumerate() {
+            self.put(x + i, y, ch);
+        }
+    }
+
+    fn draw_box(&mut self, x: usize, y: usize, width: usize, lines: &[String]) {
+        // Top
+        self.put(x, y, '┌');
+        for i in 1..width - 1 {
+            self.put(x + i, y, '─');
+        }
+        self.put(x + width - 1, y, '┐');
+
+        // Content
+        for (idx, line) in lines.iter().enumerate() {
+            let line_y = y + 1 + idx;
+            self.put(x, line_y, '│');
+            self.put_str(x + 1, line_y, line);
+            self.put(x + width - 1, line_y, '│');
+        }
+
+        // Bottom
+        let bottom_y = y + 1 + lines.len();
+        self.put(x, bottom_y, '└');
+        for i in 1..width - 1 {
+            self.put(x + i, bottom_y, '─');
+        }
+        self.put(x + width - 1, bottom_y, '┘');
+    }
+
+    fn draw_v_line(&mut self, x: usize, y_start: usize, y_end: usize) {
+        for y in y_start..=y_end {
+            if self.cells[y][x] == ' ' {
+                self.put(x, y, '│');
+            }
+        }
+    }
+
+    fn draw_h_arrow(&mut self, x_start: usize, x_end: usize, y: usize) {
+        for x in x_start..x_end {
+            self.put(x, y, '─');
+        }
+        self.put(x_end, y, '→');
+    }
+
+    fn render(&self) -> String {
+        self.cells
+            .iter()
+            .map(|row| row.iter().collect::<String>().trim_end().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+impl std::fmt::Display for Canvas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.render())
+    }
+}
 
 impl TransferGraph {
     pub fn new() -> Self {
@@ -351,9 +357,13 @@ impl TransferGraph {
         // Header with configurable title
         if cfg.show_header {
             let title_padded = self.center_text(&cfg.title, 74);
-            output.push_str("╔══════════════════════════════════════════════════════════════════════════╗\n");
+            output.push_str(
+                "╔══════════════════════════════════════════════════════════════════════════╗\n",
+            );
             output.push_str(&format!("║{}║\n", title_padded));
-            output.push_str("╚══════════════════════════════════════════════════════════════════════════╝\n\n");
+            output.push_str(
+                "╚══════════════════════════════════════════════════════════════════════════╝\n\n",
+            );
         }
 
         if let Some(token) = &self.token_name {
@@ -361,14 +371,16 @@ impl TransferGraph {
             if let Some(mint) = &self.token_mint {
                 output.push_str(&format!(" ({})", self.truncate_address(mint, 8)));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         if let Some(target) = &self.target {
             output.push_str(&format!("TARGET: {}\n\n", target));
         }
 
-        output.push_str("═══════════════════════════════════════════════════════════════════════════\n\n");
+        output.push_str(
+            "═══════════════════════════════════════════════════════════════════════════\n\n",
+        );
 
         // Render the graph tree starting from origin
         if let Some(origin_addr) = &self.origin {
@@ -390,30 +402,30 @@ impl TransferGraph {
                         }
                         output.push_str(&self.truncate_address(addr, 8));
                     }
-                    output.push_str("\n");
+                    output.push('\n');
                 }
             }
         }
 
         // Summary section if configured
         if cfg.show_stats_summary {
-            output.push_str("\n┌─────────────────────────────────────────────────────────────────────────┐\n");
+            output.push_str(
+                "\n┌─────────────────────────────────────────────────────────────────────────┐\n",
+            );
             output.push_str(&format!("│ Total Nodes: {:>58} │\n", self.nodes.len()));
 
-            let total_transfers: usize = self.nodes.values()
-                .map(|n| n.outgoing.len())
-                .sum();
+            let total_transfers: usize = self.nodes.values().map(|n| n.outgoing.len()).sum();
             output.push_str(&format!("│ Total Transfers: {:>54} │\n", total_transfers));
 
             if let Some(target_addr) = &self.target {
                 if let Some(target_node) = self.nodes.get(target_addr) {
-                    let total_received: f64 = target_node.incoming.iter()
-                        .map(|t| t.amount)
-                        .sum();
+                    let total_received: f64 = target_node.incoming.iter().map(|t| t.amount).sum();
                     output.push_str(&format!("│ Target Received: {:>54.2} │\n", total_received));
                 }
             }
-            output.push_str("└─────────────────────────────────────────────────────────────────────────┘\n");
+            output.push_str(
+                "└─────────────────────────────────────────────────────────────────────────┘\n",
+            );
         }
 
         output
@@ -426,7 +438,12 @@ impl TransferGraph {
         }
         let padding = (width - text_len) / 2;
         let extra = (width - text_len) % 2;
-        format!("{}{}{}", " ".repeat(padding), text, " ".repeat(padding + extra))
+        format!(
+            "{}{}{}",
+            " ".repeat(padding),
+            text,
+            " ".repeat(padding + extra)
+        )
     }
 
     fn render_node(
@@ -446,7 +463,7 @@ impl TransferGraph {
         &self,
         output: &mut String,
         addr: &str,
-        depth: usize,
+        _depth: usize,
         visited: &mut HashSet<String>,
         is_origin: bool,
         parent_prefix: String,
@@ -454,7 +471,10 @@ impl TransferGraph {
         // Check if this wallet has already been rendered (convergence point)
         if visited.contains(addr) {
             // This is a convergence - show a reference instead of duplicating
-            output.push_str(&format!("{}  ↗ CONVERGES TO: {} (shown above)\n", parent_prefix, addr));
+            output.push_str(&format!(
+                "{}  ↗ CONVERGES TO: {} (shown above)\n",
+                parent_prefix, addr
+            ));
             return;
         }
         visited.insert(addr.to_string());
@@ -463,7 +483,9 @@ impl TransferGraph {
         let cfg = &self.render_config;
 
         // Check how many incoming transfers this wallet has (convergence indicator)
-        let incoming_count = self.nodes.values()
+        let incoming_count = self
+            .nodes
+            .values()
             .flat_map(|n| &n.outgoing)
             .filter(|t| t.to == addr)
             .count();
@@ -475,7 +497,10 @@ impl TransferGraph {
         };
 
         // Node header - NO TRUNCATION, show full address + label
-        let label_text = node.and_then(|n| n.label.as_ref()).map(|l| format!(" [{}]", l)).unwrap_or_default();
+        let label_text = node
+            .and_then(|n| n.label.as_ref())
+            .map(|l| format!(" [{}]", l))
+            .unwrap_or_default();
 
         // Draw box around wallet address for visual clarity
         let addr_len = addr.len();
@@ -484,29 +509,22 @@ impl TransferGraph {
         let box_bot = format!("└{}┘", "─".repeat(addr_len + 2));
 
         if is_origin {
-            output.push_str(&format!("{}{}\n",
-                cfg.origin_icon,
-                label_text
-            ));
+            output.push_str(&format!("{}{}\n", cfg.origin_icon, label_text));
             output.push_str(&format!("   {}\n", box_top));
             output.push_str(&format!("   {}{}\n", box_mid, convergence_marker));
             output.push_str(&format!("   {}\n", box_bot));
         } else if Some(addr) == self.target.as_deref() {
-            output.push_str(&format!("{}{}{}{}\n",
-                parent_prefix,
-                cfg.target_icon,
-                label_text,
-                convergence_marker
+            output.push_str(&format!(
+                "{}{}{}{}\n",
+                parent_prefix, cfg.target_icon, label_text, convergence_marker
             ));
             output.push_str(&format!("{}   {}\n", parent_prefix, box_top));
             output.push_str(&format!("{}   {}\n", parent_prefix, box_mid));
             output.push_str(&format!("{}   {}\n", parent_prefix, box_bot));
         } else {
-            output.push_str(&format!("{}{}{}{}\n",
-                parent_prefix,
-                cfg.node_icon,
-                label_text,
-                convergence_marker
+            output.push_str(&format!(
+                "{}{}{}{}\n",
+                parent_prefix, cfg.node_icon, label_text, convergence_marker
             ));
             output.push_str(&format!("{}   {}\n", parent_prefix, box_top));
             output.push_str(&format!("{}   {}\n", parent_prefix, box_mid));
@@ -545,11 +563,32 @@ impl TransferGraph {
 
                 // Recurse to child with the continuous prefix
                 if !visited.contains(&transfer.to) {
-                    output.push_str(&format!("{}   │\n", if is_last { parent_prefix.clone() } else { format!("{}│", parent_prefix) }));
-                    self.render_node_with_prefix(output, &transfer.to, depth + 1, visited, false, child_prefix);
+                    output.push_str(&format!(
+                        "{}   │\n",
+                        if is_last {
+                            parent_prefix.clone()
+                        } else {
+                            format!("{}│", parent_prefix)
+                        }
+                    ));
+                    self.render_node_with_prefix(
+                        output,
+                        &transfer.to,
+                        _depth + 1,
+                        visited,
+                        false,
+                        child_prefix,
+                    );
                 } else {
                     // Already visited - this is a convergence point, show reference
-                    output.push_str(&format!("{}   ↗ (converges with path above)\n", if is_last { parent_prefix.clone() } else { format!("{}│", parent_prefix) }));
+                    output.push_str(&format!(
+                        "{}   ↗ (converges with path above)\n",
+                        if is_last {
+                            parent_prefix.clone()
+                        } else {
+                            format!("{}│", parent_prefix)
+                        }
+                    ));
                 }
             }
         }
@@ -559,7 +598,7 @@ impl TransferGraph {
         if addr.len() <= keep * 2 {
             addr.to_string()
         } else {
-            format!("{}...{}", &addr[..keep], &addr[addr.len()-keep..])
+            format!("{}...{}", &addr[..keep], &addr[addr.len() - keep..])
         }
     }
 
@@ -573,7 +612,7 @@ impl TransferGraph {
         let mut result = String::new();
         let chars: Vec<char> = integer_part.chars().collect();
         for (i, c) in chars.iter().enumerate() {
-            if i > 0 && (chars.len() - i) % 3 == 0 {
+            if i > 0 && (chars.len() - i).is_multiple_of(3) {
                 result.push(',');
             }
             result.push(*c);
@@ -625,9 +664,9 @@ impl TransferGraph {
         for transfer in &node.outgoing {
             by_destination
                 .entry(transfer.to.clone())
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .entry(transfer.token_symbol.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(transfer);
         }
 
@@ -641,7 +680,8 @@ impl TransferGraph {
                 let tx_count = transfers.len();
 
                 // Find first and last timestamps
-                let mut timestamps: Vec<&Option<String>> = transfers.iter().map(|t| &t.timestamp).collect();
+                let mut timestamps: Vec<&Option<String>> =
+                    transfers.iter().map(|t| &t.timestamp).collect();
                 timestamps.sort();
                 let first_timestamp = timestamps.first().and_then(|t| t.as_ref()).cloned();
                 let last_timestamp = timestamps.last().and_then(|t| t.as_ref()).cloned();
@@ -671,13 +711,22 @@ impl TransferGraph {
         if let Some(node) = self.nodes.get(addr) {
             if let Some(label) = &node.label {
                 let label_lower = label.to_lowercase();
-                if label_lower.contains("exchange") || label_lower.contains("binance") || label_lower.contains("coinbase") {
+                if label_lower.contains("exchange")
+                    || label_lower.contains("binance")
+                    || label_lower.contains("coinbase")
+                {
                     return "🏦";
-                } else if label_lower.contains("mixer") || label_lower.contains("tornado") || label_lower.contains("cyclone") {
+                } else if label_lower.contains("mixer")
+                    || label_lower.contains("tornado")
+                    || label_lower.contains("cyclone")
+                {
                     return "🌀";
                 } else if label_lower.contains("burner") || label_lower.contains("temp") {
                     return "🔥";
-                } else if label_lower.contains("cold") || label_lower.contains("vault") || label_lower.contains("storage") {
+                } else if label_lower.contains("cold")
+                    || label_lower.contains("vault")
+                    || label_lower.contains("storage")
+                {
                     return "💎";
                 } else if label_lower.contains("dex") || label_lower.contains("swap") {
                     return "🔄";
@@ -701,9 +750,13 @@ impl TransferGraph {
         if cfg.show_header {
             let title = "HORIZONTAL PIPELINE - WALLET FLOW ANALYSIS";
             let title_padded = self.center_text(title, 74);
-            output.push_str("╔══════════════════════════════════════════════════════════════════════════╗\n");
+            output.push_str(
+                "╔══════════════════════════════════════════════════════════════════════════╗\n",
+            );
             output.push_str(&format!("║{}║\n", title_padded));
-            output.push_str("╚══════════════════════════════════════════════════════════════════════════╝\n\n");
+            output.push_str(
+                "╚══════════════════════════════════════════════════════════════════════════╝\n\n",
+            );
         }
 
         output.push_str("═════════════════════════════════════════════════════════════════════════════════════════════\n\n");
@@ -723,7 +776,7 @@ impl TransferGraph {
         // Group wallets by depth
         let mut by_depth: HashMap<usize, Vec<String>> = HashMap::new();
         for (addr, depth) in &depths {
-            by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
+            by_depth.entry(*depth).or_default().push(addr.clone());
         }
 
         // Create canvas (wider to accommodate full addresses, much taller for all wallets)
@@ -731,7 +784,7 @@ impl TransferGraph {
         let mut canvas = Canvas::new(400, 2000);
 
         // Column X positions for each depth (wider spacing for full addresses)
-        let col_x = vec![0usize, 55, 110, 165, 220, 275, 330];
+        let col_x = [0usize, 55, 110, 165, 220, 275, 330];
         let mut current_y = 2usize;
 
         // Render up to 7 depths (increased from 4)
@@ -740,11 +793,15 @@ impl TransferGraph {
             let x = col_x[depth];
 
             for (wallet_idx, wallet_addr) in wallets.iter().enumerate() {
-                if wallet_idx > 0 { current_y += 8; }
+                if wallet_idx > 0 {
+                    current_y += 8;
+                }
 
                 let icon = self.get_wallet_icon(wallet_addr);
-                let label = self.nodes.get(wallet_addr)
-                    .and_then(|n| n.label.as_ref().map(|s| s.as_str()))
+                let label = self
+                    .nodes
+                    .get(wallet_addr)
+                    .and_then(|n| n.label.as_deref())
                     .unwrap_or("");
 
                 // ALWAYS show full address (NEVER truncate - blockchain forensics requirement)
@@ -752,14 +809,16 @@ impl TransferGraph {
 
                 // Draw wallet box (width 50 to fit full 44-char Solana addresses)
                 let icon_label = format!("{} {}", icon, label);
-                canvas.draw_box(x, current_y, 50, &vec![icon_label, addr_display]);
+                canvas.draw_box(x, current_y, 50, &[icon_label, addr_display]);
 
                 // Get transfers
                 let transfers = self.get_aggregated_transfers(wallet_addr);
-                if transfers.is_empty() { continue; }
+                if transfers.is_empty() {
+                    continue;
+                }
 
                 // Pipe position (center of wider box)
-                let pipe_x = x + 25;  // Center of 50-width box
+                let pipe_x = x + 25; // Center of 50-width box
                 let box_bottom = current_y + 3;
 
                 // Draw CONTINUOUS pipes for all transfers AND ALL TOKENS
@@ -782,7 +841,11 @@ impl TransferGraph {
                             match line_in_token {
                                 0 => {
                                     // Amount line with arrow (format to 2 decimal places for readability)
-                                    let amt = format!("[${:.2}M {}]", (agg.total_amount / 1_000_000.0), token);
+                                    let amt = format!(
+                                        "[${:.2}M {}]",
+                                        (agg.total_amount / 1_000_000.0),
+                                        token
+                                    );
                                     canvas.put_str(pipe_x + 2, y, &amt);
                                     let arrow_start = pipe_x + 2 + amt.len() + 1;
                                     if depth < 6 {
@@ -795,8 +858,11 @@ impl TransferGraph {
                                 }
                                 2 => {
                                     // Dates
-                                    if let (Some(first), Some(last)) = (&agg.first_timestamp, &agg.last_timestamp) {
-                                        let date_str = format!("{} → {}", &first[..10], &last[..10]);
+                                    if let (Some(first), Some(last)) =
+                                        (&agg.first_timestamp, &agg.last_timestamp)
+                                    {
+                                        let date_str =
+                                            format!("{} → {}", &first[..10], &last[..10]);
                                         canvas.put_str(pipe_x + 2, y, &date_str);
                                     }
                                 }
@@ -818,10 +884,14 @@ impl TransferGraph {
 
         // Summary
         if cfg.show_stats_summary {
-            output.push_str("\n┌─────────────────────────────────────────────────────────────────────────┐\n");
+            output.push_str(
+                "\n┌─────────────────────────────────────────────────────────────────────────┐\n",
+            );
             output.push_str(&format!("│ Max Depth: {:>62} │\n", max_depth));
             output.push_str(&format!("│ Total Wallets: {:>58} │\n", self.nodes.len()));
-            output.push_str("└─────────────────────────────────────────────────────────────────────────┘\n");
+            output.push_str(
+                "└─────────────────────────────────────────────────────────────────────────┘\n",
+            );
         }
 
         output
@@ -837,7 +907,9 @@ impl TransferGraph {
         // Add nodes to layout engine
         let depths = self.compute_depths(self.origin.as_ref().unwrap_or(&String::new()));
         for (addr, depth) in &depths {
-            let volume = self.nodes.get(addr)
+            let volume = self
+                .nodes
+                .get(addr)
                 .map(|n| n.outgoing.iter().map(|t| t.amount).sum())
                 .unwrap_or(0.0);
 
@@ -845,25 +917,35 @@ impl TransferGraph {
             let x = (depth * 100) as f64;
             let y = 100.0 + (addr.as_bytes()[0] as f64 % 100.0); // Spread vertically
 
-            layout.nodes.insert(addr.clone(), crate::services::enhanced_ascii_graph::NodePosition {
-                x, y, vx: 0.0, vy: 0.0,
-                fixed: *depth == 0,  // Fix origin node
-                depth: *depth,
-                volume,
-            });
+            layout.nodes.insert(
+                addr.clone(),
+                crate::services::enhanced_ascii_graph::NodePosition {
+                    x,
+                    y,
+                    vx: 0.0,
+                    vy: 0.0,
+                    fixed: *depth == 0, // Fix origin node
+                    depth: *depth,
+                    volume,
+                },
+            );
         }
 
         // Add edges
         for node in self.nodes.values() {
             for transfer in &node.outgoing {
-                layout.edges.push(crate::services::enhanced_ascii_graph::Edge {
-                    from: transfer.from.clone(),
-                    to: transfer.to.clone(),
-                    weight: transfer.amount,
-                    bidirectional: self.nodes.get(&transfer.to)
-                        .map(|n| n.outgoing.iter().any(|t| t.to == transfer.from))
-                        .unwrap_or(false),
-                });
+                layout
+                    .edges
+                    .push(crate::services::enhanced_ascii_graph::Edge {
+                        from: transfer.from.clone(),
+                        to: transfer.to.clone(),
+                        weight: transfer.amount,
+                        bidirectional: self
+                            .nodes
+                            .get(&transfer.to)
+                            .map(|n| n.outgoing.iter().any(|t| t.to == transfer.from))
+                            .unwrap_or(false),
+                    });
             }
         }
 
@@ -876,7 +958,7 @@ impl TransferGraph {
         // Group wallets by depth for clustering
         let mut by_depth: HashMap<usize, Vec<String>> = HashMap::new();
         for (addr, depth) in &depths {
-            by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
+            by_depth.entry(*depth).or_default().push(addr.clone());
         }
 
         // Draw depth gradients for 3D effect
@@ -891,7 +973,7 @@ impl TransferGraph {
             let depth = depths.get(addr).copied().unwrap_or(0) as u8;
 
             let icon = self.get_wallet_icon(addr);
-            let label = node.label.as_ref().map(|s| s.as_str()).unwrap_or("");
+            let label = node.label.as_deref().unwrap_or("");
             let transfer_count = node.outgoing.len();
 
             // Calculate wallet importance for sizing
@@ -901,7 +983,10 @@ impl TransferGraph {
             let is_selected = self.target.as_ref().map(|t| t == addr).unwrap_or(false);
 
             canvas.draw_enhanced_box(
-                *x, *y, 50, box_height,
+                *x,
+                *y,
+                50,
+                box_height,
                 &format!("{} {}", icon, label),
                 vec![
                     addr.clone(),
@@ -921,13 +1006,17 @@ impl TransferGraph {
                         let depth = depths.get(&node.address).copied().unwrap_or(0) as u8;
 
                         // Check for bidirectional flow
-                        let is_bidirectional = self.nodes.get(&transfer.to)
+                        let is_bidirectional = self
+                            .nodes
+                            .get(&transfer.to)
                             .map(|n| n.outgoing.iter().any(|t| t.to == node.address))
                             .unwrap_or(false);
 
                         canvas.draw_flow_arrow(
-                            from_x + 50, from_y + 2,  // Right side of from box
-                            *to_x, to_y + 2,           // Left side of to box
+                            from_x + 50,
+                            from_y + 2, // Right side of from box
+                            *to_x,
+                            to_y + 2, // Left side of to box
                             transfer.amount,
                             is_bidirectional,
                             depth,
@@ -940,9 +1029,12 @@ impl TransferGraph {
         // Draw suspicious clusters if detected
         let suspicious_wallets = self.detect_suspicious_clusters(&by_depth);
         if !suspicious_wallets.is_empty() {
-            let cluster_data: Vec<(&str, f64)> = suspicious_wallets.iter()
+            let cluster_data: Vec<(&str, f64)> = suspicious_wallets
+                .iter()
                 .map(|addr| {
-                    let volume = self.nodes.get(addr)
+                    let volume = self
+                        .nodes
+                        .get(addr)
                         .map(|n| n.outgoing.iter().map(|t| t.amount).sum())
                         .unwrap_or(0.0);
                     (addr.as_str(), volume)
@@ -954,7 +1046,7 @@ impl TransferGraph {
 
         // Animate and render
         canvas.next_frame();
-        canvas.render(true)  // Use colors if terminal supports
+        canvas.render(true) // Use colors if terminal supports
     }
 
     /// Detect suspicious wallet clusters (round-trips, mixers, etc)
@@ -1087,7 +1179,13 @@ impl ResearchAgent {
         mcp_service: Arc<tokio::sync::Mutex<McpService>>,
         target_wallet: String,
     ) -> Self {
-        Self::new_with_callbacks(ai_service, ovsm_service, mcp_service, target_wallet, TuiCallbacks::default())
+        Self::new_with_callbacks(
+            ai_service,
+            ovsm_service,
+            mcp_service,
+            target_wallet,
+            TuiCallbacks::default(),
+        )
     }
 
     pub fn new_with_callback(
@@ -1097,7 +1195,17 @@ impl ResearchAgent {
         target_wallet: String,
         tui_callback: Option<TuiCallback>,
     ) -> Self {
-        Self::new_with_callbacks(ai_service, ovsm_service, mcp_service, target_wallet, TuiCallbacks { output: tui_callback, logs: None, graph: None })
+        Self::new_with_callbacks(
+            ai_service,
+            ovsm_service,
+            mcp_service,
+            target_wallet,
+            TuiCallbacks {
+                output: tui_callback,
+                logs: None,
+                graph: None,
+            },
+        )
     }
 
     pub fn new_with_callbacks(
@@ -1127,14 +1235,21 @@ impl ResearchAgent {
                 graph_type: "WalletRelationshipGraph".to_string(),
                 wallets: {
                     let mut map = HashMap::new();
-                    map.insert(target_wallet.clone(), WalletNode {
-                        id: format!("wallet:{}", target_wallet),
-                        node_type: "SolanaWallet".to_string(),
-                        label: format!("{}...{}", &target_wallet[..6], &target_wallet[target_wallet.len()-4..]),
-                        first_seen: None,
-                        total_volume: 0.0,
-                        wallet_type: "target".to_string(),
-                    });
+                    map.insert(
+                        target_wallet.clone(),
+                        WalletNode {
+                            id: format!("wallet:{}", target_wallet),
+                            node_type: "SolanaWallet".to_string(),
+                            label: format!(
+                                "{}...{}",
+                                &target_wallet[..6],
+                                &target_wallet[target_wallet.len() - 4..]
+                            ),
+                            first_seen: None,
+                            total_volume: 0.0,
+                            wallet_type: "target".to_string(),
+                        },
+                    );
                     map
                 },
                 relationships: Vec::new(),
@@ -1155,7 +1270,8 @@ impl ResearchAgent {
         let state = self.state.lock().await.clone();
 
         crate::tui_log!("🔍 DEBUG: generate_investigation_plan started");
-        let planning_prompt = format!(r#"You are an expert blockchain investigator. Create a high-level investigation plan for wallet:
+        let planning_prompt = format!(
+            r#"You are an expert blockchain investigator. Create a high-level investigation plan for wallet:
 {}
 
 Available MCP tools:
@@ -1178,7 +1294,9 @@ Available MCP tools:
 Generate 5-8 investigation tasks, prioritized 1-5 (5=highest).
 **Include at least one task focused on identifying related/controlled wallets.**
 Return as JSON array:
-[{{"task": "...", "priority": 5, "reason": "..."}}, ...]"#, state.target_wallet);
+[{{"task": "...", "priority": 5, "reason": "..."}}, ...]"#,
+            state.target_wallet
+        );
 
         crate::tui_log!("🔍 DEBUG: Acquiring AI service lock for planning...");
         let ai_service = self.ai_service.lock().await;
@@ -1190,7 +1308,8 @@ Return as JSON array:
         crate::tui_log!("🔍 DEBUG: AI service query returned successfully");
 
         // Parse AI response into TODO list
-        let plan_json_clean = plan_json.trim()
+        let plan_json_clean = plan_json
+            .trim()
             .trim_start_matches("```json")
             .trim_start_matches("```")
             .trim_end_matches("```")
@@ -1279,7 +1398,10 @@ Return as JSON array:
         for todo in state.investigation_todos.iter_mut() {
             if todo.status == TodoStatus::Pending {
                 todo.status = TodoStatus::InProgress;
-                self.stream_thinking(&format!("▶️  Starting: {} (Priority: {})", todo.task, todo.priority));
+                self.stream_thinking(&format!(
+                    "▶️  Starting: {} (Priority: {})",
+                    todo.task, todo.priority
+                ));
                 break;
             }
         }
@@ -1291,7 +1413,8 @@ Return as JSON array:
     async fn decide_next_action(&self) -> Result<String> {
         let state = self.state.lock().await.clone();
 
-        let decision_prompt = format!(r#"You are a blockchain investigator. Based on current findings, decide the NEXT specific action to take.
+        let decision_prompt = format!(
+            r#"You are a blockchain investigator. Based on current findings, decide the NEXT specific action to take.
 
 Current State:
 - Wallet: {}
@@ -1317,19 +1440,27 @@ What is the single most valuable MCP tool to call next? Choose from:
 {{"action": "Investigate funding sources", "reason": "...", "mcp_tool": "get_account_transfers", "parameters": {{"address": "WALLET_HERE", "limit": 500, "compress": true}}}}
 
 Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", "parameters": {{...}}}}
-"#, state.target_wallet, state.iteration, state.findings.len(), state.investigation_todos);
+"#,
+            state.target_wallet,
+            state.iteration,
+            state.findings.len(),
+            state.investigation_todos
+        );
 
         crate::tui_log!("🔍 DEBUG: decide_next_action - Acquiring AI service lock...");
         let ai_service = self.ai_service.lock().await;
         crate::tui_log!("🔍 DEBUG: decide_next_action - Calling AI query...");
-        let decision = match ai_service.query_with_system_prompt(
-            "You are a strategic investigator. Return ONLY valid JSON object.",
-            &decision_prompt
-        ).await {
+        let decision = match ai_service
+            .query_with_system_prompt(
+                "You are a strategic investigator. Return ONLY valid JSON object.",
+                &decision_prompt,
+            )
+            .await
+        {
             Ok(decision) => {
                 crate::tui_log!("🔍 DEBUG: decide_next_action - AI query succeeded");
                 decision
-            },
+            }
             Err(e) => {
                 crate::tui_log!("⚠️  AI decision failed: {}. Using fallback action.", e);
                 // Fallback: just query transfers on first iteration, then complete
@@ -1346,7 +1477,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
     /// Main investigation loop with real-time streaming visualization
     pub async fn investigate_with_streaming(&self) -> Result<String> {
-        use crate::services::realtime_graph_stream::{StreamingGraph, GraphUpdateEvent, NodeType};
+        use crate::services::realtime_graph_stream::{GraphUpdateEvent, NodeType, StreamingGraph};
 
         crate::tui_log!("\n🔍 Starting Real-Time Blockchain Investigation...\n");
         crate::tui_log!("Graph will update progressively as data arrives...\n");
@@ -1372,12 +1503,14 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
         let investigation_handle = tokio::spawn(async move {
             // Send initial node for target wallet
             let state = state_clone.lock().await;
-            tx_clone.send(GraphUpdateEvent::NodeDiscovered {
-                address: state.target_wallet.clone(),
-                label: Some("Investigation Target".to_string()),
-                depth: 0,
-                node_type: NodeType::Target,
-            }).unwrap();
+            tx_clone
+                .send(GraphUpdateEvent::NodeDiscovered {
+                    address: state.target_wallet.clone(),
+                    label: Some("Investigation Target".to_string()),
+                    depth: 0,
+                    node_type: NodeType::Target,
+                })
+                .unwrap();
             drop(state);
 
             // Run investigation iterations
@@ -1385,7 +1518,12 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                 // Execute investigation step
                 let decision = Self::decide_next_action_static(&state_clone).await?;
                 let result = Self::execute_dynamic_investigation_static(
-                    &state_clone, &ovsm_service_clone, &mcp_service_clone, &decision).await?;
+                    &state_clone,
+                    &ovsm_service_clone,
+                    &mcp_service_clone,
+                    &decision,
+                )
+                .await?;
 
                 // Parse results and send graph updates
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&result) {
@@ -1412,7 +1550,12 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
     }
 
     /// Helper method to send graph updates from investigation results
-    async fn send_graph_updates(tx: &tokio::sync::mpsc::UnboundedSender<crate::services::realtime_graph_stream::GraphUpdateEvent>, data: &serde_json::Value) {
+    async fn send_graph_updates(
+        tx: &tokio::sync::mpsc::UnboundedSender<
+            crate::services::realtime_graph_stream::GraphUpdateEvent,
+        >,
+        data: &serde_json::Value,
+    ) {
         use crate::services::realtime_graph_stream::{GraphUpdateEvent, NodeType};
 
         // Parse transfers and send as graph events
@@ -1420,8 +1563,14 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             for transfer in transfers {
                 let from = transfer.get("from").and_then(|f| f.as_str()).unwrap_or("");
                 let to = transfer.get("to").and_then(|t| t.as_str()).unwrap_or("");
-                let amount = transfer.get("amount").and_then(|a| a.as_f64()).unwrap_or(0.0);
-                let token = transfer.get("token").and_then(|t| t.as_str()).unwrap_or("Unknown");
+                let amount = transfer
+                    .get("amount")
+                    .and_then(|a| a.as_f64())
+                    .unwrap_or(0.0);
+                let token = transfer
+                    .get("token")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("Unknown");
 
                 // Send node discovery events
                 if !from.is_empty() {
@@ -1430,7 +1579,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                         label: None,
                         depth: 1,
                         node_type: NodeType::Normal,
-                    }).ok();
+                    })
+                    .ok();
                 }
 
                 if !to.is_empty() {
@@ -1439,7 +1589,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                         label: None,
                         depth: 2,
                         node_type: NodeType::Normal,
-                    }).ok();
+                    })
+                    .ok();
                 }
 
                 // Send edge discovery event
@@ -1450,7 +1601,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                         amount,
                         token: token.to_string(),
                         timestamp: None,
-                    }).ok();
+                    })
+                    .ok();
                 }
             }
         }
@@ -1480,20 +1632,25 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
         // Get the first available MCP server
         let servers = mcp.list_servers();
         if servers.is_empty() {
-            return Ok(format!(r#"{{"wallet": "{}", "transfers": [], "error": "No MCP servers available"}}"#, wallet));
+            return Ok(format!(
+                r#"{{"wallet": "{}", "transfers": [], "error": "No MCP servers available"}}"#,
+                wallet
+            ));
         }
 
         let server_id = servers[0].0.clone();
 
         // Try to get account transfers
-        let transfers_result = mcp.call_tool(
-            &server_id,
-            "get_account_transfers",
-            Some(serde_json::json!({
-                "address": wallet,
-                "limit": 100
-            }))
-        ).await;
+        let transfers_result = mcp
+            .call_tool(
+                &server_id,
+                "get_account_transfers",
+                Some(serde_json::json!({
+                    "address": wallet,
+                    "limit": 100
+                })),
+            )
+            .await;
 
         match transfers_result {
             Ok(data) => {
@@ -1503,7 +1660,10 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             Err(e) => {
                 crate::tui_log!("⚠️  MCP query failed: {}", e);
                 // Return error but don't abort
-                Ok(format!(r#"{{"wallet": "{}", "transfers": [], "error": "{}"}}"#, wallet, e))
+                Ok(format!(
+                    r#"{{"wallet": "{}", "transfers": [], "error": "{}"}}"#,
+                    wallet, e
+                ))
             }
         }
     }
@@ -1520,7 +1680,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
         // Track visited wallets to avoid loops
         let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut queue: std::collections::VecDeque<(String, usize)> = std::collections::VecDeque::new();
+        let mut queue: std::collections::VecDeque<(String, usize)> =
+            std::collections::VecDeque::new();
 
         queue.push_back((target.clone(), 0));
         visited.insert(target.clone());
@@ -1535,7 +1696,12 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             }
 
             let depth_indicator = "→".repeat(depth + 1);
-            self.stream_log(&format!("{} Exploring {}...{}", depth_indicator, &wallet[..8], &wallet[wallet.len()-4..]));
+            self.stream_log(&format!(
+                "{} Exploring {}...{}",
+                depth_indicator,
+                &wallet[..8],
+                &wallet[wallet.len() - 4..]
+            ));
 
             // Fetch transfers for this wallet
             let params = serde_json::json!({
@@ -1546,7 +1712,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
             let server_id = {
                 let mcp = self.mcp_service.lock().await;
-                mcp.get_first_enabled_server_id().unwrap_or_else(|| "osvm-mcp".to_string())
+                mcp.get_first_enabled_server_id()
+                    .unwrap_or_else(|| "osvm-mcp".to_string())
             };
 
             // Call with timeout to avoid hanging
@@ -1556,15 +1723,16 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                 let mcp = self.mcp_service.lock().await;
                 tokio::time::timeout(
                     tokio::time::Duration::from_secs(15),
-                    mcp.call_tool(&server_id, "get_account_transfers", Some(params))
-                ).await
+                    mcp.call_tool(&server_id, "get_account_transfers", Some(params)),
+                )
+                .await
             };
 
             let result = match result {
                 Ok(r) => {
                     self.stream_log(&format!("📥 Got response for {}", &wallet[..8]));
                     r
-                },
+                }
                 Err(_) => {
                     self.stream_log(&format!("⏱️ Timeout fetching {}", &wallet[..8]));
                     continue;
@@ -1574,20 +1742,31 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             match result {
                 Ok(data) => {
                     // Debug log to see the structure
-                    self.stream_log(&format!("📦 Raw MCP response type: {}",
-                        if data.is_object() { "object" }
-                        else if data.is_array() { "array" }
-                        else if data.is_string() { "string" }
-                        else { "other" }
+                    self.stream_log(&format!(
+                        "📦 Raw MCP response type: {}",
+                        if data.is_object() {
+                            "object"
+                        } else if data.is_array() {
+                            "array"
+                        } else if data.is_string() {
+                            "string"
+                        } else {
+                            "other"
+                        }
                     ));
 
                     if let Some(obj) = data.as_object() {
-                        self.stream_log(&format!("📦 Response keys: {:?}", obj.keys().collect::<Vec<_>>()));
+                        self.stream_log(&format!(
+                            "📦 Response keys: {:?}",
+                            obj.keys().collect::<Vec<_>>()
+                        ));
                     }
 
                     self.stream_log(&format!("✅ Processing transfers for {}", &wallet[..8]));
                     // Process transfers and collect new wallets to explore
-                    let new_wallets = self.process_transfers_for_expansion(&data, &wallet, &target).await;
+                    let new_wallets = self
+                        .process_transfers_for_expansion(&data, &wallet, &target)
+                        .await;
 
                     // Queue unvisited wallets for next depth level
                     if depth < max_depth {
@@ -1612,14 +1791,25 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
         let state = self.state.lock().await;
         let node_count = state.knowledge_graph.wallets.len();
         let edge_count = state.knowledge_graph.relationships.len();
-        self.stream_log(&format!("✅ Done: {} wallets, {} connections", node_count, edge_count));
+        self.stream_log(&format!(
+            "✅ Done: {} wallets, {} connections",
+            node_count, edge_count
+        ));
 
-        Ok(format!("Explored {} wallets, {} connections", node_count, edge_count))
+        Ok(format!(
+            "Explored {} wallets, {} connections",
+            node_count, edge_count
+        ))
     }
 
     /// Process transfers and return list of connected wallets (SOL/SPL only)
     /// Also sends historical transfer data (with real timestamps) to TUI
-    async fn process_transfers_for_expansion(&self, data: &serde_json::Value, current_wallet: &str, target: &str) -> Vec<String> {
+    async fn process_transfers_for_expansion(
+        &self,
+        data: &serde_json::Value,
+        current_wallet: &str,
+        target: &str,
+    ) -> Vec<String> {
         let mut connected_wallets = Vec::new();
 
         // MCP returns: {content: [{type: "text", text: "{data: [...]}"}]}
@@ -1630,7 +1820,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
         // Debug log to see what we got
         if transfers_array.is_none() {
-            self.stream_log(&format!("⚠️ No transfers found. Data keys: {:?}",
+            self.stream_log(&format!(
+                "⚠️ No transfers found. Data keys: {:?}",
                 data.as_object().map(|o| o.keys().collect::<Vec<_>>())
             ));
         } else if let Some(ref arr) = transfers_array {
@@ -1648,13 +1839,15 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
                 let from = transfer["from"].as_str().unwrap_or("");
                 let to = transfer["to"].as_str().unwrap_or("");
-                let amount = transfer["tokenAmount"].as_str()
+                let amount = transfer["tokenAmount"]
+                    .as_str()
                     .and_then(|s| s.parse::<f64>().ok())
                     .unwrap_or(0.0);
                 let token = transfer["tokenSymbol"].as_str().unwrap_or("SOL");
 
                 // Get historical timestamp from transfer data
-                let timestamp = transfer["date"].as_str()
+                let timestamp = transfer["date"]
+                    .as_str()
                     .or_else(|| transfer["timestamp"].as_str())
                     .unwrap_or("");
 
@@ -1676,10 +1869,15 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                         timestamp
                     };
                     let direction = if to == target { "IN" } else { "OUT" };
-                    self.stream_log(&format!("  {} {} {} {} ({})",
+                    self.stream_log(&format!(
+                        "  {} {} {} {} ({})",
                         if direction == "IN" { "↓" } else { "↑" },
                         date_display,
-                        if amount >= 1000.0 { format!("{:.1}K", amount/1000.0) } else { format!("{:.2}", amount) },
+                        if amount >= 1000.0 {
+                            format!("{:.1}K", amount / 1000.0)
+                        } else {
+                            format!("{:.2}", amount)
+                        },
                         token,
                         direction
                     ));
@@ -1712,12 +1910,17 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
         // Step 1: Generate initial investigation plan (TODO list)
         crate::tui_log!("🔍 DEBUG: About to call stream_thinking...");
         self.stream_thinking("Creating investigation strategy...");
-        crate::tui_log!("🔍 DEBUG: stream_thinking completed, calling generate_investigation_plan...");
+        crate::tui_log!(
+            "🔍 DEBUG: stream_thinking completed, calling generate_investigation_plan..."
+        );
         let investigation_plan = match self.generate_investigation_plan().await {
             Ok(plan) => {
-                crate::tui_log!("🔍 DEBUG: generate_investigation_plan returned Ok with {} items", plan.len());
+                crate::tui_log!(
+                    "🔍 DEBUG: generate_investigation_plan returned Ok with {} items",
+                    plan.len()
+                );
                 plan
-            },
+            }
             Err(e) => {
                 crate::tui_log!("⚠️  AI planning failed: {}. Using fallback plan with direct blockchain queries.", e);
                 // Use fallback plan that focuses on actual blockchain data
@@ -1726,7 +1929,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                         task: "Query wallet transfer history via MCP".to_string(),
                         status: TodoStatus::Pending,
                         priority: 5,
-                        reason: "Get real blockchain data regardless of AI availability".to_string(),
+                        reason: "Get real blockchain data regardless of AI availability"
+                            .to_string(),
                         findings_so_far: Vec::new(),
                     },
                     InvestigationTodo {
@@ -1756,8 +1960,13 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
         self.stream_log("📋 Investigation Plan:");
         for (i, todo) in investigation_plan.iter().enumerate() {
-            self.stream_log(&format!("   {}. [Priority {}] {} - {}",
-                     i + 1, todo.priority, todo.task, todo.reason));
+            self.stream_log(&format!(
+                "   {}. [Priority {}] {} - {}",
+                i + 1,
+                todo.priority,
+                todo.task,
+                todo.reason
+            ));
         }
 
         let max_iterations = 15;
@@ -1771,18 +1980,26 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             let decision = self.decide_next_action().await?;
             crate::tui_log!("🔍 DEBUG: decide_next_action returned");
 
-            self.stream_thinking(&format!("Decision: {}", decision.lines().next().unwrap_or("Investigating...")));
+            self.stream_thinking(&format!(
+                "Decision: {}",
+                decision.lines().next().unwrap_or("Investigating...")
+            ));
 
             // 2. Execute the chosen action via OVSM + MCP
             self.stream_thinking("Executing investigation step via OVSM...");
-            crate::tui_log!("🔍 DEBUG: Calling execute_dynamic_investigation with decision: {}", decision.lines().next().unwrap_or("?"));
+            crate::tui_log!(
+                "🔍 DEBUG: Calling execute_dynamic_investigation with decision: {}",
+                decision.lines().next().unwrap_or("?")
+            );
             let result = self.execute_dynamic_investigation(&decision).await?;
             crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation returned");
 
             // 2.5. Build knowledge graph if we got transfer data
             {
                 let state = self.state.lock().await;
-                let should_build = state.findings.last()
+                let should_build = state
+                    .findings
+                    .last()
                     .map(|f| f.category.contains("get_account_transfers"))
                     .unwrap_or(false);
                 let raw_data = state.findings.last().map(|f| f.raw_data.clone());
@@ -1806,15 +2023,21 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             // 3. Stream findings in real-time
             self.stream_log("📊 Findings:");
             // Truncate result for log display (first 500 chars)
-            let result_preview = if result.len() > 500 { format!("{}...", &result[..500]) } else { result.clone() };
+            let result_preview = if result.len() > 500 {
+                format!("{}...", &result[..500])
+            } else {
+                result.clone()
+            };
             self.stream_log(&result_preview);
 
             // 4. Self-evaluate: What did we learn? What's next?
             self.stream_thinking("Self-evaluating findings...");
             let evaluation = match tokio::time::timeout(
                 tokio::time::Duration::from_secs(30),
-                self.evaluate_and_reflect(&result)
-            ).await {
+                self.evaluate_and_reflect(&result),
+            )
+            .await
+            {
                 Ok(Ok(eval)) => {
                     self.stream_log("🧠 AI Reflection received");
                     eval
@@ -1834,7 +2057,9 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
             // 6. Check if investigation is complete
             let state = self.state.lock().await.clone();
-            let all_completed = state.investigation_todos.iter()
+            let all_completed = state
+                .investigation_todos
+                .iter()
                 .all(|t| t.status == TodoStatus::Completed || t.status == TodoStatus::Blocked);
 
             {
@@ -1844,7 +2069,10 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
             if all_completed && iteration >= 5 {
                 self.stream_thinking("All investigation tasks completed!");
-                tracing::info!("✅ Investigation complete after {} iterations", iteration + 1);
+                tracing::info!(
+                    "✅ Investigation complete after {} iterations",
+                    iteration + 1
+                );
                 break;
             }
 
@@ -1871,13 +2099,17 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
     /// Execute a dynamically chosen investigation action based on AI decision
     async fn execute_dynamic_investigation(&self, decision_json: &str) -> Result<String> {
         // Parse the AI's decision about what to investigate
-        let decision_clean = decision_json.trim()
+        let decision_clean = decision_json
+            .trim()
             .trim_start_matches("```json")
             .trim_start_matches("```")
             .trim_end_matches("```")
             .trim();
 
-        crate::tui_log!("🔍 DEBUG: Attempting to parse decision_clean: {:?}", decision_clean);
+        crate::tui_log!(
+            "🔍 DEBUG: Attempting to parse decision_clean: {:?}",
+            decision_clean
+        );
         let decision: Result<serde_json::Value, _> = serde_json::from_str(decision_clean);
 
         // Get state first (needed for wallet address in fallbacks)
@@ -1885,17 +2117,23 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
         let (mcp_tool, params) = match decision {
             Ok(dec) => {
-                let tool = dec["mcp_tool"].as_str().unwrap_or("get_account_transfers").to_string();
+                let tool = dec["mcp_tool"]
+                    .as_str()
+                    .unwrap_or("get_account_transfers")
+                    .to_string();
                 let params = dec["parameters"].clone();
 
                 // Check if tool name is empty
                 if tool.trim().is_empty() {
                     crate::tui_log!("⚠️  DEBUG: AI returned empty mcp_tool, using fallback: get_account_transfers");
-                    ("get_account_transfers".to_string(), serde_json::json!({
-                        "address": state.target_wallet.clone(),
-                        "limit": 500,
-                        "compress": true
-                    }))
+                    (
+                        "get_account_transfers".to_string(),
+                        serde_json::json!({
+                            "address": state.target_wallet.clone(),
+                            "limit": 500,
+                            "compress": true
+                        }),
+                    )
                 } else {
                     // FORCE compress=true for get_account_transfers to avoid response size issues
                     let mut params = params;
@@ -1904,7 +2142,11 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                             obj.insert("compress".to_string(), serde_json::json!(true));
                         }
                     }
-                    crate::tui_log!("✅ DEBUG: Successfully parsed AI decision - tool: {}, params: {}", tool, params);
+                    crate::tui_log!(
+                        "✅ DEBUG: Successfully parsed AI decision - tool: {}, params: {}",
+                        tool,
+                        params
+                    );
                     (tool, params)
                 }
             }
@@ -1912,20 +2154,31 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                 // Fallback: use account transfers with compress=true
                 crate::tui_log!("⚠️  DEBUG: Failed to parse AI decision: {}", e);
                 crate::tui_log!("⚠️  DEBUG: Cleaned string was: {:?}", decision_clean);
-                ("get_account_transfers".to_string(), serde_json::json!({
-                    "address": state.target_wallet.clone(),
-                    "limit": 500,
-                    "compress": true
-                }))
+                (
+                    "get_account_transfers".to_string(),
+                    serde_json::json!({
+                        "address": state.target_wallet.clone(),
+                        "limit": 500,
+                        "compress": true
+                    }),
+                )
             }
         };
 
         // Generate OVSM script to call the chosen MCP tool
 
         // Convert params JSON to OVSM map syntax
-        crate::tui_log!("🔍 DEBUG: params type: {}, is_object: {}",
-                 if params.is_object() { "object" } else if params.is_null() { "null" } else { "other" },
-                 params.is_object());
+        crate::tui_log!(
+            "🔍 DEBUG: params type: {}, is_object: {}",
+            if params.is_object() {
+                "object"
+            } else if params.is_null() {
+                "null"
+            } else {
+                "other"
+            },
+            params.is_object()
+        );
         let params_str = if params.is_object() && !params.as_object().unwrap().is_empty() {
             let mut pairs = Vec::new();
             for (key, value) in params.as_object().unwrap() {
@@ -1945,7 +2198,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             format!(r#"{{:address "{}"}}"#, state.target_wallet)
         };
 
-        let ovsm_script = format!(r#"(do
+        let ovsm_script = format!(
+            r#"(do
   (define wallet "{}")
 
   ;; Execute dynamically chosen MCP tool: {}
@@ -1955,41 +2209,61 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
   {{:tool "{}"
    :wallet wallet
    :data result}}
-)"#, state.target_wallet, mcp_tool, mcp_tool, params_str, mcp_tool);
+)"#,
+            state.target_wallet, mcp_tool, mcp_tool, params_str, mcp_tool
+        );
 
         self.stream_thinking(&format!("Calling MCP tool: {}", mcp_tool));
 
         crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation - Acquiring OVSM lock...");
         crate::tui_log!("🔍 DEBUG: Generated OVSM script:\n{}", ovsm_script);
         // Execute OVSM script with timeout (120s for large transfers)
-        crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation - Executing OVSM script for tool '{}'...", mcp_tool);
+        crate::tui_log!(
+            "🔍 DEBUG: execute_dynamic_investigation - Executing OVSM script for tool '{}'...",
+            mcp_tool
+        );
 
         let timeout_duration = std::time::Duration::from_secs(120);
         let ovsm_clone = Arc::clone(&self.ovsm_service);
         let script_clone = ovsm_script.clone();
 
-        let result_value = match tokio::time::timeout(timeout_duration, tokio::task::spawn_blocking(move || {
-            let mut ovsm = futures::executor::block_on(ovsm_clone.lock());
-            ovsm.execute_code(&script_clone)
-        })).await {
+        let result_value = match tokio::time::timeout(
+            timeout_duration,
+            tokio::task::spawn_blocking(move || {
+                let mut ovsm = futures::executor::block_on(ovsm_clone.lock());
+                ovsm.execute_code(&script_clone)
+            }),
+        )
+        .await
+        {
             Ok(Ok(Ok(value))) => {
-                crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation - OVSM script executed successfully");
+                crate::tui_log!(
+                    "🔍 DEBUG: execute_dynamic_investigation - OVSM script executed successfully"
+                );
                 value
-            },
+            }
             Ok(Ok(Err(e))) => {
                 return Err(anyhow::anyhow!("OVSM execution failed: {}", e));
-            },
+            }
             Ok(Err(e)) => {
                 return Err(anyhow::anyhow!("Spawn blocking failed: {}", e));
-            },
+            }
             Err(_) => {
-                crate::tui_log!("⚠️  MCP tool '{}' timed out after {}s - continuing with fallback", mcp_tool, timeout_duration.as_secs());
-                return Err(anyhow::anyhow!("MCP tool '{}' execution timeout ({}s)", mcp_tool, timeout_duration.as_secs()));
+                crate::tui_log!(
+                    "⚠️  MCP tool '{}' timed out after {}s - continuing with fallback",
+                    mcp_tool,
+                    timeout_duration.as_secs()
+                );
+                return Err(anyhow::anyhow!(
+                    "MCP tool '{}' execution timeout ({}s)",
+                    mcp_tool,
+                    timeout_duration.as_secs()
+                ));
             }
         };
 
         // Convert to JSON for analysis
-        let result_json = self.value_to_json(result_value)?;
+        let result_json = Self::value_to_json(result_value)?;
 
         // Summarize findings instead of dumping raw JSON (which can be huge!)
         let findings = self.summarize_mcp_result(&mcp_tool, &result_json);
@@ -2016,7 +2290,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
     async fn evaluate_and_reflect(&self, findings: &str) -> Result<String> {
         let state = self.state.lock().await.clone();
 
-        let reflection_prompt = format!(r#"You are a blockchain investigator reflecting on new findings.
+        let reflection_prompt = format!(
+            r#"You are a blockchain investigator reflecting on new findings.
 
 Current Investigation State:
 - Wallet: {}
@@ -2044,9 +2319,21 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
             state.target_wallet,
             state.iteration,
             state.findings.len(),
-            state.investigation_todos.iter().filter(|t| t.status == TodoStatus::Pending).count(),
-            state.investigation_todos.iter().filter(|t| t.status == TodoStatus::InProgress).count(),
-            state.investigation_todos.iter().filter(|t| t.status == TodoStatus::Completed).count(),
+            state
+                .investigation_todos
+                .iter()
+                .filter(|t| t.status == TodoStatus::Pending)
+                .count(),
+            state
+                .investigation_todos
+                .iter()
+                .filter(|t| t.status == TodoStatus::InProgress)
+                .count(),
+            state
+                .investigation_todos
+                .iter()
+                .filter(|t| t.status == TodoStatus::Completed)
+                .count(),
             findings
         );
 
@@ -2066,9 +2353,12 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
     }
 
     /// Build deep knowledge graph with recursive wallet traversal (depth-5)
-    async fn build_knowledge_graph_from_transfers(&self, transfers_json: &serde_json::Value) -> Result<()> {
+    async fn build_knowledge_graph_from_transfers(
+        &self,
+        transfers_json: &serde_json::Value,
+    ) -> Result<()> {
         // Start with target wallet transfers
-        self.process_wallet_transfers(&transfers_json, 0).await?;
+        self.process_wallet_transfers(transfers_json, 0).await?;
 
         // Recursively expand the graph to depth 5
         self.expand_graph_recursively(5).await?;
@@ -2077,7 +2367,11 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
     }
 
     /// Process transfers for a single wallet and add to graph
-    async fn process_wallet_transfers(&self, transfers_json: &serde_json::Value, current_depth: usize) -> Result<()> {
+    async fn process_wallet_transfers(
+        &self,
+        transfers_json: &serde_json::Value,
+        current_depth: usize,
+    ) -> Result<()> {
         let mut state = self.state.lock().await;
         let target = state.target_wallet.clone();
 
@@ -2092,7 +2386,8 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
 
                 let from = transfer["from"].as_str().unwrap_or("");
                 let to = transfer["to"].as_str().unwrap_or("");
-                let amount = transfer["tokenAmount"].as_str()
+                let amount = transfer["tokenAmount"]
+                    .as_str()
                     .and_then(|s| s.parse::<f64>().ok())
                     .unwrap_or(0.0);
                 let transfer_type = transfer["transferType"].as_str().unwrap_or("");
@@ -2122,14 +2417,21 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
                             "related"
                         };
 
-                        state.knowledge_graph.wallets.insert(wallet.to_string(), WalletNode {
-                            id: format!("wallet:{}", wallet),
-                            node_type: "SolanaWallet".to_string(),
-                            label: format!("{}...{}", &wallet[..6], &wallet[wallet.len()-4..]),
-                            first_seen: transfer["date"].as_str().map(String::from),
-                            total_volume: amount,
-                            wallet_type: wallet_type.to_string(),
-                        });
+                        state.knowledge_graph.wallets.insert(
+                            wallet.to_string(),
+                            WalletNode {
+                                id: format!("wallet:{}", wallet),
+                                node_type: "SolanaWallet".to_string(),
+                                label: format!(
+                                    "{}...{}",
+                                    &wallet[..6],
+                                    &wallet[wallet.len() - 4..]
+                                ),
+                                first_seen: transfer["date"].as_str().map(String::from),
+                                total_volume: amount,
+                                wallet_type: wallet_type.to_string(),
+                            },
+                        );
                     } else {
                         // Update volume for existing wallet
                         if let Some(node) = state.knowledge_graph.wallets.get_mut(wallet) {
@@ -2139,8 +2441,11 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
                 }
 
                 // Check if reverse relationship exists (round-trip indicator)
-                let has_reverse = state.knowledge_graph.relationships.iter()
-                    .any(|r| r.from == to && r.to == from && r.relationship_type == RelationshipType::SimpleTransfer);
+                let has_reverse = state.knowledge_graph.relationships.iter().any(|r| {
+                    r.from == to
+                        && r.to == from
+                        && r.relationship_type == RelationshipType::SimpleTransfer
+                });
 
                 let rel_type = if has_reverse {
                     RelationshipType::RoundTrip
@@ -2151,22 +2456,29 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
                 let confidence = if has_reverse { 0.95 } else { 0.7 };
 
                 // Add or update relationship
-                if let Some(existing) = state.knowledge_graph.relationships.iter_mut()
-                    .find(|r| r.from == from && r.to == to) {
+                if let Some(existing) = state
+                    .knowledge_graph
+                    .relationships
+                    .iter_mut()
+                    .find(|r| r.from == from && r.to == to)
+                {
                     existing.volume += amount;
                     existing.tx_count += 1;
                     existing.relationship_type = rel_type.clone();
                     existing.confidence = confidence;
                 } else {
-                    state.knowledge_graph.relationships.push(WalletRelationship {
-                        rel_type: "Transfer".to_string(),
-                        from: from.to_string(),
-                        to: to.to_string(),
-                        relationship_type: rel_type,
-                        volume: amount,
-                        tx_count: 1,
-                        confidence,
-                    });
+                    state
+                        .knowledge_graph
+                        .relationships
+                        .push(WalletRelationship {
+                            rel_type: "Transfer".to_string(),
+                            from: from.to_string(),
+                            to: to.to_string(),
+                            relationship_type: rel_type,
+                            volume: amount,
+                            tx_count: 1,
+                            confidence,
+                        });
                 }
             }
         }
@@ -2191,14 +2503,20 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         // Get initial wallets to explore (from target's first hop)
         let initial_wallets: Vec<String> = {
             let state = self.state.lock().await;
-            state.knowledge_graph.wallets.keys()
+            state
+                .knowledge_graph
+                .wallets
+                .keys()
                 .filter(|w| *w != &target_wallet)
                 .cloned()
                 .collect()
         };
 
-        tracing::debug!("🔍 Starting CONCURRENT recursive exploration of {} initial wallets (max depth: {})...",
-            initial_wallets.len(), max_depth);
+        tracing::debug!(
+            "🔍 Starting CONCURRENT recursive exploration of {} initial wallets (max depth: {})...",
+            initial_wallets.len(),
+            max_depth
+        );
 
         // Spawn independent recursive tasks for each wallet
         let mut tasks = Vec::new();
@@ -2208,7 +2526,9 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
             let agent_clone = self.clone();
 
             let task = tokio::spawn(async move {
-                agent_clone.explore_wallet_recursive(wallet, 1, max_depth, visited_clone).await
+                agent_clone
+                    .explore_wallet_recursive(wallet, 1, max_depth, visited_clone)
+                    .await
             });
 
             tasks.push(task);
@@ -2219,7 +2539,11 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
 
         // Count successes
         let successful = results.iter().filter(|r| r.is_ok()).count();
-        tracing::debug!("✅ Recursive exploration complete: {}/{} tasks succeeded", successful, results.len());
+        tracing::debug!(
+            "✅ Recursive exploration complete: {}/{} tasks succeeded",
+            successful,
+            results.len()
+        );
 
         Ok(())
     }
@@ -2252,7 +2576,11 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         };
 
         if should_skip {
-            tracing::debug!("   [D{}] ⚠️  {} - SKIP (exchange)", current_depth, &wallet[..8]);
+            tracing::debug!(
+                "   [D{}] ⚠️  {} - SKIP (exchange)",
+                current_depth,
+                &wallet[..8]
+            );
             return Ok(());
         }
 
@@ -2271,35 +2599,53 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         };
 
         // Process transfers and get new wallets discovered
-        let new_wallets = match self.process_wallet_transfers(&transfers_json, current_depth).await {
+        let new_wallets = match self
+            .process_wallet_transfers(&transfers_json, current_depth)
+            .await
+        {
             Ok(_) => {
                 // Get newly discovered wallets from this processing
                 let visited_set = visited.lock().await;
                 let state = self.state.lock().await;
-                state.knowledge_graph.wallets.keys()
+                state
+                    .knowledge_graph
+                    .wallets
+                    .keys()
                     .filter(|w| !visited_set.contains(*w))
                     .cloned()
                     .collect::<Vec<_>>()
             }
             Err(e) => {
-                tracing::debug!("   [D{}] ✗ {} - processing failed: {}", current_depth, &wallet[..8], e);
+                tracing::debug!(
+                    "   [D{}] ✗ {} - processing failed: {}",
+                    current_depth,
+                    &wallet[..8],
+                    e
+                );
                 return Ok(());
             }
         };
 
-        tracing::debug!("   [D{}] ✓ {} - processed, found {} new wallets",
-            current_depth, &wallet[..8], new_wallets.len());
+        tracing::debug!(
+            "   [D{}] ✓ {} - processed, found {} new wallets",
+            current_depth,
+            &wallet[..8],
+            new_wallets.len()
+        );
 
         // If we haven't reached max depth, recursively explore neighbors CONCURRENTLY
         if current_depth < max_depth && !new_wallets.is_empty() {
-            let tasks: Vec<_> = new_wallets.into_iter().map(|new_wallet| {
-                self.explore_wallet_recursive(
-                    new_wallet,
-                    current_depth + 1,
-                    max_depth,
-                    Arc::clone(&visited),
-                )
-            }).collect();
+            let tasks: Vec<_> = new_wallets
+                .into_iter()
+                .map(|new_wallet| {
+                    self.explore_wallet_recursive(
+                        new_wallet,
+                        current_depth + 1,
+                        max_depth,
+                        Arc::clone(&visited),
+                    )
+                })
+                .collect();
 
             // Execute all child explorations concurrently
             futures::future::join_all(tasks).await;
@@ -2312,7 +2658,8 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
     async fn fetch_wallet_transfers_filtered(&self, address: &str) -> Result<serde_json::Value> {
         // Generate OVSM script to call get_account_transfers with txType filter
         // Use smaller limit for faster exploration (we only need basic relationships)
-        let ovsm_script = format!(r#"
+        let ovsm_script = format!(
+            r#"
 (do
   (define transfers (get_account_transfers {{
     :address "{}"
@@ -2320,15 +2667,18 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
     :txType "sol,spl"
   }}))
   transfers)
-"#, address);
+"#,
+            address
+        );
 
         // Execute via OVSM service
         let mut ovsm = self.ovsm_service.lock().await;
-        let result_value = ovsm.execute_code(&ovsm_script)
+        let result_value = ovsm
+            .execute_code(&ovsm_script)
             .context("Failed to fetch wallet transfers")?;
 
         // Convert OVSM Value to JSON
-        let result_json = self.value_to_json(result_value)?;
+        let result_json = Self::value_to_json(result_value)?;
 
         Ok(result_json)
     }
@@ -2339,8 +2689,15 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         let target = &state.target_wallet;
 
         // Find all funding sources (wallets that sent TO target)
-        let funding_sources: Vec<String> = state.knowledge_graph.relationships.iter()
-            .filter(|rel| &rel.to == target && (rel.relationship_type == RelationshipType::Funding || rel.relationship_type == RelationshipType::SimpleTransfer))
+        let funding_sources: Vec<String> = state
+            .knowledge_graph
+            .relationships
+            .iter()
+            .filter(|rel| {
+                &rel.to == target
+                    && (rel.relationship_type == RelationshipType::Funding
+                        || rel.relationship_type == RelationshipType::SimpleTransfer)
+            })
             .map(|rel| rel.from.clone())
             .collect();
 
@@ -2361,8 +2718,13 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         }
 
         // Also find outflow paths (from target to receivers)
-        let receivers: Vec<String> = state.knowledge_graph.relationships.iter()
-            .filter(|rel| &rel.from == target && rel.relationship_type == RelationshipType::SimpleTransfer)
+        let receivers: Vec<String> = state
+            .knowledge_graph
+            .relationships
+            .iter()
+            .filter(|rel| {
+                &rel.from == target && rel.relationship_type == RelationshipType::SimpleTransfer
+            })
             .map(|rel| rel.to.clone())
             .collect();
 
@@ -2384,13 +2746,16 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         // Rank paths by volume and recency
         all_paths.sort_by(|a, b| {
             // Sort by volume (descending)
-            b.total_volume.partial_cmp(&a.total_volume).unwrap_or(std::cmp::Ordering::Equal)
+            b.total_volume
+                .partial_cmp(&a.total_volume)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         all_paths
     }
 
     /// DFS helper to recursively find paths
+    #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
     fn dfs_find_paths(
         &self,
         current: &str,
@@ -2410,8 +2775,11 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         visited.insert(current.to_string());
 
         // Find all relationships from current wallet
-        let outgoing: Vec<&WalletRelationship> = state.knowledge_graph.relationships.iter()
-            .filter(|rel| &rel.from == current && !visited.contains(&rel.to))
+        let outgoing: Vec<&WalletRelationship> = state
+            .knowledge_graph
+            .relationships
+            .iter()
+            .filter(|rel| rel.from == current && !visited.contains(&rel.to))
             .collect();
 
         for rel in outgoing {
@@ -2419,19 +2787,30 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
             path.push(PathHop {
                 wallet: rel.to.clone(),
                 amount: rel.volume,
-                timestamp: state.knowledge_graph.wallets.get(&rel.to)
+                timestamp: state
+                    .knowledge_graph
+                    .wallets
+                    .get(&rel.to)
                     .and_then(|w| w.first_seen.clone()),
                 depth,
             });
 
             // If we reached the target, save this path
-            if &rel.to == target {
+            if rel.to == target {
                 let total_volume: f64 = path.iter().map(|h| h.amount).sum();
-                let confidence = if rel.relationship_type == RelationshipType::RoundTrip { 0.95 } else { 0.70 };
+                let confidence = if rel.relationship_type == RelationshipType::RoundTrip {
+                    0.95
+                } else {
+                    0.70
+                };
 
                 let path_type = if path.len() == 1 {
                     // Direct path
-                    if state.knowledge_graph.relationships.iter().any(|r| &r.from == target && &r.to == current && r.relationship_type == RelationshipType::RoundTrip) {
+                    if state.knowledge_graph.relationships.iter().any(|r| {
+                        r.from == target
+                            && r.to == current
+                            && r.relationship_type == RelationshipType::RoundTrip
+                    }) {
                         PathType::RoundTrip
                     } else if path[0].wallet == *target {
                         PathType::Outflow
@@ -2481,8 +2860,13 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
             Ok(t) => t,
             Err(_) => {
                 // Fallback to empty template if file not found
-                tracing::warn!("Template file not found at {}, using minimal example", template_path);
-                String::from("Example horizontal pipeline visualization with wallet boxes and arrows")
+                tracing::warn!(
+                    "Template file not found at {}, using minimal example",
+                    template_path
+                );
+                String::from(
+                    "Example horizontal pipeline visualization with wallet boxes and arrows",
+                )
             }
         };
 
@@ -2499,7 +2883,7 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
 
         let mut by_depth: HashMap<usize, Vec<String>> = HashMap::new();
         for (addr, depth) in &depths {
-            by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
+            by_depth.entry(*depth).or_default().push(addr.clone());
         }
 
         for depth in 0..=std::cmp::min(max_depth, 10) {
@@ -2507,13 +2891,18 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
                 data_summary.push_str(&format!("Depth {}: {} wallets\n", depth, wallets.len()));
                 // SHOW ALL WALLETS - removed .take(5) limit for complete forensic data
                 for wallet in wallets.iter() {
-                    let label = graph.nodes.get(wallet)
+                    let label = graph
+                        .nodes
+                        .get(wallet)
                         .and_then(|n| n.label.as_ref())
                         .map(|l| format!(" [{}]", l))
                         .unwrap_or_default();
                     let transfers = graph.get_aggregated_transfers(wallet);
                     let transfer_count = transfers.len();
-                    data_summary.push_str(&format!("  - {}{} ({} transfers)\n", wallet, label, transfer_count));
+                    data_summary.push_str(&format!(
+                        "  - {}{} ({} transfers)\n",
+                        wallet, label, transfer_count
+                    ));
                 }
             }
         }
@@ -2562,7 +2951,7 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             show_header: true,
             show_paths_summary: true,
             show_stats_summary: true,
-            address_truncate_length: 0,  // 0 = NEVER truncate (show full addresses)
+            address_truncate_length: 0, // 0 = NEVER truncate (show full addresses)
         };
 
         let mut graph = TransferGraph::with_config(config);
@@ -2586,7 +2975,10 @@ Generate the ASCII visualization ONLY (no explanations):"#,
                 to: rel.to.clone(),
                 amount: rel.volume,
                 token_symbol: "tokens".to_string(), // Could be enhanced with actual token symbol
-                timestamp: state.knowledge_graph.wallets.get(&rel.from)
+                timestamp: state
+                    .knowledge_graph
+                    .wallets
+                    .get(&rel.from)
                     .and_then(|w| w.first_seen.clone()),
                 note: Some(format!("{:?}", rel.relationship_type)),
             };
@@ -2603,7 +2995,10 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         let mut output = match self.generate_ai_pipeline_visualization(&graph).await {
             Ok(viz) => viz,
             Err(e) => {
-                tracing::warn!("AI visualization failed ({}), falling back to Canvas renderer", e);
+                tracing::warn!(
+                    "AI visualization failed ({}), falling back to Canvas renderer",
+                    e
+                );
                 graph.render_horizontal_pipeline()
             }
         };
@@ -2611,25 +3006,39 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         // Add additional analysis sections specific to blockchain investigation
         let all_paths = self.find_all_paths(state, 5);
 
-        let roundtrip_paths: Vec<_> = all_paths.iter()
+        let roundtrip_paths: Vec<_> = all_paths
+            .iter()
             .filter(|p| p.path_type == PathType::RoundTrip)
             .collect();
 
         // Add round-trip analysis (high-risk indicator)
         if !roundtrip_paths.is_empty() {
-            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
+            output.push_str(
+                "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n",
+            );
             output.push_str("⚠️  ROUND-TRIP TRANSFER ANALYSIS (Same Owner Detection)\n\n");
 
             // SHOW ALL ROUND-TRIP PATHS - removed .take(5) limit
             for (idx, path) in roundtrip_paths.iter().enumerate() {
-                output.push_str(&format!("PATH #{} - BIDIRECTIONAL FLOW (Confidence: 95%)\n", idx + 1));
+                output.push_str(&format!(
+                    "PATH #{} - BIDIRECTIONAL FLOW (Confidence: 95%)\n",
+                    idx + 1
+                ));
                 output.push_str(&format!("   Volume: {:.2} tokens\n", path.total_volume));
 
                 if !path.hops.is_empty() {
                     let first_hop = &path.hops[0];
-                    let wallet_label = state.knowledge_graph.wallets.get(&first_hop.wallet)
-                        .map(|w| w.label.as_str()).unwrap_or(&first_hop.wallet[..8]);
-                    let target_short = format!("{}...{}", &state.target_wallet[..6], &state.target_wallet[state.target_wallet.len()-4..]);
+                    let wallet_label = state
+                        .knowledge_graph
+                        .wallets
+                        .get(&first_hop.wallet)
+                        .map(|w| w.label.as_str())
+                        .unwrap_or(&first_hop.wallet[..8]);
+                    let target_short = format!(
+                        "{}...{}",
+                        &state.target_wallet[..6],
+                        &state.target_wallet[state.target_wallet.len() - 4..]
+                    );
 
                     output.push_str("   ┌────────────────────────────────────────┐\n");
                     output.push_str(&format!("   │  {} ══➤ {}  │\n", wallet_label, target_short));
@@ -2651,13 +3060,28 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             "LOW - Limited coordination evidence"
         };
 
-        output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
+        output.push_str(
+            "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n",
+        );
         output.push_str("🔍 RISK ASSESSMENT\n\n");
-        output.push_str("┌─────────────────────────────────────────────────────────────────────────┐\n");
-        output.push_str(&format!("│ Coordination Risk: {:<54} │\n", cluster_assessment));
-        output.push_str(&format!("│ Round-Trip Patterns: {:<52} │\n", total_roundtrips));
-        output.push_str(&format!("│ Total Investigation Paths: {:<48} │\n", all_paths.len()));
-        output.push_str("└─────────────────────────────────────────────────────────────────────────┘\n");
+        output.push_str(
+            "┌─────────────────────────────────────────────────────────────────────────┐\n",
+        );
+        output.push_str(&format!(
+            "│ Coordination Risk: {:<54} │\n",
+            cluster_assessment
+        ));
+        output.push_str(&format!(
+            "│ Round-Trip Patterns: {:<52} │\n",
+            total_roundtrips
+        ));
+        output.push_str(&format!(
+            "│ Total Investigation Paths: {:<48} │\n",
+            all_paths.len()
+        ));
+        output.push_str(
+            "└─────────────────────────────────────────────────────────────────────────┘\n",
+        );
 
         if total_roundtrips > 0 {
             output.push_str("\n⚠️  WARNING: Round-trip transfers detected - high probability of same-owner control.\n");
@@ -2667,12 +3091,19 @@ Generate the ASCII visualization ONLY (no explanations):"#,
 
         // AUTO-SWITCH TO TUI for complex graphs (depth > 4 OR convergence detected)
         let max_depth = all_paths.iter().map(|p| p.hops.len()).max().unwrap_or(0);
-        let convergence_wallets: HashSet<String> = state.knowledge_graph.relationships.iter()
+        let convergence_wallets: HashSet<String> = state
+            .knowledge_graph
+            .relationships
+            .iter()
             .map(|r| r.to.clone())
             .filter(|wallet| {
-                state.knowledge_graph.relationships.iter()
+                state
+                    .knowledge_graph
+                    .relationships
+                    .iter()
                     .filter(|r| &r.to == wallet)
-                    .count() > 1
+                    .count()
+                    > 1
             })
             .collect();
 
@@ -2680,16 +3111,27 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         let is_complex = max_depth > 4 || has_convergence;
 
         if is_complex {
-            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-            output.push_str(&format!("\n📊 COMPLEX GRAPH DETECTED (depth: {}, convergence points: {})\n", max_depth, convergence_wallets.len()));
-            output.push_str("\n💡 TIP: For better visualization of complex graphs, use interactive TUI mode:\n");
+            output.push_str(
+                "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+            );
+            output.push_str(&format!(
+                "\n📊 COMPLEX GRAPH DETECTED (depth: {}, convergence points: {})\n",
+                max_depth,
+                convergence_wallets.len()
+            ));
+            output.push_str(
+                "\n💡 TIP: For better visualization of complex graphs, use interactive TUI mode:\n",
+            );
             output.push_str("   osvm research --agent <WALLET> --tui\n\n");
             output.push_str("   TUI features:\n");
             output.push_str("   • Collapsible tree navigation for deep graphs\n");
-            output.push_str("   • Wallet convergence highlighting (multiple paths to same wallet)\n");
+            output
+                .push_str("   • Wallet convergence highlighting (multiple paths to same wallet)\n");
             output.push_str("   • Keyboard navigation (j/k, Enter to expand/collapse)\n");
             output.push_str("   • Search and filter capabilities\n");
-            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
+            output.push_str(
+                "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n",
+            );
         }
 
         output
@@ -2698,8 +3140,7 @@ Generate the ASCII visualization ONLY (no explanations):"#,
     /// Save knowledge graph to JSON-LD file
     async fn save_knowledge_graph(&self) -> Result<()> {
         let state = self.state.lock().await;
-        let filename = format!("/tmp/wallet_graph_{}.jsonld",
-                               &state.target_wallet[..8]);
+        let filename = format!("/tmp/wallet_graph_{}.jsonld", &state.target_wallet[..8]);
 
         let json_ld = serde_json::to_string_pretty(&state.knowledge_graph)?;
         std::fs::write(&filename, json_ld)?;
@@ -2722,15 +3163,19 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         };
 
         crate::tui_log!("? Executing OVSM script for phase: {:?}", state.phase);
-        crate::tui_log!("Script preview: {}", &ovsm_script[..ovsm_script.len().min(200)]);
+        crate::tui_log!(
+            "Script preview: {}",
+            &ovsm_script[..ovsm_script.len().min(200)]
+        );
 
         // Execute OVSM script
         let mut ovsm = self.ovsm_service.lock().await;
-        let result_value = ovsm.execute_code(&ovsm_script)
+        let result_value = ovsm
+            .execute_code(&ovsm_script)
             .context("Failed to execute OVSM script")?;
 
         // Convert Value to serde_json::Value
-        let result = self.value_to_json(result_value)?;
+        let result = Self::value_to_json(result_value)?;
 
         // Store findings
         self.store_findings(result.clone()).await?;
@@ -2759,12 +3204,14 @@ Generate the ASCII visualization ONLY (no explanations):"#,
 
         // Call AI with custom system prompt
         let ai_service = self.ai_service.lock().await;
-        let evaluation = ai_service.query_with_system_prompt(
-            &system_prompt,
-            &user_prompt
-        ).await?;
+        let evaluation = ai_service
+            .query_with_system_prompt(&system_prompt, &user_prompt)
+            .await?;
 
-        crate::tui_log!("? AI Evaluation:\n{}", &evaluation[..evaluation.len().min(500)]);
+        crate::tui_log!(
+            "? AI Evaluation:\n{}",
+            &evaluation[..evaluation.len().min(500)]
+        );
 
         Ok(evaluation)
     }
@@ -2811,18 +3258,20 @@ Generate the ASCII visualization ONLY (no explanations):"#,
     /// Decide whether to continue investigation based on AI evaluation
     async fn decide_next_steps(&self, evaluation: String) -> Result<bool> {
         // Parse AI evaluation (assuming JSON response)
-        let eval_json: serde_json::Value = serde_json::from_str(&evaluation)
-            .unwrap_or_else(|_| serde_json::json!({
+        let eval_json: serde_json::Value = serde_json::from_str(&evaluation).unwrap_or_else(|_| {
+            serde_json::json!({
                 "next_steps": ["continue"],
                 "significance": 0.5,
                 "confidence_updates": {}
-            }));
+            })
+        });
 
         let mut state = self.state.lock().await;
 
         // Update next steps from AI evaluation
         if let Some(steps) = eval_json["next_steps"].as_array() {
-            state.next_steps = steps.iter()
+            state.next_steps = steps
+                .iter()
                 .filter_map(|s| s.as_str().map(String::from))
                 .collect();
         }
@@ -3052,7 +3501,11 @@ Generate the ASCII visualization ONLY (no explanations):"#,
     }
 
     /// Calculate significance of a finding based on its content
-    fn calculate_finding_significance(&self, result: &serde_json::Value, phase: &InvestigationPhase) -> f64 {
+    fn calculate_finding_significance(
+        &self,
+        result: &serde_json::Value,
+        phase: &InvestigationPhase,
+    ) -> f64 {
         let mut significance = 0.5; // Base significance
 
         // Adjust based on phase
@@ -3076,7 +3529,11 @@ Generate the ASCII visualization ONLY (no explanations):"#,
                     significance += 0.1 * (anomalies.len() as f64).min(3.0) / 3.0;
                 }
             }
-            if obj.get("wash_trading_detected").and_then(|v| v.as_bool()).unwrap_or(false) {
+            if obj
+                .get("wash_trading_detected")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
                 significance += 0.3;
             }
             if obj.contains_key("risk_assessment") {
@@ -3089,11 +3546,15 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             }
         }
 
-        significance.min(1.0).max(0.1) // Clamp between 0.1 and 1.0
+        significance.clamp(0.1, 1.0) // Clamp between 0.1 and 1.0
     }
 
     /// Extract a descriptive summary of the finding
-    fn extract_finding_description(&self, result: &serde_json::Value, phase: &InvestigationPhase) -> String {
+    fn extract_finding_description(
+        &self,
+        result: &serde_json::Value,
+        phase: &InvestigationPhase,
+    ) -> String {
         let base_desc = match phase {
             InvestigationPhase::Initial => "Initial wallet profiling completed",
             InvestigationPhase::BasicProfiling => "Basic behavior analysis completed",
@@ -3118,7 +3579,11 @@ Generate the ASCII visualization ONLY (no explanations):"#,
                     details.push("MEV activity detected".to_string());
                 }
             }
-            if obj.get("wash_trading_detected").and_then(|v| v.as_bool()).unwrap_or(false) {
+            if obj
+                .get("wash_trading_detected")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
                 details.push("Wash trading patterns detected".to_string());
             }
 
@@ -3170,7 +3635,10 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             // Check for DEX interactions
             if let Some(programs) = data.get("program_interactions").and_then(|v| v.as_object()) {
                 for (program, _) in programs {
-                    if program.contains("serum") || program.contains("raydium") || program.contains("orca") {
+                    if program.contains("serum")
+                        || program.contains("raydium")
+                        || program.contains("orca")
+                    {
                         dex_focus += 1;
                         break;
                     }
@@ -3184,9 +3652,20 @@ Generate the ASCII visualization ONLY (no explanations):"#,
                 statement: "This wallet exhibits automated trading behavior".to_string(),
                 confidence: (regular_intervals as f64 * 0.3 + high_frequency as f64 * 0.2).min(0.9),
                 supporting_evidence: vec![
-                    if regular_intervals > 0 { Some("Regular transaction intervals detected".to_string()) } else { None },
-                    if high_frequency > 0 { Some(format!("High transaction frequency observed")) } else { None },
-                ].into_iter().flatten().collect(),
+                    if regular_intervals > 0 {
+                        Some("Regular transaction intervals detected".to_string())
+                    } else {
+                        None
+                    },
+                    if high_frequency > 0 {
+                        Some("High transaction frequency observed".to_string())
+                    } else {
+                        None
+                    },
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
                 contradicting_evidence: vec![],
             });
         }
@@ -3197,15 +3676,23 @@ Generate the ASCII visualization ONLY (no explanations):"#,
                 confidence: (mev_activity as f64 * 0.4).min(0.85),
                 supporting_evidence: vec![
                     "MEV activity patterns detected".to_string(),
-                    if dex_focus > 0 { "Heavy DEX interaction observed".to_string() } else { "".to_string() },
-                ].into_iter().filter(|s| !s.is_empty()).collect(),
+                    if dex_focus > 0 {
+                        "Heavy DEX interaction observed".to_string()
+                    } else {
+                        "".to_string()
+                    },
+                ]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect(),
                 contradicting_evidence: vec![],
             });
         }
 
         if dex_focus > 1 && mev_activity == 0 {
             hypotheses.push(Hypothesis {
-                statement: "This wallet is primarily a DEX trader or liquidity provider".to_string(),
+                statement: "This wallet is primarily a DEX trader or liquidity provider"
+                    .to_string(),
                 confidence: (dex_focus as f64 * 0.25).min(0.75),
                 supporting_evidence: vec![
                     "Multiple DEX protocol interactions".to_string(),
@@ -3224,7 +3711,9 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             hypotheses.push(Hypothesis {
                 statement: "This wallet exhibits standard user trading patterns".to_string(),
                 confidence: 0.5,
-                supporting_evidence: vec!["Transaction activity within normal parameters".to_string()],
+                supporting_evidence: vec![
+                    "Transaction activity within normal parameters".to_string()
+                ],
                 contradicting_evidence: vec![],
             });
         }
@@ -3244,17 +3733,25 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         findings: &[Finding],
     ) -> InvestigationPhase {
         match current {
-            InvestigationPhase::Initial if findings.len() >= 1 => InvestigationPhase::BasicProfiling,
-            InvestigationPhase::BasicProfiling if findings.len() >= 2 => InvestigationPhase::DeepAnalysis,
-            InvestigationPhase::DeepAnalysis if findings.len() >= 4 => InvestigationPhase::PatternRecognition,
-            InvestigationPhase::PatternRecognition if findings.len() >= 6 => InvestigationPhase::HypothesisTesting,
+            InvestigationPhase::Initial if !findings.is_empty() => {
+                InvestigationPhase::BasicProfiling
+            }
+            InvestigationPhase::BasicProfiling if findings.len() >= 2 => {
+                InvestigationPhase::DeepAnalysis
+            }
+            InvestigationPhase::DeepAnalysis if findings.len() >= 4 => {
+                InvestigationPhase::PatternRecognition
+            }
+            InvestigationPhase::PatternRecognition if findings.len() >= 6 => {
+                InvestigationPhase::HypothesisTesting
+            }
             InvestigationPhase::HypothesisTesting => InvestigationPhase::Synthesis,
             _ => current.clone(),
         }
     }
 
     /// Convert OVSM Value to JSON
-    fn value_to_json(&self, value: Value) -> Result<serde_json::Value> {
+    fn value_to_json(value: Value) -> Result<serde_json::Value> {
         use serde_json::json;
 
         let json = match value {
@@ -3264,15 +3761,14 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             Value::Float(f) => json!(f),
             Value::String(s) => json!(s),
             Value::Array(arr) => {
-                let json_array: Result<Vec<_>> = arr.iter()
-                    .map(|v| self.value_to_json(v.clone()))
-                    .collect();
+                let json_array: Result<Vec<_>> =
+                    arr.iter().map(|v| Self::value_to_json(v.clone())).collect();
                 json!(json_array?)
             }
             Value::Object(map) => {
                 let mut json_map = serde_json::Map::new();
                 for (k, v) in map.iter() {
-                    json_map.insert(k.clone(), self.value_to_json(v.clone())?);
+                    json_map.insert(k.clone(), Self::value_to_json(v.clone())?);
                 }
                 json!(json_map)
             }
@@ -3291,20 +3787,40 @@ Generate the ASCII visualization ONLY (no explanations):"#,
 
         // Handle get_account_transfers specifically
         if tool_name.contains("get_account_transfers") {
-            if let Some(data) = result.get("data").and_then(|d| d.get("data")).and_then(|d| d.as_array()) {
+            if let Some(data) = result
+                .get("data")
+                .and_then(|d| d.get("data"))
+                .and_then(|d| d.as_array())
+            {
                 let total_transfers = data.len();
 
                 // Count by direction
-                let inflows: Vec<_> = data.iter().filter(|t| t.get("transferType").and_then(|v| v.as_str()) == Some("IN")).collect();
-                let outflows: Vec<_> = data.iter().filter(|t| t.get("transferType").and_then(|v| v.as_str()) == Some("OUT")).collect();
+                let inflows: Vec<_> = data
+                    .iter()
+                    .filter(|t| t.get("transferType").and_then(|v| v.as_str()) == Some("IN"))
+                    .collect();
+                let outflows: Vec<_> = data
+                    .iter()
+                    .filter(|t| t.get("transferType").and_then(|v| v.as_str()) == Some("OUT"))
+                    .collect();
 
                 // Count by type
-                let sol_transfers: Vec<_> = data.iter().filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("sol")).collect();
-                let spl_transfers: Vec<_> = data.iter().filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("spl")).collect();
-                let defi_transfers: Vec<_> = data.iter().filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("defi")).collect();
+                let sol_transfers: Vec<_> = data
+                    .iter()
+                    .filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("sol"))
+                    .collect();
+                let spl_transfers: Vec<_> = data
+                    .iter()
+                    .filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("spl"))
+                    .collect();
+                let defi_transfers: Vec<_> = data
+                    .iter()
+                    .filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("defi"))
+                    .collect();
 
                 // Get unique counterparties
-                let mut counterparties: std::collections::HashSet<&str> = std::collections::HashSet::new();
+                let mut counterparties: std::collections::HashSet<&str> =
+                    std::collections::HashSet::new();
                 for t in data {
                     if let Some(from) = t.get("from").and_then(|v| v.as_str()) {
                         counterparties.insert(from);
@@ -3322,13 +3838,27 @@ Generate the ASCII visualization ONLY (no explanations):"#,
                     }
                 }
 
-                summary.push_str(&format!("Summary:\n"));
+                summary.push_str("Summary:\n");
                 summary.push_str(&format!("  - Total transfers: {}\n", total_transfers));
-                summary.push_str(&format!("  - Inflows: {}, Outflows: {}\n", inflows.len(), outflows.len()));
-                summary.push_str(&format!("  - SOL transfers: {}, SPL transfers: {}, DeFi: {}\n",
-                    sol_transfers.len(), spl_transfers.len(), defi_transfers.len()));
-                summary.push_str(&format!("  - Unique counterparties: {}\n", counterparties.len()));
-                summary.push_str(&format!("  - Tokens involved: {:?}\n", tokens.iter().take(10).collect::<Vec<_>>()));
+                summary.push_str(&format!(
+                    "  - Inflows: {}, Outflows: {}\n",
+                    inflows.len(),
+                    outflows.len()
+                ));
+                summary.push_str(&format!(
+                    "  - SOL transfers: {}, SPL transfers: {}, DeFi: {}\n",
+                    sol_transfers.len(),
+                    spl_transfers.len(),
+                    defi_transfers.len()
+                ));
+                summary.push_str(&format!(
+                    "  - Unique counterparties: {}\n",
+                    counterparties.len()
+                ));
+                summary.push_str(&format!(
+                    "  - Tokens involved: {:?}\n",
+                    tokens.iter().take(10).collect::<Vec<_>>()
+                ));
 
                 // Sample top 5 transfers
                 summary.push_str("\nSample transfers (top 5):\n");
@@ -3337,9 +3867,19 @@ Generate the ASCII visualization ONLY (no explanations):"#,
                     let to = t.get("to").and_then(|v| v.as_str()).unwrap_or("?");
                     let amount = t.get("tokenAmount").and_then(|v| v.as_str()).unwrap_or("0");
                     let symbol = t.get("tokenSymbol").and_then(|v| v.as_str()).unwrap_or("?");
-                    let tx_type = t.get("transferType").and_then(|v| v.as_str()).unwrap_or("?");
-                    summary.push_str(&format!("  {}. {} {} {} ({} -> {})\n",
-                        i + 1, amount, symbol, tx_type, &from[..8.min(from.len())], &to[..8.min(to.len())]));
+                    let tx_type = t
+                        .get("transferType")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?");
+                    summary.push_str(&format!(
+                        "  {}. {} {} {} ({} -> {})\n",
+                        i + 1,
+                        amount,
+                        symbol,
+                        tx_type,
+                        &from[..8.min(from.len())],
+                        &to[..8.min(to.len())]
+                    ));
                 }
             } else {
                 summary.push_str("No transfer data in response\n");
@@ -3347,8 +3887,14 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         }
         // Handle get_account_stats
         else if tool_name.contains("get_account_stats") {
-            summary.push_str(&format!("Account stats retrieved: {}\n",
-                serde_json::to_string(result).unwrap_or_default().chars().take(200).collect::<String>()));
+            summary.push_str(&format!(
+                "Account stats retrieved: {}\n",
+                serde_json::to_string(result)
+                    .unwrap_or_default()
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
+            ));
         }
         // Default: truncate to reasonable size
         else {
@@ -3367,12 +3913,16 @@ Generate the ASCII visualization ONLY (no explanations):"#,
     async fn generate_final_report(&self) -> Result<String> {
         let state = self.state.lock().await;
 
-        let findings_list = state.findings.iter()
+        let findings_list = state
+            .findings
+            .iter()
             .map(|f| format!("- {}: {}", f.category, f.description))
             .collect::<Vec<_>>()
             .join("\n");
 
-        let hypotheses_list = state.hypotheses.iter()
+        let hypotheses_list = state
+            .hypotheses
+            .iter()
             .map(|h| format!("- {} (confidence: {:.2})", h.statement, h.confidence))
             .collect::<Vec<_>>()
             .join("\n");
@@ -3381,17 +3931,32 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         report.push_str("# Wallet Investigation Report\n\n");
         report.push_str(&format!("**Target Wallet:** {}\n", state.target_wallet));
         report.push_str(&format!("**Iterations:** {}\n", state.iteration));
-        report.push_str(&format!("**Findings:** {} collected\n\n", state.findings.len()));
+        report.push_str(&format!(
+            "**Findings:** {} collected\n\n",
+            state.findings.len()
+        ));
         report.push_str("## Executive Summary\n\n");
-        report.push_str(&format!("Based on {} iterations of investigation with self-evaluation, we have identified:\n\n", state.iteration));
+        report.push_str(&format!(
+            "Based on {} iterations of investigation with self-evaluation, we have identified:\n\n",
+            state.iteration
+        ));
         report.push_str("## Key Findings\n");
         report.push_str(&findings_list);
         report.push_str("\n\n## Hypotheses\n");
         report.push_str(&hypotheses_list);
-        report.push_str(&format!("\n\n## Confidence Scores\n{:?}\n\n", state.confidence_scores));
+        report.push_str(&format!(
+            "\n\n## Confidence Scores\n{:?}\n\n",
+            state.confidence_scores
+        ));
         report.push_str("## Evidence Summary\n");
-        report.push_str(&format!("- Total evidence pieces: {}\n", state.evidence.len()));
-        report.push_str(&format!("- Investigation phases completed: {:?}", state.phase));
+        report.push_str(&format!(
+            "- Total evidence pieces: {}\n",
+            state.evidence.len()
+        ));
+        report.push_str(&format!(
+            "- Investigation phases completed: {:?}",
+            state.phase
+        ));
 
         Ok(report)
     }
@@ -3409,9 +3974,10 @@ impl AiService {
         self.query_osvm_ai_with_options(
             user_prompt,
             Some(system_prompt.to_string()),
-            Some(true),  // ownPlan=true - use custom system prompt, bypass planning
-            true  // debug - enable to see prompt sizes
-        ).await
+            Some(true), // ownPlan=true - use custom system prompt, bypass planning
+            true,       // debug - enable to see prompt sizes
+        )
+        .await
     }
 }
 
@@ -3423,9 +3989,7 @@ mod tests {
 
     // Helper function to create test research agent
     async fn create_test_agent() -> ResearchAgent {
-        let ai_service = Arc::new(Mutex::new(
-            AiService::new()
-        ));
+        let ai_service = Arc::new(Mutex::new(AiService::new()));
         let ovsm_service = Arc::new(Mutex::new(OvsmService::new()));
 
         // Initialize MCP service for tests
@@ -3437,7 +4001,7 @@ mod tests {
             ai_service,
             ovsm_service,
             mcp_arc,
-            "TestWallet123".to_string()
+            "TestWallet123".to_string(),
         )
     }
 
@@ -3468,34 +4032,43 @@ mod tests {
         let mut wallets = HashMap::new();
 
         // Target wallet
-        wallets.insert(wallet.to_string(), WalletNode {
-            id: wallet.to_string(),
-            node_type: "Wallet".to_string(),
-            label: "Target Wallet".to_string(),
-            first_seen: Some("2024-01-01T00:00:00Z".to_string()),
-            total_volume: 50000.0,
-            wallet_type: "target".to_string(),
-        });
+        wallets.insert(
+            wallet.to_string(),
+            WalletNode {
+                id: wallet.to_string(),
+                node_type: "Wallet".to_string(),
+                label: "Target Wallet".to_string(),
+                first_seen: Some("2024-01-01T00:00:00Z".to_string()),
+                total_volume: 50000.0,
+                wallet_type: "target".to_string(),
+            },
+        );
 
         // Funding source
-        wallets.insert("FundingSource123".to_string(), WalletNode {
-            id: "FundingSource123".to_string(),
-            node_type: "Wallet".to_string(),
-            label: "Exchange Wallet".to_string(),
-            first_seen: Some("2023-12-01T00:00:00Z".to_string()),
-            total_volume: 100000.0,
-            wallet_type: "funding_source".to_string(),
-        });
+        wallets.insert(
+            "FundingSource123".to_string(),
+            WalletNode {
+                id: "FundingSource123".to_string(),
+                node_type: "Wallet".to_string(),
+                label: "Exchange Wallet".to_string(),
+                first_seen: Some("2023-12-01T00:00:00Z".to_string()),
+                total_volume: 100000.0,
+                wallet_type: "funding_source".to_string(),
+            },
+        );
 
         // Receiver
-        wallets.insert("ReceiverABC".to_string(), WalletNode {
-            id: "ReceiverABC".to_string(),
-            node_type: "Wallet".to_string(),
-            label: "Output Wallet".to_string(),
-            first_seen: Some("2024-01-15T00:00:00Z".to_string()),
-            total_volume: 25000.0,
-            wallet_type: "receiver".to_string(),
-        });
+        wallets.insert(
+            "ReceiverABC".to_string(),
+            WalletNode {
+                id: "ReceiverABC".to_string(),
+                node_type: "Wallet".to_string(),
+                label: "Output Wallet".to_string(),
+                first_seen: Some("2024-01-15T00:00:00Z".to_string()),
+                total_volume: 25000.0,
+                wallet_type: "receiver".to_string(),
+            },
+        );
 
         let relationships = vec![
             WalletRelationship {
@@ -3631,7 +4204,9 @@ mod tests {
         let state = agent.state.lock().await;
         assert!(!state.hypotheses.is_empty());
 
-        let mev_hypothesis = state.hypotheses.iter()
+        let mev_hypothesis = state
+            .hypotheses
+            .iter()
             .find(|h| h.statement.contains("MEV"))
             .expect("Should have MEV hypothesis");
 
@@ -3661,7 +4236,9 @@ mod tests {
         agent.generate_hypotheses().await.unwrap();
 
         let state = agent.state.lock().await;
-        let automated_hypothesis = state.hypotheses.iter()
+        let automated_hypothesis = state
+            .hypotheses
+            .iter()
             .find(|h| h.statement.contains("automated"))
             .expect("Should have automation hypothesis");
 
@@ -3678,12 +4255,13 @@ mod tests {
             "wash_trading_detected": true
         });
 
-        let significance = agent.calculate_finding_significance(
-            &mev_result,
-            &InvestigationPhase::DeepAnalysis
-        );
+        let significance =
+            agent.calculate_finding_significance(&mev_result, &InvestigationPhase::DeepAnalysis);
 
-        assert!(significance > 0.7, "MEV + wash trading should have high significance");
+        assert!(
+            significance > 0.7,
+            "MEV + wash trading should have high significance"
+        );
 
         // Test with normal activity
         let normal_result = serde_json::json!({
@@ -3691,12 +4269,13 @@ mod tests {
             "recent_activity": 10
         });
 
-        let normal_significance = agent.calculate_finding_significance(
-            &normal_result,
-            &InvestigationPhase::Initial
-        );
+        let normal_significance =
+            agent.calculate_finding_significance(&normal_result, &InvestigationPhase::Initial);
 
-        assert!(normal_significance < 0.6, "Normal activity should have lower significance");
+        assert!(
+            normal_significance < 0.6,
+            "Normal activity should have lower significance"
+        );
     }
 
     #[tokio::test]
@@ -3710,10 +4289,8 @@ mod tests {
             "wash_trading_detected": true
         });
 
-        let description = agent.extract_finding_description(
-            &result,
-            &InvestigationPhase::DeepAnalysis
-        );
+        let description =
+            agent.extract_finding_description(&result, &InvestigationPhase::DeepAnalysis);
 
         assert!(description.contains("Deep MEV"));
         assert!(description.contains("5.00 SOL"));
@@ -3750,7 +4327,7 @@ mod tests {
                 significance: 0.5,
                 raw_data: serde_json::json!({}),
                 timestamp: 1,
-            }]
+            }],
         );
 
         assert!(matches!(next_phase, InvestigationPhase::BasicProfiling));
@@ -3760,9 +4337,7 @@ mod tests {
     async fn test_build_evaluation_prompt() {
         let agent = create_test_agent().await;
         let mut state = create_test_state("TestWallet", InvestigationPhase::HypothesisTesting);
-        state.confidence_scores = HashMap::from([
-            ("test_score".to_string(), 0.75)
-        ]);
+        state.confidence_scores = HashMap::from([("test_score".to_string(), 0.75)]);
         state.iteration = 5;
 
         let prompt = agent.build_evaluation_prompt(&state);
@@ -3780,19 +4355,34 @@ mod tests {
 
         // Test various Value types
         let null_value = Value::Null;
-        assert_eq!(agent.value_to_json(null_value).unwrap(), serde_json::Value::Null);
+        assert_eq!(
+            ResearchAgent::value_to_json(null_value).unwrap(),
+            serde_json::Value::Null
+        );
 
         let bool_value = Value::Bool(true);
-        assert_eq!(agent.value_to_json(bool_value).unwrap(), serde_json::json!(true));
+        assert_eq!(
+            ResearchAgent::value_to_json(bool_value).unwrap(),
+            serde_json::json!(true)
+        );
 
         let int_value = Value::Int(42);
-        assert_eq!(agent.value_to_json(int_value).unwrap(), serde_json::json!(42));
+        assert_eq!(
+            ResearchAgent::value_to_json(int_value).unwrap(),
+            serde_json::json!(42)
+        );
 
         let float_value = Value::Float(3.14);
-        assert_eq!(agent.value_to_json(float_value).unwrap(), serde_json::json!(3.14));
+        assert_eq!(
+            ResearchAgent::value_to_json(float_value).unwrap(),
+            serde_json::json!(3.14)
+        );
 
         let string_value = Value::String("test".to_string());
-        assert_eq!(agent.value_to_json(string_value).unwrap(), serde_json::json!("test"));
+        assert_eq!(
+            ResearchAgent::value_to_json(string_value).unwrap(),
+            serde_json::json!("test")
+        );
     }
 
     #[tokio::test]
@@ -3813,7 +4403,7 @@ mod tests {
                 confidence: 0.6,
                 supporting_evidence: vec!["Sandwich patterns".to_string()],
                 contradicting_evidence: vec!["Low profit".to_string()],
-            }
+            },
         ];
         state.iteration = 3;
 
@@ -3846,16 +4436,14 @@ mod tests {
                 significance: 0.8,
                 raw_data: serde_json::json!({}),
                 timestamp: 2,
-            }
+            },
         ];
-        state.hypotheses = vec![
-            Hypothesis {
-                statement: "Professional trader".to_string(),
-                confidence: 0.85,
-                supporting_evidence: vec![],
-                contradicting_evidence: vec![],
-            }
-        ];
+        state.hypotheses = vec![Hypothesis {
+            statement: "Professional trader".to_string(),
+            confidence: 0.85,
+            supporting_evidence: vec![],
+            contradicting_evidence: vec![],
+        }];
         state.iteration = 10;
 
         let script = agent.generate_synthesis_script(&state);
@@ -4082,9 +4670,9 @@ mod tests {
         // Note: AI pipeline generation may fail in tests, falling back to horizontal pipeline
         // which uses "HORIZONTAL PIPELINE - WALLET FLOW ANALYSIS" title
         assert!(
-            output.contains("WALLET RELATIONSHIP INVESTIGATION") ||
-            output.contains("HORIZONTAL PIPELINE") ||
-            output.contains("WALLET FLOW"),
+            output.contains("WALLET RELATIONSHIP INVESTIGATION")
+                || output.contains("HORIZONTAL PIPELINE")
+                || output.contains("WALLET FLOW"),
             "Output should contain either AI-generated or fallback visualization title"
         );
         // Check for coordination risk assessment which is added to all visualizations
@@ -4136,8 +4724,14 @@ mod tests {
         }
 
         // Set labels
-        graph.set_node_label("ExchangeHotWallet1234567890ABCDEF", "Binance Deposit".to_string());
-        graph.set_node_label("SuspectWalletAAAABBBBCCCCDDDD", "Investigation Target".to_string());
+        graph.set_node_label(
+            "ExchangeHotWallet1234567890ABCDEF",
+            "Binance Deposit".to_string(),
+        );
+        graph.set_node_label(
+            "SuspectWalletAAAABBBBCCCCDDDD",
+            "Investigation Target".to_string(),
+        );
         graph.set_node_label("OutputWallet1_XYZ", "Mixer Entry".to_string());
         graph.set_node_label("OutputWallet2_XYZ", "DEX Trader".to_string());
         graph.set_node_label("OutputWallet3_XYZ", "Cold Storage".to_string());
@@ -4165,178 +4759,181 @@ mod tests {
         assert!(output.contains("PATH #1:"));
     }
 }
-    #[test]
-    fn test_transfer_graph_very_complex_network() {
-        // Multi-level network: Exchange → Mixer → 3 intermediates → 6 outputs → 1 convergence
-        let config = RenderConfig {
-            title: "MULTI-LEVEL MONEY LAUNDERING NETWORK".to_string(),
-            origin_icon: "💰 EXCHANGE".to_string(),
-            target_icon: "🎯 MIXER".to_string(),
-            node_icon: "◉".to_string(),
-            show_header: true,
-            show_paths_summary: true,
-            show_stats_summary: true,
-            address_truncate_length: 6,
-        };
+#[test]
+fn test_transfer_graph_very_complex_network() {
+    // Multi-level network: Exchange → Mixer → 3 intermediates → 6 outputs → 1 convergence
+    let config = RenderConfig {
+        title: "MULTI-LEVEL MONEY LAUNDERING NETWORK".to_string(),
+        origin_icon: "💰 EXCHANGE".to_string(),
+        target_icon: "🎯 MIXER".to_string(),
+        node_icon: "◉".to_string(),
+        show_header: true,
+        show_paths_summary: true,
+        show_stats_summary: true,
+        address_truncate_length: 6,
+    };
 
-        let mut graph = TransferGraph::with_config(config);
-        graph.origin = Some("ExchangeWallet_ORIGIN".to_string());
-        graph.target = Some("MixerHub_TARGET".to_string());
-        graph.token_name = Some("USDT".to_string());
+    let mut graph = TransferGraph::with_config(config);
+    graph.origin = Some("ExchangeWallet_ORIGIN".to_string());
+    graph.target = Some("MixerHub_TARGET".to_string());
+    graph.token_name = Some("USDT".to_string());
 
-        // Level 1: Exchange → Mixer
+    // Level 1: Exchange → Mixer
+    graph.add_transfer(Transfer {
+        from: "ExchangeWallet_ORIGIN".to_string(),
+        to: "MixerHub_TARGET".to_string(),
+        amount: 1000000.0,
+        token_symbol: "USDT".to_string(),
+        timestamp: Some("2024-01-01T10:00:00Z".to_string()),
+        note: Some("Initial deposit".to_string()),
+    });
+
+    // Level 2: Mixer → 3 Intermediates
+    for i in 1..=3 {
         graph.add_transfer(Transfer {
-            from: "ExchangeWallet_ORIGIN".to_string(),
-            to: "MixerHub_TARGET".to_string(),
-            amount: 1000000.0,
+            from: "MixerHub_TARGET".to_string(),
+            to: format!("Intermediate_L2_{}", i),
+            amount: 300000.0,
             token_symbol: "USDT".to_string(),
-            timestamp: Some("2024-01-01T10:00:00Z".to_string()),
-            note: Some("Initial deposit".to_string()),
+            timestamp: Some(format!("2024-01-02T{:02}:00:00Z", 10 + i)),
+            note: Some(format!("Split {}/3", i)),
         });
+    }
 
-        // Level 2: Mixer → 3 Intermediates
-        for i in 1..=3 {
+    // Level 3: Each intermediate → 2 outputs
+    for i in 1..=3 {
+        for j in 1..=2 {
             graph.add_transfer(Transfer {
-                from: "MixerHub_TARGET".to_string(),
-                to: format!("Intermediate_L2_{}", i),
-                amount: 300000.0,
+                from: format!("Intermediate_L2_{}", i),
+                to: format!("Output_L3_{}_{}", i, j),
+                amount: 140000.0,
                 token_symbol: "USDT".to_string(),
-                timestamp: Some(format!("2024-01-02T{:02}:00:00Z", 10 + i)),
-                note: Some(format!("Split {}/3", i)),
+                timestamp: Some(format!("2024-01-03T{:02}:{:02}:00Z", 10 + i, j * 15)),
+                note: Some(format!("Distribution {}-{}", i, j)),
             });
         }
-
-        // Level 3: Each intermediate → 2 outputs
-        for i in 1..=3 {
-            for j in 1..=2 {
-                graph.add_transfer(Transfer {
-                    from: format!("Intermediate_L2_{}", i),
-                    to: format!("Output_L3_{}_{}", i, j),
-                    amount: 140000.0,
-                    token_symbol: "USDT".to_string(),
-                    timestamp: Some(format!("2024-01-03T{:02}:{:02}:00Z", 10 + i, j * 15)),
-                    note: Some(format!("Distribution {}-{}", i, j)),
-                });
-            }
-        }
-
-        // Level 4: 2 outputs converge to final destination
-        graph.add_transfer(Transfer {
-            from: "Output_L3_1_1".to_string(),
-            to: "FinalDestination_COLD".to_string(),
-            amount: 130000.0,
-            token_symbol: "USDT".to_string(),
-            timestamp: Some("2024-01-04T15:00:00Z".to_string()),
-            note: Some("Consolidation 1".to_string()),
-        });
-
-        graph.add_transfer(Transfer {
-            from: "Output_L3_2_2".to_string(),
-            to: "FinalDestination_COLD".to_string(),
-            amount: 130000.0,
-            token_symbol: "USDT".to_string(),
-            timestamp: Some("2024-01-04T15:30:00Z".to_string()),
-            note: Some("Consolidation 2".to_string()),
-        });
-
-        // Set labels
-        graph.set_node_label("ExchangeWallet_ORIGIN", "Binance Hot Wallet".to_string());
-        graph.set_node_label("MixerHub_TARGET", "TornadoCash Proxy".to_string());
-        graph.set_node_label("Intermediate_L2_1", "Burner Wallet A".to_string());
-        graph.set_node_label("Intermediate_L2_2", "Burner Wallet B".to_string());
-        graph.set_node_label("Intermediate_L2_3", "Burner Wallet C".to_string());
-        graph.set_node_label("Output_L3_1_1", "DEX Trader 1".to_string());
-        graph.set_node_label("Output_L3_1_2", "DEX Trader 2".to_string());
-        graph.set_node_label("Output_L3_2_1", "NFT Flipper 1".to_string());
-        graph.set_node_label("Output_L3_2_2", "NFT Flipper 2".to_string());
-        graph.set_node_label("Output_L3_3_1", "Yield Farmer 1".to_string());
-        graph.set_node_label("Output_L3_3_2", "Yield Farmer 2".to_string());
-        graph.set_node_label("FinalDestination_COLD", "Cold Storage Vault".to_string());
-
-        let output = graph.render_ascii();
-
-        crate::tui_log!("\n╔══════════════════════════════════════════════════════════════╗");
-        crate::tui_log!("║        VERY COMPLEX NETWORK VISUALIZATION DEMO               ║");
-        crate::tui_log!("╚══════════════════════════════════════════════════════════════╝\n");
-        crate::tui_log!("{}", output);
-
-        // Verify complex scenario elements
-        assert!(output.contains("MULTI-LEVEL MONEY LAUNDERING NETWORK"));
-        assert!(output.contains("USDT"));
-        assert!(output.contains("1,000,000.00"));
-        assert!(output.contains("TornadoCash Proxy"));
-        assert!(output.contains("Burner Wallet"));
-        assert!(output.contains("Cold Storage Vault"));
     }
 
-    #[test]
-    fn test_horizontal_pipeline_renderer() {
-        let mut graph = TransferGraph::new();
+    // Level 4: 2 outputs converge to final destination
+    graph.add_transfer(Transfer {
+        from: "Output_L3_1_1".to_string(),
+        to: "FinalDestination_COLD".to_string(),
+        amount: 130000.0,
+        token_symbol: "USDT".to_string(),
+        timestamp: Some("2024-01-04T15:00:00Z".to_string()),
+        note: Some("Consolidation 1".to_string()),
+    });
 
-        // Origin: Exchange
-        let origin = "ExchangeWallet_Binance_HotWallet_MainUSDT_2025_ABC123XYZ456".to_string();
-        graph.origin = Some(origin.clone());
-        graph.set_node_label(&origin, "Binance Exchange Wallet".to_string());
+    graph.add_transfer(Transfer {
+        from: "Output_L3_2_2".to_string(),
+        to: "FinalDestination_COLD".to_string(),
+        amount: 130000.0,
+        token_symbol: "USDT".to_string(),
+        timestamp: Some("2024-01-04T15:30:00Z".to_string()),
+        note: Some("Consolidation 2".to_string()),
+    });
 
-        // Depth 1: Mixer
-        let mixer = "MixerHub_TornadoCash_PoolAlpha_USDT_2025_DEF789GHI012".to_string();
-        graph.set_node_label(&mixer, "Tornado Cash Mixer A".to_string());
+    // Set labels
+    graph.set_node_label("ExchangeWallet_ORIGIN", "Binance Hot Wallet".to_string());
+    graph.set_node_label("MixerHub_TARGET", "TornadoCash Proxy".to_string());
+    graph.set_node_label("Intermediate_L2_1", "Burner Wallet A".to_string());
+    graph.set_node_label("Intermediate_L2_2", "Burner Wallet B".to_string());
+    graph.set_node_label("Intermediate_L2_3", "Burner Wallet C".to_string());
+    graph.set_node_label("Output_L3_1_1", "DEX Trader 1".to_string());
+    graph.set_node_label("Output_L3_1_2", "DEX Trader 2".to_string());
+    graph.set_node_label("Output_L3_2_1", "NFT Flipper 1".to_string());
+    graph.set_node_label("Output_L3_2_2", "NFT Flipper 2".to_string());
+    graph.set_node_label("Output_L3_3_1", "Yield Farmer 1".to_string());
+    graph.set_node_label("Output_L3_3_2", "Yield Farmer 2".to_string());
+    graph.set_node_label("FinalDestination_COLD", "Cold Storage Vault".to_string());
 
-        graph.add_transfer(Transfer {
-            from: origin.clone(),
-            to: mixer.clone(),
-            amount: 5_000_000.0,
-            token_symbol: "USDT".to_string(),
-            timestamp: Some("2025-01-01T00:00:00Z".to_string()),
-            note: Some("Exchange withdrawal".to_string()),
-        });
+    let output = graph.render_ascii();
 
-        // Depth 2: Burner (with multi-token)
-        let burner = "BurnerWallet_Temporary_L2_Keychain_001_JKL345MNO678".to_string();
-        graph.set_node_label(&burner, "Burner Wallet 001".to_string());
+    crate::tui_log!("\n╔══════════════════════════════════════════════════════════════╗");
+    crate::tui_log!("║        VERY COMPLEX NETWORK VISUALIZATION DEMO               ║");
+    crate::tui_log!("╚══════════════════════════════════════════════════════════════╝\n");
+    crate::tui_log!("{}", output);
 
-        graph.add_transfer(Transfer {
-            from: mixer.clone(),
-            to: burner.clone(),
-            amount: 2_500_000.0,
-            token_symbol: "USDT".to_string(),
-            timestamp: Some("2025-01-02T00:00:00Z".to_string()),
-            note: None,
-        });
+    // Verify complex scenario elements
+    assert!(output.contains("MULTI-LEVEL MONEY LAUNDERING NETWORK"));
+    assert!(output.contains("USDT"));
+    assert!(output.contains("1,000,000.00"));
+    assert!(output.contains("TornadoCash Proxy"));
+    assert!(output.contains("Burner Wallet"));
+    assert!(output.contains("Cold Storage Vault"));
+}
 
-        graph.add_transfer(Transfer {
-            from: mixer.clone(),
-            to: burner.clone(),
-            amount: 500_000.0,
-            token_symbol: "SOL".to_string(),
-            timestamp: Some("2025-01-02T01:00:00Z".to_string()),
-            note: None,
-        });
+#[test]
+fn test_horizontal_pipeline_renderer() {
+    let mut graph = TransferGraph::new();
 
-        // Depth 3: Cold Storage
-        let cold_storage = "ColdStorage_HardwareWallet_Ledger_Final_PQR901STU234".to_string();
-        graph.set_node_label(&cold_storage, "Cold Storage Vault - Final Destination".to_string());
+    // Origin: Exchange
+    let origin = "ExchangeWallet_Binance_HotWallet_MainUSDT_2025_ABC123XYZ456".to_string();
+    graph.origin = Some(origin.clone());
+    graph.set_node_label(&origin, "Binance Exchange Wallet".to_string());
 
-        graph.add_transfer(Transfer {
-            from: burner.clone(),
-            to: cold_storage.clone(),
-            amount: 3_000_000.0,
-            token_symbol: "MULTI".to_string(),
-            timestamp: Some("2025-01-03T00:00:00Z".to_string()),
-            note: Some("Final deposit".to_string()),
-        });
+    // Depth 1: Mixer
+    let mixer = "MixerHub_TornadoCash_PoolAlpha_USDT_2025_DEF789GHI012".to_string();
+    graph.set_node_label(&mixer, "Tornado Cash Mixer A".to_string());
 
-        // Render horizontal pipeline
-        let output = graph.render_horizontal_pipeline();
+    graph.add_transfer(Transfer {
+        from: origin.clone(),
+        to: mixer.clone(),
+        amount: 5_000_000.0,
+        token_symbol: "USDT".to_string(),
+        timestamp: Some("2025-01-01T00:00:00Z".to_string()),
+        note: Some("Exchange withdrawal".to_string()),
+    });
 
-        crate::tui_log!("\n{}", output);
+    // Depth 2: Burner (with multi-token)
+    let burner = "BurnerWallet_Temporary_L2_Keychain_001_JKL345MNO678".to_string();
+    graph.set_node_label(&burner, "Burner Wallet 001".to_string());
 
-        // Assertions - Beautiful chart with continuous pipes!
-        assert!(output.contains("│")); // Vertical pipes
-        assert!(output.contains("Exchange") || output.contains("MixerHub")); // Wallets
-        assert!(output.contains("[$")); // Dollar amounts
-        assert!(output.contains("txs")); // Transaction counts
-        assert!(output.contains("───→")); // Horizontal arrows
-        assert!(output.contains("○")); // Icons
-        assert!(output.contains("→")); // Dates with arrows
-    }
+    graph.add_transfer(Transfer {
+        from: mixer.clone(),
+        to: burner.clone(),
+        amount: 2_500_000.0,
+        token_symbol: "USDT".to_string(),
+        timestamp: Some("2025-01-02T00:00:00Z".to_string()),
+        note: None,
+    });
+
+    graph.add_transfer(Transfer {
+        from: mixer.clone(),
+        to: burner.clone(),
+        amount: 500_000.0,
+        token_symbol: "SOL".to_string(),
+        timestamp: Some("2025-01-02T01:00:00Z".to_string()),
+        note: None,
+    });
+
+    // Depth 3: Cold Storage
+    let cold_storage = "ColdStorage_HardwareWallet_Ledger_Final_PQR901STU234".to_string();
+    graph.set_node_label(
+        &cold_storage,
+        "Cold Storage Vault - Final Destination".to_string(),
+    );
+
+    graph.add_transfer(Transfer {
+        from: burner.clone(),
+        to: cold_storage.clone(),
+        amount: 3_000_000.0,
+        token_symbol: "MULTI".to_string(),
+        timestamp: Some("2025-01-03T00:00:00Z".to_string()),
+        note: Some("Final deposit".to_string()),
+    });
+
+    // Render horizontal pipeline
+    let output = graph.render_horizontal_pipeline();
+
+    crate::tui_log!("\n{}", output);
+
+    // Assertions - Beautiful chart with continuous pipes!
+    assert!(output.contains("│")); // Vertical pipes
+    assert!(output.contains("Exchange") || output.contains("MixerHub")); // Wallets
+    assert!(output.contains("[$")); // Dollar amounts
+    assert!(output.contains("txs")); // Transaction counts
+    assert!(output.contains("───→")); // Horizontal arrows
+    assert!(output.contains("○")); // Icons
+    assert!(output.contains("→")); // Dates with arrows
+}

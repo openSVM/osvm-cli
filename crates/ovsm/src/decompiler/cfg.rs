@@ -39,7 +39,7 @@ impl BasicBlock {
 }
 
 /// Control Flow Graph
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph {
     /// Basic blocks indexed by ID
     pub blocks: HashMap<usize, BasicBlock>,
@@ -154,7 +154,9 @@ impl ControlFlowGraph {
                 // Fall-through to next instruction
                 if let Some(&next_block) = leader_to_block.get(&(i + 1)) {
                     // Only add if this is the last instruction in current block
-                    let is_last_in_block = cfg.blocks.get(&src_block)
+                    let is_last_in_block = cfg
+                        .blocks
+                        .get(&src_block)
                         .map(|b| b.instructions.last() == Some(&i))
                         .unwrap_or(false);
 
@@ -192,7 +194,12 @@ impl ControlFlowGraph {
         let mut visited: HashSet<usize> = HashSet::new();
         let mut order: Vec<usize> = Vec::new();
 
-        fn dfs(cfg: &ControlFlowGraph, block_id: usize, visited: &mut HashSet<usize>, order: &mut Vec<usize>) {
+        fn dfs(
+            cfg: &ControlFlowGraph,
+            block_id: usize,
+            visited: &mut HashSet<usize>,
+            order: &mut Vec<usize>,
+        ) {
             if visited.contains(&block_id) {
                 return;
             }
@@ -250,17 +257,6 @@ impl ControlFlowGraph {
     }
 }
 
-impl Default for ControlFlowGraph {
-    fn default() -> Self {
-        Self {
-            blocks: HashMap::new(),
-            entry: 0,
-            exits: Vec::new(),
-            offset_to_block: HashMap::new(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,8 +274,8 @@ mod tests {
 
         // Two instructions: mov64 r0, 42; exit
         let bytes = [
-            0xb7, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00,  // mov64 r0, 42
-            0x95, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // exit
+            0xb7, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00, // mov64 r0, 42
+            0x95, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // exit
         ];
 
         // Create mock instructions directly

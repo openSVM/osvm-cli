@@ -41,8 +41,8 @@ fn main() {
     elf.extend_from_slice(&0x120u64.to_le_bytes()); // p_offset
     elf.extend_from_slice(&0x120u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x120u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0x30u64.to_le_bytes());  // p_filesz
-    elf.extend_from_slice(&0x30u64.to_le_bytes());  // p_memsz
+    elf.extend_from_slice(&0x30u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0x30u64.to_le_bytes()); // p_memsz
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_align
 
     // PT_LOAD #2: .rodata (at 0x150)
@@ -53,9 +53,9 @@ fn main() {
     elf.extend_from_slice(&0x150u64.to_le_bytes()); // p_offset
     elf.extend_from_slice(&0x150u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x150u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0x4u64.to_le_bytes());   // p_filesz
-    elf.extend_from_slice(&0x4u64.to_le_bytes());   // p_memsz
-    elf.extend_from_slice(&0x1u64.to_le_bytes());   // p_align = 1
+    elf.extend_from_slice(&0x4u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0x4u64.to_le_bytes()); // p_memsz
+    elf.extend_from_slice(&0x1u64.to_le_bytes()); // p_align = 1
 
     // PT_LOAD #3: Dynamic sections
     elf.extend_from_slice(&[
@@ -65,8 +65,8 @@ fn main() {
     elf.extend_from_slice(&0x208u64.to_le_bytes()); // p_offset
     elf.extend_from_slice(&0x208u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x208u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0x78u64.to_le_bytes());  // p_filesz
-    elf.extend_from_slice(&0x78u64.to_le_bytes());  // p_memsz
+    elf.extend_from_slice(&0x78u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0x78u64.to_le_bytes()); // p_memsz
     elf.extend_from_slice(&0x1000u64.to_le_bytes()); // p_align
 
     // PT_DYNAMIC
@@ -77,9 +77,9 @@ fn main() {
     elf.extend_from_slice(&0x158u64.to_le_bytes()); // p_offset
     elf.extend_from_slice(&0x158u64.to_le_bytes()); // p_vaddr
     elf.extend_from_slice(&0x158u64.to_le_bytes()); // p_paddr
-    elf.extend_from_slice(&0xb0u64.to_le_bytes());  // p_filesz
-    elf.extend_from_slice(&0xb0u64.to_le_bytes());  // p_memsz
-    elf.extend_from_slice(&0x8u64.to_le_bytes());   // p_align
+    elf.extend_from_slice(&0xb0u64.to_le_bytes()); // p_filesz
+    elf.extend_from_slice(&0xb0u64.to_le_bytes()); // p_memsz
+    elf.extend_from_slice(&0x8u64.to_le_bytes()); // p_align
 
     // Padding to 0x120
     while elf.len() < 0x120 {
@@ -90,26 +90,22 @@ fn main() {
     // Simple program that calls sol_log_ syscall
     // LDDW r0, <hash will be patched>
     elf.extend_from_slice(&[
-        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00,
     ]);
     // LDDW r1, 0x150 (rodata address)
     elf.extend_from_slice(&[
-        0x18, 0x01, 0x00, 0x00, 0x50, 0x01, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x18, 0x01, 0x00, 0x00, 0x50, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00,
     ]);
     // MOV r2, 4
-    elf.extend_from_slice(&[
-        0xb7, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
-    ]);
+    elf.extend_from_slice(&[0xb7, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00]);
     // CALL with imm=-1 for V1 external call (doesn't validate as relative jump)
     elf.extend_from_slice(&[
         0x85, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, // imm=-1 for V1 syscall
     ]);
     // EXIT
-    elf.extend_from_slice(&[
-        0x95, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    ]);
+    elf.extend_from_slice(&[0x95, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
     // ==================== .rodata Section (at 0x150) ====================
     elf.extend_from_slice(&[0x04, 0x00, 0x00, 0x00]); // 4 as u32 (matching Solana)
@@ -166,11 +162,11 @@ fn main() {
     // sol_log_ symbol
     elf.extend_from_slice(&1u32.to_le_bytes()); // st_name
     elf.push(0x12); // st_info
-    elf.push(0);    // st_other
+    elf.push(0); // st_other
     elf.extend_from_slice(&0u16.to_le_bytes()); // st_shndx
     elf.extend_from_slice(&0u64.to_le_bytes()); // st_value
     elf.extend_from_slice(&0u64.to_le_bytes()); // st_size
-    // Empty symbol for padding
+                                                // Empty symbol for padding
     elf.extend_from_slice(&[0u8; 24]);
 
     // ==================== .dynstr Section (at 0x250) ====================
@@ -206,11 +202,11 @@ fn main() {
     // entrypoint symbol
     elf.extend_from_slice(&21u32.to_le_bytes()); // st_name (offset in .strtab)
     elf.push(0x12); // st_info (GLOBAL | FUNC)
-    elf.push(0);    // st_other
+    elf.push(0); // st_other
     elf.extend_from_slice(&1u16.to_le_bytes()); // st_shndx (.text)
     elf.extend_from_slice(&0x120u64.to_le_bytes()); // st_value
     elf.extend_from_slice(&0x30u64.to_le_bytes()); // st_size
-    // sol_log_ symbol
+                                                   // sol_log_ symbol
     elf.extend_from_slice(&1u32.to_le_bytes());
     elf.push(0x10); // st_info (GLOBAL)
     elf.push(0);

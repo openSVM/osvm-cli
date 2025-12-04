@@ -5,31 +5,31 @@
 
 use ovsm::lexer::{Token, TokenKind};
 use tower_lsp::lsp_types::{
-    SemanticToken, SemanticTokenType, SemanticTokenModifier, SemanticTokensLegend,
+    SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend,
 };
 
 /// Token types for OVSM semantic highlighting
 pub const TOKEN_TYPES: &[SemanticTokenType] = &[
-    SemanticTokenType::KEYWORD,       // 0 - Special forms (if, define, let, etc.)
-    SemanticTokenType::FUNCTION,      // 1 - Built-in functions
-    SemanticTokenType::VARIABLE,      // 2 - Variables
-    SemanticTokenType::STRING,        // 3 - Strings
-    SemanticTokenType::NUMBER,        // 4 - Numbers
-    SemanticTokenType::OPERATOR,      // 5 - Operators
-    SemanticTokenType::COMMENT,       // 6 - Comments (handled separately)
-    SemanticTokenType::PARAMETER,     // 7 - Lambda parameters
-    SemanticTokenType::TYPE,          // 8 - Type names
-    SemanticTokenType::MACRO,         // 9 - Macros
-    SemanticTokenType::PROPERTY,      // 10 - Object keys
+    SemanticTokenType::KEYWORD,   // 0 - Special forms (if, define, let, etc.)
+    SemanticTokenType::FUNCTION,  // 1 - Built-in functions
+    SemanticTokenType::VARIABLE,  // 2 - Variables
+    SemanticTokenType::STRING,    // 3 - Strings
+    SemanticTokenType::NUMBER,    // 4 - Numbers
+    SemanticTokenType::OPERATOR,  // 5 - Operators
+    SemanticTokenType::COMMENT,   // 6 - Comments (handled separately)
+    SemanticTokenType::PARAMETER, // 7 - Lambda parameters
+    SemanticTokenType::TYPE,      // 8 - Type names
+    SemanticTokenType::MACRO,     // 9 - Macros
+    SemanticTokenType::PROPERTY,  // 10 - Object keys
 ];
 
 /// Token modifiers for OVSM
 pub const TOKEN_MODIFIERS: &[SemanticTokenModifier] = &[
-    SemanticTokenModifier::DECLARATION,    // 0 - Variable declaration
-    SemanticTokenModifier::DEFINITION,     // 1 - Function definition
-    SemanticTokenModifier::READONLY,       // 2 - Constants
-    SemanticTokenModifier::MODIFICATION,   // 3 - Mutation (set!)
-    SemanticTokenModifier::DOCUMENTATION,  // 4 - Doc comments
+    SemanticTokenModifier::DECLARATION,   // 0 - Variable declaration
+    SemanticTokenModifier::DEFINITION,    // 1 - Function definition
+    SemanticTokenModifier::READONLY,      // 2 - Constants
+    SemanticTokenModifier::MODIFICATION,  // 3 - Mutation (set!)
+    SemanticTokenModifier::DOCUMENTATION, // 4 - Doc comments
 ];
 
 /// Get the semantic tokens legend for client registration
@@ -42,38 +42,132 @@ pub fn get_legend() -> SemanticTokensLegend {
 
 /// Special forms that should be highlighted as keywords
 const SPECIAL_FORMS: &[&str] = &[
-    "if", "define", "set!", "let", "let*", "lambda", "do", "progn",
-    "while", "for", "when", "unless", "cond", "case", "typecase",
-    "defun", "defn", "defmacro", "const", "catch", "throw",
-    "loop", "flet", "labels", "destructuring-bind",
+    "if",
+    "define",
+    "set!",
+    "let",
+    "let*",
+    "lambda",
+    "do",
+    "progn",
+    "while",
+    "for",
+    "when",
+    "unless",
+    "cond",
+    "case",
+    "typecase",
+    "defun",
+    "defn",
+    "defmacro",
+    "const",
+    "catch",
+    "throw",
+    "loop",
+    "flet",
+    "labels",
+    "destructuring-bind",
 ];
 
 /// Built-in functions that should be highlighted differently
 const BUILTIN_FUNCTIONS: &[&str] = &[
     // Type predicates
-    "null?", "empty?", "evenp", "oddp", "zerop", "positivep", "negativep",
-    "typeof", "type-of", "atom", "consp", "listp",
+    "null?",
+    "empty?",
+    "evenp",
+    "oddp",
+    "zerop",
+    "positivep",
+    "negativep",
+    "typeof",
+    "type-of",
+    "atom",
+    "consp",
+    "listp",
     // Collection operations
-    "length", "get", "first", "rest", "last", "cons", "append", "reverse",
-    "range", "mapcar", "map", "filter", "reduce", "member", "assoc", "elt",
-    "subseq", "sort", "keys", "values", "merge",
+    "length",
+    "get",
+    "first",
+    "rest",
+    "last",
+    "cons",
+    "append",
+    "reverse",
+    "range",
+    "mapcar",
+    "map",
+    "filter",
+    "reduce",
+    "member",
+    "assoc",
+    "elt",
+    "subseq",
+    "sort",
+    "keys",
+    "values",
+    "merge",
     // String operations
-    "concat", "split", "join", "replace", "trim", "upper", "lower",
+    "concat",
+    "split",
+    "join",
+    "replace",
+    "trim",
+    "upper",
+    "lower",
     // Math functions
-    "sqrt", "pow", "expt", "exp", "ln", "abs", "min", "max",
-    "sin", "cos", "tan", "asin", "acos", "atan",
-    "floor", "ceiling", "ceil", "round", "truncate", "trunc",
-    "gcd", "lcm", "mod", "rem",
+    "sqrt",
+    "pow",
+    "expt",
+    "exp",
+    "ln",
+    "abs",
+    "min",
+    "max",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "floor",
+    "ceiling",
+    "ceil",
+    "round",
+    "truncate",
+    "trunc",
+    "gcd",
+    "lcm",
+    "mod",
+    "rem",
     // Bitwise
-    "logand", "logior", "logxor", "lognot", "ash",
+    "logand",
+    "logior",
+    "logxor",
+    "lognot",
+    "ash",
     // Type conversion
-    "int", "integer", "float", "bool", "string", "parse-int", "parse-float",
+    "int",
+    "integer",
+    "float",
+    "bool",
+    "string",
+    "parse-int",
+    "parse-float",
     // I/O
-    "log", "print", "assert", "error", "now",
+    "log",
+    "print",
+    "assert",
+    "error",
+    "now",
     // Logic
-    "not", "and", "or",
+    "not",
+    "and",
+    "or",
     // Misc
-    "incf", "decf", "gensym", "defvar",
+    "incf",
+    "decf",
+    "gensym",
+    "defvar",
 ];
 
 /// Convert OVSM tokens to LSP semantic tokens
@@ -93,7 +187,12 @@ pub fn tokens_to_semantic(tokens: &[Token]) -> Vec<SemanticToken> {
         // Skip unclassified tokens
         let Some(type_idx) = token_type else {
             // Update context tracking
-            update_context(token, &mut in_define, &mut in_let_bindings, &mut paren_depth);
+            update_context(
+                token,
+                &mut in_define,
+                &mut in_let_bindings,
+                &mut paren_depth,
+            );
             continue;
         };
 
@@ -121,7 +220,12 @@ pub fn tokens_to_semantic(tokens: &[Token]) -> Vec<SemanticToken> {
         prev_start = start;
 
         // Update context tracking
-        update_context(token, &mut in_define, &mut in_let_bindings, &mut paren_depth);
+        update_context(
+            token,
+            &mut in_define,
+            &mut in_let_bindings,
+            &mut paren_depth,
+        );
     }
 
     result

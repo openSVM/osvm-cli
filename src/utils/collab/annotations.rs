@@ -3,10 +3,10 @@
 //! Allows investigators to add notes and annotations to wallets, transactions,
 //! and other blockchain entities that are visible to all session participants.
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 use super::session::ParticipantColor;
@@ -73,11 +73,11 @@ impl AnnotationSeverity {
     /// Get color for display
     pub fn color(&self) -> (u8, u8, u8) {
         match self {
-            AnnotationSeverity::Info => (100, 149, 237),      // Cornflower Blue
-            AnnotationSeverity::Important => (255, 215, 0),   // Gold
-            AnnotationSeverity::Warning => (255, 165, 0),     // Orange
-            AnnotationSeverity::Critical => (255, 0, 0),      // Red
-            AnnotationSeverity::Question => (186, 85, 211),   // Medium Orchid
+            AnnotationSeverity::Info => (100, 149, 237), // Cornflower Blue
+            AnnotationSeverity::Important => (255, 215, 0), // Gold
+            AnnotationSeverity::Warning => (255, 165, 0), // Orange
+            AnnotationSeverity::Critical => (255, 0, 0), // Red
+            AnnotationSeverity::Question => (186, 85, 211), // Medium Orchid
         }
     }
 }
@@ -230,7 +230,8 @@ impl AnnotationStore {
         let by_target = self.by_target.read().await;
         let annotations = self.annotations.read().await;
 
-        by_target.get(target)
+        by_target
+            .get(target)
             .map(|ids| {
                 ids.iter()
                     .filter_map(|id| annotations.get(id).cloned())
@@ -241,12 +242,14 @@ impl AnnotationStore {
 
     /// Get all annotations for a wallet address
     pub async fn get_for_wallet(&self, address: &str) -> Vec<Annotation> {
-        self.get_by_target(&AnnotationType::Wallet(address.to_string())).await
+        self.get_by_target(&AnnotationType::Wallet(address.to_string()))
+            .await
     }
 
     /// Get all annotations for a transaction
     pub async fn get_for_transaction(&self, signature: &str) -> Vec<Annotation> {
-        self.get_by_target(&AnnotationType::Transaction(signature.to_string())).await
+        self.get_by_target(&AnnotationType::Transaction(signature.to_string()))
+            .await
     }
 
     /// Get all annotations
@@ -258,16 +261,14 @@ impl AnnotationStore {
     /// Get pinned annotations
     pub async fn get_pinned(&self) -> Vec<Annotation> {
         let annotations = self.annotations.read().await;
-        annotations.values()
-            .filter(|a| a.pinned)
-            .cloned()
-            .collect()
+        annotations.values().filter(|a| a.pinned).cloned().collect()
     }
 
     /// Get annotations by severity
     pub async fn get_by_severity(&self, severity: AnnotationSeverity) -> Vec<Annotation> {
         let annotations = self.annotations.read().await;
-        annotations.values()
+        annotations
+            .values()
             .filter(|a| a.severity == severity)
             .cloned()
             .collect()
@@ -276,7 +277,8 @@ impl AnnotationStore {
     /// Get annotations by author
     pub async fn get_by_author(&self, author_id: &str) -> Vec<Annotation> {
         let annotations = self.annotations.read().await;
-        annotations.values()
+        annotations
+            .values()
             .filter(|a| a.author_id == author_id)
             .cloned()
             .collect()
@@ -335,10 +337,13 @@ impl AnnotationStore {
         let query_lower = query.to_lowercase();
         let annotations = self.annotations.read().await;
 
-        annotations.values()
+        annotations
+            .values()
             .filter(|a| {
                 a.text.to_lowercase().contains(&query_lower)
-                    || a.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                    || a.tags
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&query_lower))
             })
             .cloned()
             .collect()
@@ -419,7 +424,8 @@ mod tests {
 
     #[test]
     fn test_annotation_type_display() {
-        let wallet = AnnotationType::Wallet("5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1".to_string());
+        let wallet =
+            AnnotationType::Wallet("5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1".to_string());
         let display = format!("{}", wallet);
         assert!(display.starts_with("Wallet: 5Q544fKr"));
     }
@@ -433,7 +439,8 @@ mod tests {
             "user1".to_string(),
             "Alice".to_string(),
             ParticipantColor::from_index(0),
-        ).with_tag("suspicious");
+        )
+        .with_tag("suspicious");
 
         assert_eq!(annotation.tags.len(), 1);
         assert_eq!(annotation.severity, AnnotationSeverity::Warning);

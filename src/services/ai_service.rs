@@ -71,6 +71,7 @@ pub struct AiService {
     api_url: String,
     api_key: Option<String>,
     use_openai: bool,
+    default_debug_mode: bool,
     circuit_breaker: GranularCircuitBreaker,
     template_manager: PromptTemplateManager,
     conversation_history: std::sync::Arc<std::sync::Mutex<Vec<ConversationMessage>>>,
@@ -79,6 +80,43 @@ pub struct AiService {
     fallback_model: Option<String>,
     /// Track if last request used fallback (for UI notification)
     last_used_fallback: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Clone for AiService {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            api_url: self.api_url.clone(),
+            api_key: self.api_key.clone(),
+            use_openai: self.use_openai,
+            default_debug_mode: self.default_debug_mode,
+            circuit_breaker: self.circuit_breaker.clone(),
+            template_manager: self.template_manager.clone(),
+            conversation_history: self.conversation_history.clone(),
+            fallback_url: self.fallback_url.clone(),
+            fallback_model: self.fallback_model.clone(),
+            last_used_fallback: self.last_used_fallback.clone(),
+        }
+    }
+}
+
+/// Check if fake AI mode is enabled (used for tests/non-interactive runs)
+pub fn is_fake_ai_enabled() -> bool {
+    false
+}
+
+fn fake_ai_response(question: &str) -> String {
+    format!("(fake-ai) {}", question)
+}
+
+fn fake_ai_plan_response(request: &str) -> String {
+    format!(
+        "Expected Plan: Respond directly without external calls\n\
+**Available Tools:**\n- LOG\n\n\
+**Main Branch:**\n- Address user request: {}\n\n\
+**Action:** Provide a concise textual answer\n[CONFIDENCE: 95%]",
+        request
+    )
 }
 
 impl AiService {
@@ -159,7 +197,7 @@ impl AiService {
     }
 
     pub fn new() -> Self {
-        Self::new_with_debug(true)
+        Self::new_with_debug(false)
     }
 
     pub fn new_with_debug(debug_mode: bool) -> Self {
@@ -167,7 +205,7 @@ impl AiService {
     }
 
     pub fn with_api_url(custom_api_url: Option<String>) -> Self {
-        Self::with_api_url_and_debug(custom_api_url, true)
+        Self::with_api_url_and_debug(custom_api_url, false)
     }
 
     pub fn with_api_url_and_debug(custom_api_url: Option<String>, debug_mode: bool) -> Self {
@@ -254,6 +292,7 @@ impl AiService {
             api_url,
             api_key,
             use_openai,
+            default_debug_mode: debug_mode,
             circuit_breaker,
             template_manager,
             conversation_history: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -265,7 +304,8 @@ impl AiService {
 
     /// Check if the last AI request used fallback (and reset the flag)
     pub fn did_use_fallback(&self) -> bool {
-        self.last_used_fallback.swap(false, std::sync::atomic::Ordering::SeqCst)
+        self.last_used_fallback
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Get the fallback model name if available
@@ -329,6 +369,10 @@ impl AiService {
     }
 
     pub async fn query_with_debug(&self, question: &str, debug_mode: bool) -> Result<String> {
+        if is_fake_ai_enabled() {
+            return Ok(fake_ai_response(question));
+        }
+
         // Fail fast if OpenAI is configured but no API key is provided
         if self.use_openai && self.api_key.is_none() {
             anyhow::bail!(
@@ -514,7 +558,7 @@ impl AiService {
                                     max_attempts
                                 );
                             } else {
-                                println!("⛔ Non-timeout error, not retrying");
+                                println!("⛔ Non-timeout error, not retrying: {}", e);
                             }
                         }
                         return Err(e);
@@ -547,7 +591,7 @@ impl AiService {
     async fn query_osvm_ai(&self, question: &str, debug_mode: bool) -> Result<String> {
         // Wrap with timeout retry logic (max 4 attempts with exponential backoff)
         self.with_timeout_retry(
-            || self.query_osvm_ai_internal(question, None, None, debug_mode),
+            || self.query_osvm_ai_internal(&self.api_url, question, None, None, debug_mode),
             4, // 4 attempts = up to 75 seconds total wait time
             debug_mode,
         )
@@ -561,11 +605,19 @@ impl AiService {
         only_plan: Option<bool>,
         debug_mode: bool,
     ) -> Result<String> {
+        if is_fake_ai_enabled() {
+            if only_plan.unwrap_or(false) {
+                return Ok(fake_ai_plan_response(question));
+            }
+            return Ok(fake_ai_response(question));
+        }
+
         // Try primary endpoint with timeout/retry
         let primary_result = self
             .with_timeout_retry(
                 || {
                     self.query_osvm_ai_internal(
+                        &self.api_url,
                         question,
                         system_prompt.clone(),
                         only_plan,
@@ -577,38 +629,61 @@ impl AiService {
             )
             .await;
 
-        // If primary fails, try Ollama fallback with preserved system prompt
+        // If primary fails, try alternate host (osvm.ai <-> opensvm.com) before erroring
         let mut response = match primary_result {
             Ok(resp) => resp,
-            Err(e) => {
-                if debug_mode {
-                    debug_warn!("Primary AI endpoint failed: {}. Trying Ollama fallback...", e);
-                }
+            Err(primary_err) => {
+                if let Some(alt_url) = Self::alternate_osvm_url(&self.api_url) {
+                    if debug_mode {
+                        println!("♻️ Retrying via alternate endpoint: {}", alt_url);
+                    }
+                    let alt_result = self
+                        .with_timeout_retry(
+                            || {
+                                self.query_osvm_ai_internal(
+                                    &alt_url,
+                                    question,
+                                    system_prompt.clone(),
+                                    only_plan,
+                                    debug_mode,
+                                )
+                            },
+                            2,
+                            debug_mode,
+                        )
+                        .await;
 
-                // Check if Ollama is available before trying
-                if self.is_ollama_available().await {
-                    // Set fallback flag for UI notification
-                    self.last_used_fallback.store(true, std::sync::atomic::Ordering::SeqCst);
-                    log::info!("AI fallback: using local Ollama instead of osvm.ai");
-
-                    // Use Ollama with the SAME system prompt
-                    match self.query_ollama_fallback(question, system_prompt.clone(), debug_mode).await {
-                        Ok(resp) => {
-                            debug_success!("Ollama fallback succeeded");
-                            resp
-                        }
-                        Err(fallback_err) => {
-                            // Both failed - return original error with context
-                            return Err(anyhow::anyhow!(
-                                "Primary AI failed: {}. Ollama fallback also failed: {}",
-                                e,
-                                fallback_err
-                            ));
+                    match alt_result {
+                        Ok(resp) => resp,
+                        Err(alt_err) => {
+                            if let Some(fallback) = Self::offline_fallback(&question.to_lowercase())
+                            {
+                                if debug_mode {
+                                    println!(
+                                        "⚠️  Both AI endpoints unavailable ({} / {}). Using offline fallback response.",
+                                        primary_err, alt_err
+                                    );
+                                }
+                                fallback
+                            } else {
+                                return Err(anyhow::anyhow!(
+                                    "Primary AI failed: {}. Alternate endpoint failed: {}",
+                                    primary_err,
+                                    alt_err
+                                ));
+                            }
                         }
                     }
+                } else if let Some(fallback) = Self::offline_fallback(&question.to_lowercase()) {
+                    if debug_mode {
+                        println!(
+                            "⚠️  Online AI unavailable ({}). Using offline fallback response.",
+                            primary_err
+                        );
+                    }
+                    fallback
                 } else {
-                    debug_warn!("Ollama not available for fallback");
-                    return Err(e);
+                    return Err(primary_err);
                 }
             }
         };
@@ -629,9 +704,41 @@ impl AiService {
         Ok(response)
     }
 
+    /// Simple offline fallback for common queries when both endpoints fail
+    fn offline_fallback(question: &str) -> Option<String> {
+        if question.contains("tmux") {
+            return Some(
+                "tmux quickstart (offline fallback):\n\
+                 - Install: apt/brew/dnf install tmux\n\
+                 - New session: tmux new -s mysession\n\
+                 - Detach: Ctrl-b d | List: tmux ls | Attach: tmux attach -t mysession\n\
+                 - New window: Ctrl-b c | Next/Prev: Ctrl-b n / Ctrl-b p\n\
+                 - Split panes: Ctrl-b % (vertical) | Ctrl-b \" (horizontal)\n\
+                 - Switch panes: Ctrl-b o | Resize: Ctrl-b <arrow>\n"
+                    .to_string(),
+            );
+        }
+
+        Some(
+            "OSVM AI temporarily unavailable. Please retry in a moment or set OSVM_FAKE_AI=1 for offline responses."
+                .to_string(),
+        )
+    }
+
     /// Internal API call without retry logic
+    fn alternate_osvm_url(current: &str) -> Option<String> {
+        if current.contains("osvm.ai") {
+            Some(current.replace("osvm.ai", "opensvm.com"))
+        } else if current.contains("opensvm.com") {
+            Some(current.replace("opensvm.com", "osvm.ai"))
+        } else {
+            None
+        }
+    }
+
     async fn query_osvm_ai_internal(
         &self,
+        api_url: &str,
         question: &str,
         system_prompt: Option<String>,
         only_plan: Option<bool>,
@@ -670,24 +777,26 @@ impl AiService {
         // Debug: Show request body if in debug mode
         if debug_mode {
             println!("\n🔍 HTTP REQUEST:");
-            println!("  URL: {}", self.api_url);
-            println!("  Body: {}", serde_json::to_string_pretty(&request_body).unwrap_or_else(|_| "Failed to serialize".to_string()));
+            println!("  URL: {}", api_url);
+            println!(
+                "  Body: {}",
+                serde_json::to_string_pretty(&request_body)
+                    .unwrap_or_else(|_| "Failed to serialize".to_string())
+            );
         }
 
         let mut request = self
             .client
-            .post(&self.api_url)
-            .header("Content-Type", "application/json");
+            .post(api_url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json");
 
         // Add Authorization header if API key is available
         if let Some(ref api_key) = self.api_key {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = request
-            .json(&request_body)
-            .send()
-            .await?;
+        let response = request.json(&request_body).send().await?;
 
         let status = response.status();
         let response_text = response.text().await?;
@@ -755,6 +864,13 @@ impl AiService {
         system_prompt: Option<&str>,
         debug_mode: bool,
     ) -> Result<String> {
+        if is_fake_ai_enabled() {
+            if debug_mode {
+                println!("🤖 (fake-ai) {}", question);
+            }
+            return Ok(fake_ai_response(question));
+        }
+
         let api_key = self.api_key.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
                 "OpenAI API key not available. Please set OPENAI_KEY environment variable."
@@ -839,11 +955,15 @@ impl AiService {
         system_prompt: Option<String>,
         debug_mode: bool,
     ) -> Result<String> {
-        let fallback_url = self.fallback_url.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("No fallback URL configured")
-        })?;
+        let fallback_url = self
+            .fallback_url
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No fallback URL configured"))?;
 
-        let model = self.fallback_model.clone().unwrap_or_else(|| "qwen3-coder:30b".to_string());
+        let model = self
+            .fallback_model
+            .clone()
+            .unwrap_or_else(|| "qwen3-coder:30b".to_string());
 
         let mut messages = Vec::new();
 
@@ -875,7 +995,10 @@ impl AiService {
                 model
             );
             if system_prompt.is_some() {
-                debug_print!("  System prompt: {} chars", system_prompt.as_ref().map(|s| s.len()).unwrap_or(0));
+                debug_print!(
+                    "  System prompt: {} chars",
+                    system_prompt.as_ref().map(|s| s.len()).unwrap_or(0)
+                );
             }
         }
 
@@ -897,7 +1020,11 @@ impl AiService {
         let response_text = response.text().await?;
 
         if debug_mode {
-            debug_print!("📥 Ollama Response ({}): {} chars", status, response_text.len());
+            debug_print!(
+                "📥 Ollama Response ({}): {} chars",
+                status,
+                response_text.len()
+            );
         }
 
         if !status.is_success() {
@@ -943,6 +1070,15 @@ impl AiService {
         user_request: &str,
         available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
     ) -> Result<ToolPlan> {
+        if is_fake_ai_enabled() {
+            return Ok(ToolPlan {
+                reasoning: "Fake AI mode: responding directly without planning".to_string(),
+                osvm_tools_to_use: vec![],
+                expected_outcome: "Provide direct answer".to_string(),
+                raw_ovsm_plan: Some(fake_ai_plan_response(user_request)),
+            });
+        }
+
         // Build OVSM planning prompt with system prompt
         let (planning_prompt, ovsm_system_prompt) =
             self.build_ovsm_planning_prompt(user_request, available_tools)?;
@@ -953,8 +1089,12 @@ impl AiService {
             debug_print!(
                 "Sending OVSM plan request to OpenAI-compatible endpoint with system prompt"
             );
-            self.query_openai_with_system(&planning_prompt, Some(&ovsm_system_prompt), true)
-                .await?
+            self.query_openai_with_system(
+                &planning_prompt,
+                Some(&ovsm_system_prompt),
+                self.default_debug_mode,
+            )
+            .await?
         } else {
             // OSVM AI: use ownPlan=true to get structured plan
             debug_print!("Sending OVSM plan request with custom system prompt");
@@ -962,7 +1102,7 @@ impl AiService {
                 &planning_prompt,
                 Some(ovsm_system_prompt.clone()),
                 Some(true), // ownPlan=true
-                true,       // DEBUG MODE ON
+                self.default_debug_mode,
             )
             .await?
         };
@@ -1000,13 +1140,15 @@ impl AiService {
         );
 
         let retry_response = if self.use_openai {
-            self.query_with_debug(&retry_prompt, false).await.ok()
+            self.query_with_debug(&retry_prompt, self.default_debug_mode)
+                .await
+                .ok()
         } else {
             self.query_osvm_ai_with_options(
                 &retry_prompt,
                 Some(ovsm_system_prompt),
                 Some(true),
-                false,
+                self.default_debug_mode,
             )
             .await
             .ok()
@@ -1062,8 +1204,9 @@ impl AiService {
         // Check if minimal mode is enabled via environment variable
         // DEFAULT: true (minimal mode) - set OSVM_MINIMAL_PROMPT=false to disable
         let use_minimal = std::env::var("OSVM_MINIMAL_PROMPT")
-            .unwrap_or_else(|_| "true".to_string())  // Default to minimal mode
-            .to_lowercase() != "false";  // Only disable if explicitly set to "false"
+            .unwrap_or_else(|_| "true".to_string()) // Default to minimal mode
+            .to_lowercase()
+            != "false"; // Only disable if explicitly set to "false"
 
         let mut tools_context = String::new();
 
@@ -1079,7 +1222,8 @@ impl AiService {
                     .collect();
 
                 if !filtered_tools.is_empty() {
-                    let tool_names: Vec<_> = filtered_tools.iter().map(|t| t.name.as_str()).collect();
+                    let tool_names: Vec<_> =
+                        filtered_tools.iter().map(|t| t.name.as_str()).collect();
                     tools_context.push_str(&format!("{}: {}\n", server_id, tool_names.join(", ")));
                 }
             }
@@ -1108,8 +1252,10 @@ impl AiService {
                 }
             }
 
-            tools_context.push_str("\n⚠️ CRITICAL: Read tool descriptions carefully before using them!\n");
-            tools_context.push_str("Tool names are case-sensitive. Use exact names from list above.\n");
+            tools_context
+                .push_str("\n⚠️ CRITICAL: Read tool descriptions carefully before using them!\n");
+            tools_context
+                .push_str("Tool names are case-sensitive. Use exact names from list above.\n");
         }
 
         // Choose prompt template based on mode
@@ -1856,6 +2002,7 @@ impl AiService {
                 .with_timeout_retry(
                     || {
                         self.query_osvm_ai_internal(
+                            &self.api_url,
                             &continuation_prompt,
                             system_prompt.clone(),
                             only_plan,
@@ -2593,6 +2740,15 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
         available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
         max_retries: u32,
     ) -> Result<ToolPlan> {
+        if is_fake_ai_enabled() {
+            return Ok(ToolPlan {
+                reasoning: "Fake AI mode: responding directly without planning".to_string(),
+                osvm_tools_to_use: vec![],
+                expected_outcome: "Provide direct answer".to_string(),
+                raw_ovsm_plan: Some(fake_ai_plan_response(user_request)),
+            });
+        }
+
         let mut attempt = 0;
         let mut last_error: Option<String> = None;
 
@@ -2621,7 +2777,7 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
                         &refinement_prompt,
                         Some(ovsm_system_prompt),
                         Some(true),
-                        true,
+                        self.default_debug_mode,
                     )
                     .await?;
 
@@ -2711,7 +2867,10 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
             data_summary.push_str(&format!("  TARGET → {}: {} {}\n", addr, amount, token));
         }
         if outflows.len() > 10 {
-            data_summary.push_str(&format!("  ... and {} more outflows\n", outflows.len() - 10));
+            data_summary.push_str(&format!(
+                "  ... and {} more outflows\n",
+                outflows.len() - 10
+            ));
         }
 
         // Entity clusters if provided

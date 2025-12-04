@@ -56,7 +56,10 @@ async fn main() {
         .with(fmt::layer().with_writer(std::io::stderr))
         .init();
 
-    tracing::info!("Starting OVSM Language Server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!(
+        "Starting OVSM Language Server v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     // Create the LSP service
     let stdin = tokio::io::stdin();

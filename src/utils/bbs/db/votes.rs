@@ -3,9 +3,9 @@
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
-use crate::utils::bbs::models::{UserVote, NewUserVote};
+use super::{now_as_useconds, Result};
+use crate::utils::bbs::models::{NewUserVote, UserVote};
 use crate::utils::bbs::schema::user_votes;
-use super::{Result, now_as_useconds};
 
 /// Vote result with info about what happened
 #[derive(Debug)]
@@ -35,7 +35,7 @@ pub fn cast_vote(
     conn: &mut SqliteConnection,
     user_id: i32,
     post_id: i32,
-    vote_type: i32,  // 1 = upvote, -1 = downvote
+    vote_type: i32, // 1 = upvote, -1 = downvote
 ) -> Result<VoteResult> {
     use crate::utils::bbs::schema::posts;
 
@@ -43,8 +43,7 @@ pub fn cast_vote(
     if let Some(existing) = get_user_vote(conn, user_id, post_id) {
         if existing.vote_type == vote_type {
             // Same vote again = toggle off (remove vote)
-            diesel::delete(user_votes::table.find(existing.id))
-                .execute(conn)?;
+            diesel::delete(user_votes::table.find(existing.id)).execute(conn)?;
 
             // Adjust post score by removing the vote
             diesel::update(posts::table.find(post_id))
@@ -81,7 +80,10 @@ pub fn cast_vote(
                 .select(posts::score)
                 .first::<i32>(conn)?;
 
-            Ok(VoteResult::Changed { new_score, old_vote })
+            Ok(VoteResult::Changed {
+                new_score,
+                old_vote,
+            })
         }
     } else {
         // New vote

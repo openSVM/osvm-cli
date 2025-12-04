@@ -8,9 +8,9 @@
 //!
 //! Run with: cargo test --test collab_federation_integration_test -- --ignored --nocapture
 
-use std::process::{Command, Child, Stdio};
-use std::time::Duration;
+use std::process::{Child, Command, Stdio};
 use std::thread;
+use std::time::Duration;
 
 /// Helper to start a collab server in the background
 fn start_collab_server(port: u16) -> Option<Child> {
@@ -44,8 +44,10 @@ fn test_federation_peer_management() {
     let _ = run_collab_cmd(&["collab", "peers", "add", "http://test-peer:8080"]);
 
     let output = run_collab_cmd(&["collab", "peers", "list"]);
-    assert!(output.contains("test-peer") || output.contains("8080"),
-        "Peer list should contain added peer");
+    assert!(
+        output.contains("test-peer") || output.contains("8080"),
+        "Peer list should contain added peer"
+    );
 
     // Clean up (peers are in-memory only for now)
 }
@@ -55,9 +57,15 @@ fn test_federation_peer_management() {
 fn test_federation_status() {
     let output = run_collab_cmd(&["collab", "status"]);
 
-    assert!(output.contains("FEDERATION STATUS"), "Should show federation status header");
+    assert!(
+        output.contains("FEDERATION STATUS"),
+        "Should show federation status header"
+    );
     assert!(output.contains("Node ID:"), "Should show node ID");
-    assert!(output.contains("Connected Peers:"), "Should show peer count");
+    assert!(
+        output.contains("Connected Peers:"),
+        "Should show peer count"
+    );
 }
 
 #[test]

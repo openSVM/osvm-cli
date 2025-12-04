@@ -1,8 +1,8 @@
 // File-based logger for TUI mode - prevents logs from corrupting the UI
+use once_cell::sync::Lazy;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
 
 static LOG_FILE: Lazy<Mutex<Option<File>>> = Lazy::new(|| Mutex::new(None));
 

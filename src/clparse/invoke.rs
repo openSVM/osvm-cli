@@ -23,13 +23,17 @@ pub fn build_invoke_command() -> Command {
                 .long("account")
                 .value_name("ACCOUNT")
                 .action(ArgAction::Append)
-                .help("Account in format 'pubkey:is_signer:is_writable' (e.g., '5Ys...:false:true')"),
+                .help(
+                    "Account in format 'pubkey:is_signer:is_writable' (e.g., '5Ys...:false:true')",
+                ),
         )
         .arg(
             Arg::new("skip-preflight")
                 .long("skip-preflight")
                 .action(ArgAction::SetTrue)
-                .help("Skip preflight transaction simulation (useful for debugging on-chain errors)"),
+                .help(
+                    "Skip preflight transaction simulation (useful for debugging on-chain errors)",
+                ),
         )
         .arg(
             Arg::new("show-logs")

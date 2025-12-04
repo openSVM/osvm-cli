@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
 
 /// Semantic features extracted from text for meaningful embeddings
 #[derive(Debug, Clone)]
@@ -29,8 +29,8 @@ struct SemanticFeatures {
     anomaly_indicators: f32,
 
     // Activity levels
-    activity_level: f32,      // -1.0 (low) to 1.0 (high)
-    confidence_level: f32,    // -1.0 (low) to 1.0 (high)
+    activity_level: f32,   // -1.0 (low) to 1.0 (high)
+    confidence_level: f32, // -1.0 (low) to 1.0 (high)
 
     // Text characteristics
     text_length: f32,
@@ -118,11 +118,11 @@ pub struct InvestigationEpisode {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum InvestigationOutcome {
-    Confirmed(String),      // Hypothesis confirmed
-    Refuted(String),        // Hypothesis refuted
-    Inconclusive,          // Not enough evidence
-    Discovered(String),     // Unexpected discovery
-    Anomaly(String),       // Significant anomaly found
+    Confirmed(String),  // Hypothesis confirmed
+    Refuted(String),    // Hypothesis refuted
+    Inconclusive,       // Not enough evidence
+    Discovered(String), // Unexpected discovery
+    Anomaly(String),    // Significant anomaly found
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,7 +133,7 @@ pub struct DecisionPoint {
     pub options_considered: Vec<String>,
     pub choice_made: String,
     pub reasoning: String,
-    pub outcome_quality: f64,  // How good was this decision in retrospect
+    pub outcome_quality: f64, // How good was this decision in retrospect
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,7 +160,7 @@ pub struct BehavioralPattern {
     pub description: String,
     pub indicators: Vec<Indicator>,
     pub confidence_threshold: f64,
-    pub examples: Vec<String>,  // References to investigation episodes
+    pub examples: Vec<String>, // References to investigation episodes
     pub counter_examples: Vec<String>,
 }
 
@@ -331,8 +331,11 @@ impl InvestigationMemory {
         // Add to episodic memory
         {
             let mut memory = self.episodic_memory.write().await;
-            memory.temporal_index.insert(episode.start_time, episode.id.clone());
-            memory.outcome_index
+            memory
+                .temporal_index
+                .insert(episode.start_time, episode.id.clone());
+            memory
+                .outcome_index
                 .entry(episode.outcome.clone())
                 .or_insert_with(Vec::new)
                 .push(episode.id.clone());
@@ -414,8 +417,9 @@ impl InvestigationMemory {
             // Extract successful strategies
             for change in &case.episode.strategy_changes {
                 if change.effectiveness > 0.6 {
-                    *strategy_scores.entry(change.to_strategy.clone()).or_insert(0.0) +=
-                        weight * change.effectiveness;
+                    *strategy_scores
+                        .entry(change.to_strategy.clone())
+                        .or_insert(0.0) += weight * change.effectiveness;
                 }
             }
 
@@ -437,18 +441,22 @@ impl InvestigationMemory {
         // Find applicable investigation templates
         let mut applicable_templates = Vec::new();
         for template in &pattern_library.investigation_templates {
-            if self.check_conditions(&template.applicable_when, current_context).await? {
+            if self
+                .check_conditions(&template.applicable_when, current_context)
+                .await?
+            {
                 applicable_templates.push(template.clone());
             }
         }
 
         Ok(TransferLearningResult {
-            recommended_strategy: strategy_scores.into_iter()
+            recommended_strategy: strategy_scores
+                .into_iter()
                 .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
                 .map(|(s, _)| s)
                 .unwrap_or_else(|| "exploratory".to_string()),
             applicable_patterns: relevant_patterns,
-            suggested_questions: suggested_questions,
+            suggested_questions,
             investigation_templates: applicable_templates,
             confidence: self.calculate_transfer_confidence(similar_cases),
         })
@@ -586,22 +594,22 @@ impl InvestigationMemory {
 
         fs::write(
             self.memory_path.join("semantic_index.json"),
-            serde_json::to_string_pretty(&*semantic)?
+            serde_json::to_string_pretty(&*semantic)?,
         )?;
 
         fs::write(
             self.memory_path.join("episodic_memory.json"),
-            serde_json::to_string_pretty(&*episodic)?
+            serde_json::to_string_pretty(&*episodic)?,
         )?;
 
         fs::write(
             self.memory_path.join("pattern_library.json"),
-            serde_json::to_string_pretty(&*patterns)?
+            serde_json::to_string_pretty(&*patterns)?,
         )?;
 
         fs::write(
             self.memory_path.join("knowledge_graph.json"),
-            serde_json::to_string_pretty(&*knowledge)?
+            serde_json::to_string_pretty(&*knowledge)?,
         )?;
 
         Ok(())
@@ -635,10 +643,12 @@ impl InvestigationMemory {
             let pattern = BehavioralPattern {
                 id: format!("pattern_{}", Uuid::new_v4()),
                 name: "Investigation Pattern".to_string(),
-                description: format!("Pattern from {}: {} questions, {} hypotheses tested",
+                description: format!(
+                    "Pattern from {}: {} questions, {} hypotheses tested",
                     episode.id,
                     episode.questions_asked.len(),
-                    episode.hypotheses_tested.len()),
+                    episode.hypotheses_tested.len()
+                ),
                 indicators,
                 confidence_threshold: 0.6,
                 examples: vec![episode.id.clone()],
@@ -679,10 +689,9 @@ impl InvestigationMemory {
         // In production, this would use a real embedding model like BERT or Sentence Transformers
         let embedding = self.generate_pseudo_embedding(episode)?;
 
-        index.investigation_vectors.insert(
-            episode.id.clone(),
-            embedding,
-        );
+        index
+            .investigation_vectors
+            .insert(episode.id.clone(), embedding);
 
         Ok(())
     }
@@ -773,7 +782,8 @@ impl InvestigationMemory {
 
     async fn get_relevant_patterns(&self, episode_id: &str) -> Result<Vec<BehavioralPattern>> {
         let patterns = self.pattern_library.read().await;
-        Ok(patterns.behavioral_patterns
+        Ok(patterns
+            .behavioral_patterns
             .iter()
             .filter(|p| p.examples.contains(&episode_id.to_string()))
             .cloned()
@@ -824,9 +834,11 @@ impl InvestigationMemory {
             return 0.0;
         }
 
-        let avg_similarity: f64 = similar_cases.iter()
+        let avg_similarity: f64 = similar_cases
+            .iter()
             .map(|c| c.similarity_score)
-            .sum::<f64>() / similar_cases.len() as f64;
+            .sum::<f64>()
+            / similar_cases.len() as f64;
 
         // Higher confidence with more similar cases and higher similarity
         (avg_similarity * (1.0 + (similar_cases.len() as f64 / 10.0).min(1.0))) / 2.0
@@ -876,20 +888,14 @@ impl InvestigationMemory {
         Ok(HashMap::new())
     }
 
-    fn calculate_causal_confidence(
-        &self,
-        edges: &[KnowledgeEdge],
-    ) -> HashMap<String, f64> {
-        edges.iter()
+    fn calculate_causal_confidence(&self, edges: &[KnowledgeEdge]) -> HashMap<String, f64> {
+        edges
+            .iter()
             .map(|e| (format!("{}->{}", e.from, e.to), e.confidence))
             .collect()
     }
 
-    fn find_affected_paths(
-        &self,
-        node: &str,
-        graph: &CausalGraph,
-    ) -> Result<Vec<Vec<String>>> {
+    fn find_affected_paths(&self, node: &str, graph: &CausalGraph) -> Result<Vec<Vec<String>>> {
         // Find all paths affected by a node
         Ok(Vec::new())
     }
@@ -912,11 +918,7 @@ impl InvestigationMemory {
         Ok(HashMap::new())
     }
 
-    fn evaluate_hypothesis(
-        &self,
-        hypothesis: &Hypothesis,
-        graph: &CausalGraph,
-    ) -> Result<Outcome> {
+    fn evaluate_hypothesis(&self, hypothesis: &Hypothesis, graph: &CausalGraph) -> Result<Outcome> {
         Ok(Outcome {
             hypothesis_id: hypothesis.id.clone(),
             probability: 0.7,
@@ -931,16 +933,14 @@ impl InvestigationMemory {
         outcome: &Outcome,
     ) -> Result<Vec<String>> {
         // Identify factors critical to the outcome
-        Ok(effects.iter()
+        Ok(effects
+            .iter()
             .filter(|(_, v)| **v > 0.5)
             .map(|(k, _)| k.clone())
             .collect())
     }
 
-    fn calculate_counterfactual_confidence(
-        &self,
-        effects: &HashMap<String, f64>,
-    ) -> f64 {
+    fn calculate_counterfactual_confidence(&self, effects: &HashMap<String, f64>) -> f64 {
         if effects.is_empty() {
             return 0.0;
         }
@@ -959,22 +959,31 @@ impl InvestigationMemory {
         let wallet_mentions = (lower.matches("wallet").count() as f32 / text_len) * 100.0;
         let transaction_mentions = (lower.matches("transaction").count() as f32 / text_len) * 100.0;
         let token_mentions = (lower.matches("token").count() as f32 / text_len) * 100.0;
-        let dex_mentions = ((lower.matches("dex").count() +
-                            lower.matches("swap").count() +
-                            lower.matches("exchange").count()) as f32 / text_len) * 100.0;
-        let nft_mentions = ((lower.matches("nft").count() +
-                            lower.matches("mint").count()) as f32 / text_len) * 100.0;
-        let defi_mentions = ((lower.matches("defi").count() +
-                             lower.matches("liquidity").count() +
-                             lower.matches("yield").count()) as f32 / text_len) * 100.0;
-        let mev_mentions = ((lower.matches("mev").count() +
-                            lower.matches("arbitrage").count() +
-                            lower.matches("sandwich").count()) as f32 / text_len) * 100.0;
+        let dex_mentions = ((lower.matches("dex").count()
+            + lower.matches("swap").count()
+            + lower.matches("exchange").count()) as f32
+            / text_len)
+            * 100.0;
+        let nft_mentions = ((lower.matches("nft").count() + lower.matches("mint").count()) as f32
+            / text_len)
+            * 100.0;
+        let defi_mentions = ((lower.matches("defi").count()
+            + lower.matches("liquidity").count()
+            + lower.matches("yield").count()) as f32
+            / text_len)
+            * 100.0;
+        let mev_mentions = ((lower.matches("mev").count()
+            + lower.matches("arbitrage").count()
+            + lower.matches("sandwich").count()) as f32
+            / text_len)
+            * 100.0;
 
         // Analyze address patterns (Solana addresses are typically 32-44 chars base58)
-        let potential_addresses = text.split_whitespace()
-            .filter(|word| word.len() >= 32 && word.len() <= 44 &&
-                          word.chars().all(|c| c.is_alphanumeric()))
+        let potential_addresses = text
+            .split_whitespace()
+            .filter(|word| {
+                word.len() >= 32 && word.len() <= 44 && word.chars().all(|c| c.is_alphanumeric())
+            })
             .count() as f32;
         let has_addresses = (potential_addresses > 0.0) as i32 as f32;
 
@@ -989,27 +998,31 @@ impl InvestigationMemory {
                              lower.contains("date")) as i32 as f32;
 
         // Behavioral indicators (weighted by importance)
-        let bot_indicators = ((lower.matches("bot").count() * 2 +
-                              lower.matches("automated").count() +
-                              lower.matches("regular interval").count() +
-                              lower.matches("pattern").count()) as f32 / text_len) * 100.0;
+        let bot_indicators = ((lower.matches("bot").count() * 2
+            + lower.matches("automated").count()
+            + lower.matches("regular interval").count()
+            + lower.matches("pattern").count()) as f32
+            / text_len)
+            * 100.0;
 
-        let anomaly_indicators = ((lower.matches("unusual").count() * 2 +
-                                  lower.matches("anomaly").count() * 3 +
-                                  lower.matches("suspicious").count() * 3 +
-                                  lower.matches("strange").count() +
-                                  lower.matches("unexpected").count()) as f32 / text_len) * 100.0;
+        let anomaly_indicators = ((lower.matches("unusual").count() * 2
+            + lower.matches("anomaly").count() * 3
+            + lower.matches("suspicious").count() * 3
+            + lower.matches("strange").count()
+            + lower.matches("unexpected").count()) as f32
+            / text_len)
+            * 100.0;
 
         // Activity level analysis
-        let high_activity_score = (lower.matches("high").count() +
-                                   lower.matches("frequent").count() +
-                                   lower.matches("many").count() +
-                                   lower.matches("active").count()) as f32;
+        let high_activity_score = (lower.matches("high").count()
+            + lower.matches("frequent").count()
+            + lower.matches("many").count()
+            + lower.matches("active").count()) as f32;
 
-        let low_activity_score = (lower.matches("low").count() +
-                                  lower.matches("rare").count() +
-                                  lower.matches("few").count() +
-                                  lower.matches("inactive").count()) as f32;
+        let low_activity_score = (lower.matches("low").count()
+            + lower.matches("rare").count()
+            + lower.matches("few").count()
+            + lower.matches("inactive").count()) as f32;
 
         let activity_level = if high_activity_score > low_activity_score {
             (high_activity_score / (high_activity_score + low_activity_score + 1.0)).min(1.0)
@@ -1020,15 +1033,15 @@ impl InvestigationMemory {
         };
 
         // Confidence analysis
-        let high_confidence_score = (lower.matches("confident").count() +
-                                     lower.matches("certain").count() +
-                                     lower.matches("definitely").count() +
-                                     lower.matches("confirmed").count()) as f32;
+        let high_confidence_score = (lower.matches("confident").count()
+            + lower.matches("certain").count()
+            + lower.matches("definitely").count()
+            + lower.matches("confirmed").count()) as f32;
 
-        let low_confidence_score = (lower.matches("uncertain").count() +
-                                    lower.matches("maybe").count() +
-                                    lower.matches("possibly").count() +
-                                    lower.matches("unclear").count()) as f32;
+        let low_confidence_score = (lower.matches("uncertain").count()
+            + lower.matches("maybe").count()
+            + lower.matches("possibly").count()
+            + lower.matches("unclear").count()) as f32;
 
         let confidence_level = if high_confidence_score > low_confidence_score {
             (high_confidence_score / (high_confidence_score + low_confidence_score + 1.0)).min(1.0)
@@ -1100,7 +1113,7 @@ impl InvestigationMemory {
 
         let mut idx = 16;
         for i in 0..14 {
-            for j in i+1..14 {
+            for j in i + 1..14 {
                 if idx < 80 {
                     // Create interaction features with normalization
                     embedding[idx] = (base_features[i] * base_features[j]).tanh();
@@ -1111,7 +1124,8 @@ impl InvestigationMemory {
 
         // === Domain-Specific Combinations (dimensions 80-127) ===
         // Trading activity patterns
-        embedding[80] = (features.dex_mentions + features.token_mentions + features.mev_mentions).tanh();
+        embedding[80] =
+            (features.dex_mentions + features.token_mentions + features.mev_mentions).tanh();
         embedding[81] = (features.bot_indicators * features.dex_mentions).tanh();
         embedding[82] = (features.mev_mentions * features.anomaly_indicators).tanh();
 
@@ -1124,7 +1138,8 @@ impl InvestigationMemory {
         embedding[86] = (features.defi_mentions * features.wallet_mentions).tanh();
 
         // Risk indicators
-        embedding[87] = (features.anomaly_indicators * (1.0 - features.confidence_level.abs())).tanh();
+        embedding[87] =
+            (features.anomaly_indicators * (1.0 - features.confidence_level.abs())).tanh();
         embedding[88] = (features.anomaly_indicators + features.bot_indicators).tanh();
 
         // Activity correlations
@@ -1137,20 +1152,21 @@ impl InvestigationMemory {
 
         // Fill remaining dimensions with smooth transitions
         // Using sinusoidal basis functions for remaining dimensions
-        for i in 93..768 {
-            let freq = (i - 93) as f32 / 50.0;
-            let base_idx = (i - 93) % 14;
+        for (offset, slot) in embedding[93..768].iter_mut().enumerate() {
+            let freq = offset as f32 / 50.0;
+            let base_idx = offset % 14;
             let base_val = if base_idx < base_features.len() {
                 base_features[base_idx]
             } else {
                 0.0
             };
 
-            if i % 2 == 0 {
-                embedding[i] = (freq * base_val).sin() * 0.5;
+            let i = 93 + offset;
+            *slot = if i % 2 == 0 {
+                (freq * base_val).sin() * 0.5
             } else {
-                embedding[i] = (freq * base_val).cos() * 0.5;
-            }
+                (freq * base_val).cos() * 0.5
+            };
         }
 
         // === Normalization ===
@@ -1165,15 +1181,13 @@ impl InvestigationMemory {
         embedding
     }
 
-    async fn load_investigation_context(
-        &self,
-        investigation_id: &str,
-    ) -> Result<MemoryContext> {
+    async fn load_investigation_context(&self, investigation_id: &str) -> Result<MemoryContext> {
         let episodic = self.episodic_memory.read().await;
         let patterns = self.pattern_library.read().await;
 
         Ok(MemoryContext {
-            relevant_episodes: episodic.episodes
+            relevant_episodes: episodic
+                .episodes
                 .iter()
                 .filter(|e| e.id == investigation_id)
                 .cloned()
@@ -1371,5 +1385,5 @@ pub struct Finding {
 }
 
 // Use real crates
-use uuid::Uuid;
 use rand::Rng;
+use uuid::Uuid;

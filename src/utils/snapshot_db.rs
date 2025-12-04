@@ -7,19 +7,19 @@
 //! - Efficient range queries (account scans)
 //! - Large datasets (terabytes)
 
-use anyhow::{Result, Context};
-use rocksdb::{DB, Options, WriteBatch, IteratorMode};
+use anyhow::{Context, Result};
+use rocksdb::{IteratorMode, Options, WriteBatch, DB};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Column families for different data types
 pub mod cf {
-    pub const ACCOUNTS: &str = "accounts";           // Account state data
-    pub const TRANSACTIONS: &str = "transactions";   // Transaction history
-    pub const PROGRAM_DATA: &str = "program_data";   // Program account data
+    pub const ACCOUNTS: &str = "accounts"; // Account state data
+    pub const TRANSACTIONS: &str = "transactions"; // Transaction history
+    pub const PROGRAM_DATA: &str = "program_data"; // Program account data
     pub const TOKEN_ACCOUNTS: &str = "token_accounts"; // Token-specific data
-    pub const METADATA: &str = "metadata";           // Snapshot metadata
+    pub const METADATA: &str = "metadata"; // Snapshot metadata
 }
 
 /// Account data stored in RocksDB
@@ -31,7 +31,7 @@ pub struct AccountRecord {
     pub executable: bool,
     pub rent_epoch: u64,
     pub data: Vec<u8>,
-    pub slot: u64,  // When this was last updated
+    pub slot: u64, // When this was last updated
 }
 
 /// Transaction record
@@ -88,8 +88,7 @@ impl SnapshotDB {
 
         // Ensure directory exists
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create snapshot db directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create snapshot db directory")?;
         }
 
         // Configure RocksDB for high performance
@@ -116,17 +115,13 @@ impl SnapshotDB {
             cf::METADATA,
         ];
 
-        let db = DB::open_cf(&opts, &db_path, &cfs)
-            .context("Failed to open snapshot database")?;
+        let db = DB::open_cf(&opts, &db_path, &cfs).context("Failed to open snapshot database")?;
 
-        Ok(Self {
-            db: Arc::new(db),
-        })
+        Ok(Self { db: Arc::new(db) })
     }
 
     fn db_path() -> Result<PathBuf> {
-        let home = dirs::home_dir()
-            .context("Failed to get home directory")?;
+        let home = dirs::home_dir().context("Failed to get home directory")?;
         Ok(home.join(".osvm").join("snapshot.rocksdb"))
     }
 
@@ -135,8 +130,7 @@ impl SnapshotDB {
     pub fn open_path(path: &std::path::Path) -> Result<Self> {
         // Ensure directory exists
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create snapshot db directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create snapshot db directory")?;
         }
 
         // Configure RocksDB for high performance
@@ -163,24 +157,24 @@ impl SnapshotDB {
             cf::METADATA,
         ];
 
-        let db = DB::open_cf(&opts, path, &cfs)
-            .context("Failed to open snapshot database")?;
+        let db = DB::open_cf(&opts, path, &cfs).context("Failed to open snapshot database")?;
 
-        Ok(Self {
-            db: Arc::new(db),
-        })
+        Ok(Self { db: Arc::new(db) })
     }
 
     /// Store account data
     pub fn put_account(&self, account: &AccountRecord) -> Result<()> {
-        let cf = self.db.cf_handle(cf::ACCOUNTS)
+        let cf = self
+            .db
+            .cf_handle(cf::ACCOUNTS)
             .context("Accounts column family not found")?;
 
         let key = account.address.as_bytes();
         let value = bincode::encode_to_vec(account, bincode::config::standard())
             .context("Failed to serialize account")?;
 
-        self.db.put_cf(cf, key, value)
+        self.db
+            .put_cf(cf, key, value)
             .context("Failed to write account")?;
 
         Ok(())
@@ -188,15 +182,18 @@ impl SnapshotDB {
 
     /// Get account data
     pub fn get_account(&self, address: &str) -> Result<Option<AccountRecord>> {
-        let cf = self.db.cf_handle(cf::ACCOUNTS)
+        let cf = self
+            .db
+            .cf_handle(cf::ACCOUNTS)
             .context("Accounts column family not found")?;
 
         let key = address.as_bytes();
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let (account, _): (AccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
-                    .context("Failed to deserialize account")?;
+                let (account, _): (AccountRecord, _) =
+                    bincode::decode_from_slice(&value, bincode::config::standard())
+                        .context("Failed to deserialize account")?;
                 Ok(Some(account))
             }
             None => Ok(None),
@@ -205,7 +202,9 @@ impl SnapshotDB {
 
     /// Batch insert accounts (for snapshot sync)
     pub fn put_accounts_batch(&self, accounts: &[AccountRecord]) -> Result<()> {
-        let cf = self.db.cf_handle(cf::ACCOUNTS)
+        let cf = self
+            .db
+            .cf_handle(cf::ACCOUNTS)
             .context("Accounts column family not found")?;
 
         let mut batch = WriteBatch::default();
@@ -217,7 +216,8 @@ impl SnapshotDB {
             batch.put_cf(cf, key, value);
         }
 
-        self.db.write(batch)
+        self.db
+            .write(batch)
             .context("Failed to write account batch")?;
 
         Ok(())
@@ -225,14 +225,17 @@ impl SnapshotDB {
 
     /// Store transaction
     pub fn put_transaction(&self, tx: &TransactionRecord) -> Result<()> {
-        let cf = self.db.cf_handle(cf::TRANSACTIONS)
+        let cf = self
+            .db
+            .cf_handle(cf::TRANSACTIONS)
             .context("Transactions column family not found")?;
 
         let key = tx.signature.as_bytes();
         let value = bincode::encode_to_vec(tx, bincode::config::standard())
             .context("Failed to serialize transaction")?;
 
-        self.db.put_cf(cf, key, value)
+        self.db
+            .put_cf(cf, key, value)
             .context("Failed to write transaction")?;
 
         Ok(())
@@ -240,15 +243,18 @@ impl SnapshotDB {
 
     /// Get transaction
     pub fn get_transaction(&self, signature: &str) -> Result<Option<TransactionRecord>> {
-        let cf = self.db.cf_handle(cf::TRANSACTIONS)
+        let cf = self
+            .db
+            .cf_handle(cf::TRANSACTIONS)
             .context("Transactions column family not found")?;
 
         let key = signature.as_bytes();
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let (tx, _): (TransactionRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
-                    .context("Failed to deserialize transaction")?;
+                let (tx, _): (TransactionRecord, _) =
+                    bincode::decode_from_slice(&value, bincode::config::standard())
+                        .context("Failed to deserialize transaction")?;
                 Ok(Some(tx))
             }
             None => Ok(None),
@@ -257,14 +263,17 @@ impl SnapshotDB {
 
     /// Store token account
     pub fn put_token_account(&self, token_account: &TokenAccountRecord) -> Result<()> {
-        let cf = self.db.cf_handle(cf::TOKEN_ACCOUNTS)
+        let cf = self
+            .db
+            .cf_handle(cf::TOKEN_ACCOUNTS)
             .context("Token accounts column family not found")?;
 
         let key = token_account.address.as_bytes();
         let value = bincode::encode_to_vec(token_account, bincode::config::standard())
             .context("Failed to serialize token account")?;
 
-        self.db.put_cf(cf, key, value)
+        self.db
+            .put_cf(cf, key, value)
             .context("Failed to write token account")?;
 
         Ok(())
@@ -272,15 +281,18 @@ impl SnapshotDB {
 
     /// Get token account
     pub fn get_token_account(&self, address: &str) -> Result<Option<TokenAccountRecord>> {
-        let cf = self.db.cf_handle(cf::TOKEN_ACCOUNTS)
+        let cf = self
+            .db
+            .cf_handle(cf::TOKEN_ACCOUNTS)
             .context("Token accounts column family not found")?;
 
         let key = address.as_bytes();
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let (token, _): (TokenAccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
-                    .context("Failed to deserialize token account")?;
+                let (token, _): (TokenAccountRecord, _) =
+                    bincode::decode_from_slice(&value, bincode::config::standard())
+                        .context("Failed to deserialize token account")?;
                 Ok(Some(token))
             }
             None => Ok(None),
@@ -289,7 +301,9 @@ impl SnapshotDB {
 
     /// Get all token accounts for a wallet
     pub fn get_wallet_tokens(&self, owner: &str) -> Result<Vec<TokenAccountRecord>> {
-        let cf = self.db.cf_handle(cf::TOKEN_ACCOUNTS)
+        let cf = self
+            .db
+            .cf_handle(cf::TOKEN_ACCOUNTS)
             .context("Token accounts column family not found")?;
 
         let mut tokens = Vec::new();
@@ -297,8 +311,9 @@ impl SnapshotDB {
         let iter = self.db.iterator_cf(cf, IteratorMode::Start);
         for item in iter {
             let (_, value) = item?;
-            let (token, _): (TokenAccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
-                .context("Failed to deserialize token account")?;
+            let (token, _): (TokenAccountRecord, _) =
+                bincode::decode_from_slice(&value, bincode::config::standard())
+                    .context("Failed to deserialize token account")?;
 
             if token.owner == owner {
                 tokens.push(token);
@@ -310,7 +325,9 @@ impl SnapshotDB {
 
     /// Get all accounts owned by a program
     pub fn get_program_accounts(&self, program_id: &str) -> Result<Vec<AccountRecord>> {
-        let cf = self.db.cf_handle(cf::ACCOUNTS)
+        let cf = self
+            .db
+            .cf_handle(cf::ACCOUNTS)
             .context("Accounts column family not found")?;
 
         let mut accounts = Vec::new();
@@ -318,8 +335,9 @@ impl SnapshotDB {
         let iter = self.db.iterator_cf(cf, IteratorMode::Start);
         for item in iter {
             let (_, value) = item?;
-            let (account, _): (AccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
-                .context("Failed to deserialize account")?;
+            let (account, _): (AccountRecord, _) =
+                bincode::decode_from_slice(&value, bincode::config::standard())
+                    .context("Failed to deserialize account")?;
 
             if account.owner == program_id {
                 accounts.push(account);
@@ -331,14 +349,17 @@ impl SnapshotDB {
 
     /// Store snapshot metadata
     pub fn put_snapshot_metadata(&self, metadata: &SnapshotMetadata) -> Result<()> {
-        let cf = self.db.cf_handle(cf::METADATA)
+        let cf = self
+            .db
+            .cf_handle(cf::METADATA)
             .context("Metadata column family not found")?;
 
         let key = b"current_snapshot";
         let value = bincode::encode_to_vec(metadata, bincode::config::standard())
             .context("Failed to serialize metadata")?;
 
-        self.db.put_cf(cf, key, value)
+        self.db
+            .put_cf(cf, key, value)
             .context("Failed to write metadata")?;
 
         Ok(())
@@ -346,15 +367,18 @@ impl SnapshotDB {
 
     /// Get current snapshot metadata
     pub fn get_snapshot_metadata(&self) -> Result<Option<SnapshotMetadata>> {
-        let cf = self.db.cf_handle(cf::METADATA)
+        let cf = self
+            .db
+            .cf_handle(cf::METADATA)
             .context("Metadata column family not found")?;
 
         let key = b"current_snapshot";
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let (metadata, _): (SnapshotMetadata, _) = bincode::decode_from_slice(&value, bincode::config::standard())
-                    .context("Failed to deserialize metadata")?;
+                let (metadata, _): (SnapshotMetadata, _) =
+                    bincode::decode_from_slice(&value, bincode::config::standard())
+                        .context("Failed to deserialize metadata")?;
                 Ok(Some(metadata))
             }
             None => Ok(None),
@@ -363,11 +387,17 @@ impl SnapshotDB {
 
     /// Get database statistics
     pub fn get_stats(&self) -> Result<DatabaseStats> {
-        let accounts_cf = self.db.cf_handle(cf::ACCOUNTS)
+        let accounts_cf = self
+            .db
+            .cf_handle(cf::ACCOUNTS)
             .context("Accounts column family not found")?;
-        let txs_cf = self.db.cf_handle(cf::TRANSACTIONS)
+        let txs_cf = self
+            .db
+            .cf_handle(cf::TRANSACTIONS)
             .context("Transactions column family not found")?;
-        let tokens_cf = self.db.cf_handle(cf::TOKEN_ACCOUNTS)
+        let tokens_cf = self
+            .db
+            .cf_handle(cf::TOKEN_ACCOUNTS)
             .context("Token accounts column family not found")?;
 
         let accounts_count = self.estimate_num_keys(accounts_cf)?;
@@ -384,7 +414,10 @@ impl SnapshotDB {
 
     fn estimate_num_keys(&self, cf: &rocksdb::ColumnFamily) -> Result<u64> {
         // RocksDB property for approximate count
-        match self.db.property_int_value_cf(cf, "rocksdb.estimate-num-keys")? {
+        match self
+            .db
+            .property_int_value_cf(cf, "rocksdb.estimate-num-keys")?
+        {
             Some(count) => Ok(count),
             None => Ok(0),
         }

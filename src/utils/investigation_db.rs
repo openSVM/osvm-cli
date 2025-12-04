@@ -1,10 +1,10 @@
 //! Investigation database for persistent forensic analysis tracking
 
-use anyhow::{Result, Context};
-use rusqlite::{Connection, params, OptionalExtension};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 
 /// Investigation record with metadata and findings
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,11 +29,11 @@ pub struct Investigation {
 pub struct Alert {
     pub id: Option<i64>,
     pub investigation_id: i64,
-    pub alert_type: String,  // "rapid_transfer", "circular_flow", "mixer_detected"
-    pub severity: String,     // "Critical", "High", "Medium", "Low"
+    pub alert_type: String, // "rapid_transfer", "circular_flow", "mixer_detected"
+    pub severity: String,   // "Critical", "High", "Medium", "Low"
     pub message: String,
     pub timestamp: DateTime<Utc>,
-    pub metadata: Option<String>,  // JSON for additional data
+    pub metadata: Option<String>, // JSON for additional data
 }
 
 /// Wallet history entry for longitudinal analysis
@@ -45,7 +45,7 @@ pub struct WalletHistory {
     pub investigation_count: usize,
     pub current_risk_score: f64,
     pub current_behavior: String,
-    pub risk_trend: String,  // "increasing", "decreasing", "stable"
+    pub risk_trend: String, // "increasing", "decreasing", "stable"
 }
 
 pub struct InvestigationDB {
@@ -59,12 +59,10 @@ impl InvestigationDB {
 
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create database directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create database directory")?;
         }
 
-        let conn = Connection::open(&db_path)
-            .context("Failed to open investigation database")?;
+        let conn = Connection::open(&db_path).context("Failed to open investigation database")?;
 
         let mut db = Self { conn };
         db.init_schema()?;
@@ -74,8 +72,7 @@ impl InvestigationDB {
 
     /// Get database file path
     fn db_path() -> Result<PathBuf> {
-        let home = dirs::home_dir()
-            .context("Failed to get home directory")?;
+        let home = dirs::home_dir().context("Failed to get home directory")?;
 
         Ok(home.join(".osvm").join("investigations.db"))
     }
@@ -85,12 +82,10 @@ impl InvestigationDB {
     pub fn open_path(path: &std::path::Path) -> Result<Self> {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create database directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create database directory")?;
         }
 
-        let conn = Connection::open(path)
-            .context("Failed to open investigation database")?;
+        let conn = Connection::open(path).context("Failed to open investigation database")?;
 
         let mut db = Self { conn };
         db.init_schema()?;
@@ -100,8 +95,9 @@ impl InvestigationDB {
 
     /// Initialize database schema
     fn init_schema(&mut self) -> Result<()> {
-        self.conn.execute_batch(
-            r#"
+        self.conn
+            .execute_batch(
+                r#"
             CREATE TABLE IF NOT EXISTS investigations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 wallet_address TEXT NOT NULL,
@@ -149,8 +145,9 @@ impl InvestigationDB {
                 ON alerts(investigation_id);
             CREATE INDEX IF NOT EXISTS idx_alerts_severity
                 ON alerts(severity, timestamp DESC);
-            "#
-        ).context("Failed to initialize database schema")?;
+            "#,
+            )
+            .context("Failed to initialize database schema")?;
 
         Ok(())
     }
@@ -180,7 +177,7 @@ impl InvestigationDB {
                 alerts_json,
                 reasons_json,
                 inv.notes,
-            ]
+            ],
         )?;
 
         let id = self.conn.last_insert_rowid();
@@ -206,7 +203,7 @@ impl InvestigationDB {
                 alert.message,
                 alert.timestamp.to_rfc3339(),
                 alert.metadata,
-            ]
+            ],
         )?;
 
         Ok(self.conn.last_insert_rowid())
@@ -221,7 +218,7 @@ impl InvestigationDB {
             FROM investigations
             WHERE wallet_address = ?1
             ORDER BY started_at DESC
-            "#
+            "#,
         )?;
 
         let invs = stmt.query_map([wallet], |row| {
@@ -232,8 +229,10 @@ impl InvestigationDB {
                 id: Some(row.get(0)?),
                 wallet_address: row.get(1)?,
                 started_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .unwrap().with_timezone(&Utc),
-                completed_at: row.get::<_, Option<String>>(3)?
+                    .unwrap()
+                    .with_timezone(&Utc),
+                completed_at: row
+                    .get::<_, Option<String>>(3)?
                     .and_then(|s: String| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc)),
                 risk_score: row.get(4)?,
@@ -260,7 +259,7 @@ impl InvestigationDB {
             FROM investigations
             WHERE risk_score >= ?1
             ORDER BY risk_score DESC, started_at DESC
-            "#
+            "#,
         )?;
 
         let invs = stmt.query_map([min_score], |row| {
@@ -271,8 +270,10 @@ impl InvestigationDB {
                 id: Some(row.get(0)?),
                 wallet_address: row.get(1)?,
                 started_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .unwrap().with_timezone(&Utc),
-                completed_at: row.get::<_, Option<String>>(3)?
+                    .unwrap()
+                    .with_timezone(&Utc),
+                completed_at: row
+                    .get::<_, Option<String>>(3)?
                     .and_then(|s: String| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc)),
                 risk_score: row.get(4)?,
@@ -291,7 +292,12 @@ impl InvestigationDB {
     }
 
     /// Update wallet history
-    fn update_wallet_history(&mut self, wallet: &str, risk_score: f64, behavior: &str) -> Result<()> {
+    fn update_wallet_history(
+        &mut self,
+        wallet: &str,
+        risk_score: f64,
+        behavior: &str,
+    ) -> Result<()> {
         let now = Utc::now();
 
         // Get previous investigation for trend analysis
@@ -327,7 +333,7 @@ impl InvestigationDB {
                 current_behavior = ?4,
                 risk_trend = ?5
             "#,
-            params![wallet, now.to_rfc3339(), risk_score, behavior, risk_trend]
+            params![wallet, now.to_rfc3339(), risk_score, behavior, risk_trend],
         )?;
 
         Ok(())
@@ -335,28 +341,33 @@ impl InvestigationDB {
 
     /// Get wallet history summary
     pub fn get_wallet_history(&self, wallet: &str) -> Result<Option<WalletHistory>> {
-        self.conn.query_row(
-            r#"
+        self.conn
+            .query_row(
+                r#"
             SELECT wallet_address, first_seen, last_investigated, investigation_count,
                    current_risk_score, current_behavior, risk_trend
             FROM wallet_history
             WHERE wallet_address = ?1
             "#,
-            [wallet],
-            |row| {
-                Ok(WalletHistory {
-                    wallet_address: row.get(0)?,
-                    first_seen: DateTime::parse_from_rfc3339(&row.get::<_, String>(1)?)
-                        .unwrap().with_timezone(&Utc),
-                    last_investigated: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                        .unwrap().with_timezone(&Utc),
-                    investigation_count: row.get::<_, i64>(3)? as usize,
-                    current_risk_score: row.get(4)?,
-                    current_behavior: row.get(5)?,
-                    risk_trend: row.get(6)?,
-                })
-            }
-        ).optional().map_err(Into::into)
+                [wallet],
+                |row| {
+                    Ok(WalletHistory {
+                        wallet_address: row.get(0)?,
+                        first_seen: DateTime::parse_from_rfc3339(&row.get::<_, String>(1)?)
+                            .unwrap()
+                            .with_timezone(&Utc),
+                        last_investigated: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
+                            .unwrap()
+                            .with_timezone(&Utc),
+                        investigation_count: row.get::<_, i64>(3)? as usize,
+                        current_risk_score: row.get(4)?,
+                        current_behavior: row.get(5)?,
+                        risk_trend: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     /// Get recent investigations summary
@@ -368,7 +379,7 @@ impl InvestigationDB {
             FROM investigations
             ORDER BY started_at DESC
             LIMIT ?1
-            "#
+            "#,
         )?;
 
         let invs = stmt.query_map([limit as i64], |row| {
@@ -379,8 +390,10 @@ impl InvestigationDB {
                 id: Some(row.get(0)?),
                 wallet_address: row.get(1)?,
                 started_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .unwrap().with_timezone(&Utc),
-                completed_at: row.get::<_, Option<String>>(3)?
+                    .unwrap()
+                    .with_timezone(&Utc),
+                completed_at: row
+                    .get::<_, Option<String>>(3)?
                     .and_then(|s: String| DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc)),
                 risk_score: row.get(4)?,

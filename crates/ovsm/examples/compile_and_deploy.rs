@@ -1,5 +1,5 @@
 //! Compile OVSM to sBPF and deploy to localnet
-use ovsm::compiler::{Compiler, CompileOptions, debug_compile};
+use ovsm::compiler::{debug_compile, CompileOptions, Compiler};
 use std::process::Command;
 
 fn main() {
@@ -29,7 +29,13 @@ fn main() {
             // Generate program keypair
             let program_keypair = "/tmp/amm_program_keypair.json";
             let keygen = Command::new("solana-keygen")
-                .args(["new", "--no-bip39-passphrase", "--outfile", program_keypair, "--force"])
+                .args([
+                    "new",
+                    "--no-bip39-passphrase",
+                    "--outfile",
+                    program_keypair,
+                    "--force",
+                ])
                 .output()
                 .expect("Failed to generate keypair");
 
@@ -43,7 +49,9 @@ fn main() {
                 .args(["pubkey", program_keypair])
                 .output()
                 .expect("Failed to get pubkey");
-            let program_id = String::from_utf8_lossy(&pubkey_output.stdout).trim().to_string();
+            let program_id = String::from_utf8_lossy(&pubkey_output.stdout)
+                .trim()
+                .to_string();
             println!("   Program ID: {}", program_id);
 
             println!("\n=== Deploying to localnet ===\n");
@@ -51,10 +59,14 @@ fn main() {
             // Deploy
             let deploy = Command::new("solana")
                 .args([
-                    "program", "deploy",
-                    "--keypair", "/tmp/test-deploy-keypair.json",
-                    "--program-id", program_keypair,
-                    "--url", "http://localhost:8899",
+                    "program",
+                    "deploy",
+                    "--keypair",
+                    "/tmp/test-deploy-keypair.json",
+                    "--program-id",
+                    program_keypair,
+                    "--url",
+                    "http://localhost:8899",
                     elf_path,
                 ])
                 .output()
@@ -70,8 +82,10 @@ fn main() {
                 // Verify deployment
                 let account = Command::new("solana")
                     .args([
-                        "program", "show",
-                        "--url", "http://localhost:8899",
+                        "program",
+                        "show",
+                        "--url",
+                        "http://localhost:8899",
                         &program_id,
                     ])
                     .output();

@@ -1,9 +1,9 @@
 //! Integration tests for OVSM language integration in OSVM-CLI
 //! These tests verify that the OVSM service works correctly through the CLI interface.
 
+use assert_cmd::assert::OutputAssertExt;
 #[allow(deprecated)]
 use assert_cmd::cargo::cargo_bin;
-use assert_cmd::assert::OutputAssertExt;
 use predicates::prelude::*;
 use std::fs;
 use std::process::Command;

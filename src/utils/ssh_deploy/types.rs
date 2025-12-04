@@ -115,10 +115,10 @@ impl ServerConfig {
 
         // Try common SSH key types in order of preference (modern first)
         let key_types = vec![
-            "id_ed25519",    // Ed25519 (modern, recommended)
-            "id_ecdsa",      // ECDSA
-            "id_rsa",        // RSA (legacy but common)
-            "id_dsa",        // DSA (deprecated)
+            "id_ed25519", // Ed25519 (modern, recommended)
+            "id_ecdsa",   // ECDSA
+            "id_rsa",     // RSA (legacy but common)
+            "id_dsa",     // DSA (deprecated)
         ];
 
         for key_type in key_types {

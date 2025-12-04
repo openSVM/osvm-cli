@@ -3,7 +3,7 @@
 //! Parses Anchor IDL JSON files to provide semantic naming
 //! for decompiled programs.
 
-use crate::{Result, Error};
+use crate::{Error, Result};
 use std::collections::HashMap;
 
 /// Anchor IDL structure
@@ -173,7 +173,8 @@ impl AnchorIdl {
 
         // Parse discriminator
         let discriminator = if let Some(disc) = value["discriminator"].as_array() {
-            let bytes: Vec<u8> = disc.iter()
+            let bytes: Vec<u8> = disc
+                .iter()
                 .filter_map(|v| v.as_u64().map(|n| n as u8))
                 .collect();
             if bytes.len() == 8 {
@@ -195,7 +196,8 @@ impl AnchorIdl {
                     name: acct["name"].as_str().unwrap_or("unknown").to_string(),
                     is_mut: acct["isMut"].as_bool().unwrap_or(false),
                     is_signer: acct["isSigner"].as_bool().unwrap_or(false),
-                    description: acct["docs"].as_array()
+                    description: acct["docs"]
+                        .as_array()
                         .and_then(|d| d.first())
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string()),
@@ -226,7 +228,8 @@ impl AnchorIdl {
         let name = value["name"].as_str().unwrap_or("unknown").to_string();
 
         let discriminator = if let Some(disc) = value["discriminator"].as_array() {
-            let bytes: Vec<u8> = disc.iter()
+            let bytes: Vec<u8> = disc
+                .iter()
                 .filter_map(|v| v.as_u64().map(|n| n as u8))
                 .collect();
             if bytes.len() == 8 {
@@ -264,20 +267,28 @@ impl AnchorIdl {
 
         let kind = if let Some(ty) = value["type"].as_object() {
             if let Some("struct") = ty.get("kind").and_then(|v| v.as_str()) {
-                let fields: Vec<IdlField> = ty.get("fields")
+                let fields: Vec<IdlField> = ty
+                    .get("fields")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().map(|f| IdlField {
-                        name: f["name"].as_str().unwrap_or("unknown").to_string(),
-                        ty: Self::type_to_string(&f["type"]),
-                    }).collect())
+                    .map(|arr| {
+                        arr.iter()
+                            .map(|f| IdlField {
+                                name: f["name"].as_str().unwrap_or("unknown").to_string(),
+                                ty: Self::type_to_string(&f["type"]),
+                            })
+                            .collect()
+                    })
                     .unwrap_or_default();
                 IdlTypeKind::Struct(fields)
             } else if let Some("enum") = ty.get("kind").and_then(|v| v.as_str()) {
-                let variants: Vec<String> = ty.get("variants")
+                let variants: Vec<String> = ty
+                    .get("variants")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter()
-                        .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
-                        .collect())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 IdlTypeKind::Enum(variants)
             } else {
@@ -319,7 +330,8 @@ impl AnchorIdl {
             if let Some(arr) = obj.get("array") {
                 if let Some(inner) = arr.as_array() {
                     if inner.len() == 2 {
-                        return format!("[{}; {}]",
+                        return format!(
+                            "[{}; {}]",
                             Self::type_to_string(&inner[0]),
                             inner[1].as_u64().unwrap_or(0)
                         );
@@ -334,26 +346,24 @@ impl AnchorIdl {
 
     /// Look up instruction by discriminator
     pub fn find_instruction_by_discriminator(&self, disc: &[u8; 8]) -> Option<&IdlInstruction> {
-        self.instructions.iter()
+        self.instructions
+            .iter()
             .find(|i| i.discriminator.as_ref() == Some(disc))
     }
 
     /// Look up instruction by name
     pub fn find_instruction(&self, name: &str) -> Option<&IdlInstruction> {
-        self.instructions.iter()
-            .find(|i| i.name == name)
+        self.instructions.iter().find(|i| i.name == name)
     }
 
     /// Look up account by name
     pub fn find_account(&self, name: &str) -> Option<&IdlAccount> {
-        self.accounts.iter()
-            .find(|a| a.name == name)
+        self.accounts.iter().find(|a| a.name == name)
     }
 
     /// Look up error by code
     pub fn find_error(&self, code: u32) -> Option<&IdlError> {
-        self.errors.iter()
-            .find(|e| e.code == code)
+        self.errors.iter().find(|e| e.code == code)
     }
 }
 

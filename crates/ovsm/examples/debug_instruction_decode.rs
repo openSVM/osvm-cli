@@ -22,7 +22,11 @@ fn main() {
         }
 
         let opcode = elf_bytes[offset];
-        let regs = if offset + 1 < elf_bytes.len() { elf_bytes[offset + 1] } else { 0 };
+        let regs = if offset + 1 < elf_bytes.len() {
+            elf_bytes[offset + 1]
+        } else {
+            0
+        };
         let dst = regs & 0xf;
         let src = (regs >> 4) & 0xf;
 
@@ -64,9 +68,15 @@ fn main() {
                 // Check if this is a relative jump
                 if imm != 0 {
                     let target = (pc as i32 + imm * 8) as usize;
-                    println!("       → Jump target would be: 0x{:x} (relative offset {})", target, imm);
+                    println!(
+                        "       → Jump target would be: 0x{:x} (relative offset {})",
+                        target, imm
+                    );
                     if target >= text_size {
-                        println!("       ❌ JUMP OUT OF BOUNDS! Text size is only 0x{:x}", text_size);
+                        println!(
+                            "       ❌ JUMP OUT OF BOUNDS! Text size is only 0x{:x}",
+                            text_size
+                        );
                     }
                 }
                 pc += 8;
@@ -107,10 +117,15 @@ fn main() {
         // Check if it's interpreted as a jump
         if bytes[0] & 0x07 == 0x05 {
             let imm = i32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-            println!("  ❌ This is being interpreted as a JUMP with offset {}", imm);
+            println!(
+                "  ❌ This is being interpreted as a JUMP with offset {}",
+                imm
+            );
         }
     }
 
     // Also check what RBPF might be seeing differently
-    println!("\n🎯 Theory: RBPF might be starting from a different offset or seeing corrupted data");
+    println!(
+        "\n🎯 Theory: RBPF might be starting from a different offset or seeing corrupted data"
+    );
 }

@@ -135,14 +135,27 @@ impl Tool for McpBridgeTool {
 
         // Execute the tool with correct server ID
         // Note: Using futures::executor::block_on because we may not be in a Tokio context
-        crate::tui_log!("🔍 MCP BRIDGE: Calling tool '{}' on server '{}'...", self.name, SERVER_ID);
-        crate::tui_log!("🔍 MCP BRIDGE: Parameters: {}",
-                 arguments.as_ref().map(|a| serde_json::to_string(a).unwrap_or_else(|_| "null".to_string())).unwrap_or_else(|| "none".to_string()));
-        let mut result_json = match futures::executor::block_on(svc.call_tool(SERVER_ID, &self.name, arguments.clone())) {
+        crate::tui_log!(
+            "🔍 MCP BRIDGE: Calling tool '{}' on server '{}'...",
+            self.name,
+            SERVER_ID
+        );
+        crate::tui_log!(
+            "🔍 MCP BRIDGE: Parameters: {}",
+            arguments
+                .as_ref()
+                .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "null".to_string()))
+                .unwrap_or_else(|| "none".to_string())
+        );
+        let mut result_json = match futures::executor::block_on(svc.call_tool(
+            SERVER_ID,
+            &self.name,
+            arguments.clone(),
+        )) {
             Ok(json) => {
                 crate::tui_log!("✅ MCP BRIDGE: Tool '{}' returned successfully", self.name);
                 json
-            },
+            }
             Err(e) => {
                 crate::tui_log!("⚠️  MCP BRIDGE: Tool '{}' failed: {}", self.name, e);
                 return Err(ovsm::error::Error::RpcError {
@@ -157,7 +170,8 @@ impl Tool for McpBridgeTool {
                 crate::tui_log!("🗜️  MCP BRIDGE: Decompressing Brotli response...");
 
                 // Extract base64-encoded compressed data
-                let compressed_b64 = result_json.get("data")
+                let compressed_b64 = result_json
+                    .get("data")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ovsm::error::Error::RpcError {
                         message: "Compressed response missing 'data' field".to_string(),
@@ -174,19 +188,24 @@ impl Tool for McpBridgeTool {
                 // Decompress with Brotli
                 let mut decompressed = Vec::new();
                 let mut decoder = brotli::Decompressor::new(&compressed[..], 4096);
-                std::io::Read::read_to_end(&mut decoder, &mut decompressed)
-                    .map_err(|e| ovsm::error::Error::RpcError {
+                std::io::Read::read_to_end(&mut decoder, &mut decompressed).map_err(|e| {
+                    ovsm::error::Error::RpcError {
                         message: format!("Failed to decompress Brotli: {}", e),
-                    })?;
+                    }
+                })?;
 
                 // Parse decompressed JSON
-                result_json = serde_json::from_slice(&decompressed)
-                    .map_err(|e| ovsm::error::Error::RpcError {
+                result_json = serde_json::from_slice(&decompressed).map_err(|e| {
+                    ovsm::error::Error::RpcError {
                         message: format!("Failed to parse decompressed JSON: {}", e),
-                    })?;
+                    }
+                })?;
 
-                crate::tui_log!("✅ MCP BRIDGE: Decompression successful ({} bytes -> {} bytes)",
-                         compressed.len(), decompressed.len());
+                crate::tui_log!(
+                    "✅ MCP BRIDGE: Decompression successful ({} bytes -> {} bytes)",
+                    compressed.len(),
+                    decompressed.len()
+                );
             }
         }
 

@@ -6,11 +6,11 @@
 use anyhow::{anyhow, Result};
 use clap::ArgMatches;
 use colored::*;
-use solana_sdk::signature::Signer;  // For keypair.pubkey()
+use solana_sdk::signature::Signer; // For keypair.pubkey()
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::utils::bbs::{db, meshtastic, http_server, federation, registry, num_id_to_hex};
+use crate::utils::bbs::{db, federation, http_server, meshtastic, num_id_to_hex, registry};
 
 /// Global radio connection (lazy singleton)
 static RADIO: once_cell::sync::Lazy<Arc<Mutex<Option<meshtastic::MeshtasticRadio>>>> =
@@ -46,7 +46,10 @@ pub async fn handle_bbs_command(matches: &ArgMatches) -> Result<()> {
         Some(("analytics", sub_m)) => handle_analytics(sub_m).await,
         Some(("mesh", sub_m)) => handle_mesh(sub_m).await,
         _ => {
-            println!("{}", "Use 'osvm bbs --help' for available commands".yellow());
+            println!(
+                "{}",
+                "Use 'osvm bbs --help' for available commands".yellow()
+            );
             Ok(())
         }
     }
@@ -63,7 +66,10 @@ async fn handle_init(matches: &ArgMatches) -> Result<()> {
     let db_path = crate::utils::bbs::db_path();
 
     if reset && db_path.exists() {
-        println!("{}", "Resetting database (removing existing data)...".yellow());
+        println!(
+            "{}",
+            "Resetting database (removing existing data)...".yellow()
+        );
         std::fs::remove_file(&db_path)?;
     }
 
@@ -119,22 +125,33 @@ async fn handle_boards(matches: &ArgMatches) -> Result<()> {
             let boards = db_err(db::boards::list(&mut conn))?;
 
             if json {
-                println!("{}", serde_json::to_string_pretty(&boards.iter().map(|b| {
-                    let mod_count = db::moderators::count_for_board(&mut conn, b.id);
-                    serde_json::json!({
-                        "id": b.id,
-                        "name": b.name,
-                        "description": b.description,
-                        "creator_id": b.creator_id,
-                        "moderators": mod_count,
-                    })
-                }).collect::<Vec<_>>())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &boards
+                            .iter()
+                            .map(|b| {
+                                let mod_count = db::moderators::count_for_board(&mut conn, b.id);
+                                serde_json::json!({
+                                    "id": b.id,
+                                    "name": b.name,
+                                    "description": b.description,
+                                    "creator_id": b.creator_id,
+                                    "moderators": mod_count,
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    )?
+                );
             } else {
                 println!("{}", "BBS Boards".cyan().bold());
                 println!("{}", "─".repeat(60));
 
                 if boards.is_empty() {
-                    println!("{}", "No boards found. Run 'osvm bbs init' to create default boards.".yellow());
+                    println!(
+                        "{}",
+                        "No boards found. Run 'osvm bbs init' to create default boards.".yellow()
+                    );
                 } else {
                     for board in boards {
                         let post_count = db::posts::list_for_board(&mut conn, board.id, 1000)
@@ -142,11 +159,12 @@ async fn handle_boards(matches: &ArgMatches) -> Result<()> {
                             .unwrap_or(0);
                         let mod_count = db::moderators::count_for_board(&mut conn, board.id);
                         let owner_info = if board.creator_id.is_some() {
-                            format!(" [owned]")
+                            " [owned]".to_string()
                         } else {
                             String::new()
                         };
-                        println!("  {} {} - {} ({} posts, {} mods){}",
+                        println!(
+                            "  {} {} - {} ({} posts, {} mods){}",
                             "◉".cyan(),
                             board.name.bold(),
                             board.description.dimmed(),
@@ -173,9 +191,22 @@ async fn handle_boards(matches: &ArgMatches) -> Result<()> {
                 timestamp,
             ))?;
 
-            let board = db_err(db::boards::create_with_creator(&mut conn, &name, description, Some(user.id)))?;
-            println!("{} Created board: {} - {}", "✓".green(), board.name.bold(), board.description);
-            println!("  Owner: {} (can delete and add moderators)", user.long_name);
+            let board = db_err(db::boards::create_with_creator(
+                &mut conn,
+                &name,
+                description,
+                Some(user.id),
+            ))?;
+            println!(
+                "{} Created board: {} - {}",
+                "✓".green(),
+                board.name.bold(),
+                board.description
+            );
+            println!(
+                "  Owner: {} (can delete and add moderators)",
+                user.long_name
+            );
             Ok(())
         }
         Some(("delete", sub_m)) => {
@@ -198,7 +229,10 @@ async fn handle_boards(matches: &ArgMatches) -> Result<()> {
             // Check permission
             let can_del = db_err(db::boards::can_delete(&mut conn, board.id, user.id))?;
             if !can_del {
-                println!("{} Permission denied: only the board creator or moderators can delete.", "✗".red());
+                println!(
+                    "{} Permission denied: only the board creator or moderators can delete.",
+                    "✗".red()
+                );
                 println!("  Board '{}' creator_id: {:?}", name, board.creator_id);
                 return Ok(());
             }
@@ -220,7 +254,10 @@ async fn handle_boards(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
         _ => {
-            println!("{}", "Use 'osvm bbs boards --help' for available commands".yellow());
+            println!(
+                "{}",
+                "Use 'osvm bbs boards --help' for available commands".yellow()
+            );
             Ok(())
         }
     }
@@ -253,7 +290,12 @@ async fn handle_post(matches: &ArgMatches) -> Result<()> {
     // Create post
     let post = db_err(db::posts::create(&mut conn, board.id, user.id, message))?;
 
-    println!("{} Posted to {} (ID: {})", "✓".green(), board.name.bold(), post.id);
+    println!(
+        "{} Posted to {} (ID: {})",
+        "✓".green(),
+        board.name.bold(),
+        post.id
+    );
     println!("  {}", message.dimmed());
 
     Ok(())
@@ -264,7 +306,8 @@ async fn handle_read(matches: &ArgMatches) -> Result<()> {
     let mut conn = db_err(db::establish_connection())?;
 
     let board_name = matches.get_one::<String>("board").unwrap().to_uppercase();
-    let limit: i64 = matches.get_one::<String>("limit")
+    let limit: i64 = matches
+        .get_one::<String>("limit")
         .and_then(|s| s.parse().ok())
         .unwrap_or(20);
     let json = matches.get_flag("json");
@@ -277,21 +320,28 @@ async fn handle_read(matches: &ArgMatches) -> Result<()> {
     let posts = db_err(db::posts::list_for_board(&mut conn, board.id, limit))?;
 
     if json {
-        let output: Vec<_> = posts.iter().map(|p| {
-            let user = db::users::get_by_user_id(&mut conn, p.user_id).ok();
-            let reply_count = db::posts::reply_count(&mut conn, p.id);
-            serde_json::json!({
-                "id": p.id,
-                "user": user.map(|u| u.short_name).unwrap_or_else(|| "???".to_string()),
-                "body": p.body,
-                "timestamp": p.created_at_us / 1_000_000,
-                "parent_id": p.parent_id,
-                "reply_count": reply_count,
+        let output: Vec<_> = posts
+            .iter()
+            .map(|p| {
+                let user = db::users::get_by_user_id(&mut conn, p.user_id).ok();
+                let reply_count = db::posts::reply_count(&mut conn, p.id);
+                serde_json::json!({
+                    "id": p.id,
+                    "user": user.map(|u| u.short_name).unwrap_or_else(|| "???".to_string()),
+                    "body": p.body,
+                    "timestamp": p.created_at_us / 1_000_000,
+                    "parent_id": p.parent_id,
+                    "reply_count": reply_count,
+                })
             })
-        }).collect();
+            .collect();
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("{} {}", board.name.cyan().bold(), format!("({} messages)", posts.len()).dimmed());
+        println!(
+            "{} {}",
+            board.name.cyan().bold(),
+            format!("({} messages)", posts.len()).dimmed()
+        );
         println!("{}", "─".repeat(60));
 
         if posts.is_empty() {
@@ -315,12 +365,13 @@ async fn handle_read(matches: &ArgMatches) -> Result<()> {
                 };
 
                 let thread_indicator = if post.parent_id.is_some() {
-                    format!("↳ ").cyan().to_string()
+                    "↳ ".to_string().cyan().to_string()
                 } else {
                     String::new()
                 };
 
-                println!("{} {} {}{}",
+                println!(
+                    "{} {} {}{}",
                     format!("[{}]", post.id).dimmed(),
                     user.cyan(),
                     timestamp.dimmed(),
@@ -339,7 +390,8 @@ async fn handle_read(matches: &ArgMatches) -> Result<()> {
 async fn handle_reply(matches: &ArgMatches) -> Result<()> {
     let mut conn = db_err(db::establish_connection())?;
 
-    let post_id: i32 = matches.get_one::<String>("message_id")
+    let post_id: i32 = matches
+        .get_one::<String>("message_id")
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| anyhow!("Invalid message ID"))?;
     let content = matches.get_one::<String>("content").unwrap();
@@ -360,7 +412,12 @@ async fn handle_reply(matches: &ArgMatches) -> Result<()> {
     // Create reply
     let reply = db_err(db::posts::reply(&mut conn, post_id, user.id, content))?;
 
-    println!("{} Reply to #{} created (ID: {})", "✓".green(), post_id, reply.id);
+    println!(
+        "{} Reply to #{} created (ID: {})",
+        "✓".green(),
+        post_id,
+        reply.id
+    );
     println!("  {}", format!("↳ {}", content).dimmed());
 
     // Show context
@@ -377,7 +434,8 @@ async fn handle_agent(matches: &ArgMatches) -> Result<()> {
     match matches.subcommand() {
         Some(("register", sub_m)) => {
             let name = sub_m.get_one::<String>("name").unwrap();
-            let capabilities = sub_m.get_one::<String>("capabilities")
+            let capabilities = sub_m
+                .get_one::<String>("capabilities")
                 .map(|s| s.as_str())
                 .unwrap_or("general");
 
@@ -414,7 +472,10 @@ async fn handle_agent(matches: &ArgMatches) -> Result<()> {
             println!("{}", "─".repeat(40));
             println!("  Total users: {}", total);
             println!("  Active users: {}", active);
-            println!("\n{}", "Note: Full agent listing requires database query".dimmed());
+            println!(
+                "\n{}",
+                "Note: Full agent listing requires database query".dimmed()
+            );
             Ok(())
         }
         Some(("status", sub_m)) => {
@@ -431,7 +492,14 @@ async fn handle_agent(matches: &ArgMatches) -> Result<()> {
                         println!("  Node ID: {}", user.node_id);
                         println!("  Short Name: {}", user.short_name);
                         println!("  Long Name: {}", user.long_name);
-                        println!("  Blocked: {}", if user.jackass { "Yes".red() } else { "No".green() });
+                        println!(
+                            "  Blocked: {}",
+                            if user.jackass {
+                                "Yes".red()
+                            } else {
+                                "No".green()
+                            }
+                        );
 
                         // Check moderator status
                         let mod_boards = db_err(db::moderators::list_for_user(&mut conn, user.id))?;
@@ -447,7 +515,10 @@ async fn handle_agent(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
         _ => {
-            println!("{}", "Use 'osvm bbs agent --help' for available commands".yellow());
+            println!(
+                "{}",
+                "Use 'osvm bbs agent --help' for available commands".yellow()
+            );
             Ok(())
         }
     }
@@ -465,12 +536,15 @@ async fn handle_radio(matches: &ArgMatches) -> Result<()> {
             let conn_type = meshtastic::ConnectionType::parse(address)
                 .ok_or_else(|| anyhow!("Invalid address format"))?;
 
-            println!("  Type: {}", match &conn_type {
-                meshtastic::ConnectionType::Tcp { address, port } =>
-                    format!("TCP {}:{}", address, port),
-                meshtastic::ConnectionType::Serial { device, baud_rate } =>
-                    format!("Serial {} @ {} baud", device, baud_rate),
-            });
+            println!(
+                "  Type: {}",
+                match &conn_type {
+                    meshtastic::ConnectionType::Tcp { address, port } =>
+                        format!("TCP {}:{}", address, port),
+                    meshtastic::ConnectionType::Serial { device, baud_rate } =>
+                        format!("Serial {} @ {} baud", device, baud_rate),
+                }
+            );
 
             // Create and connect
             let mut radio = meshtastic::MeshtasticRadio::new(conn_type);
@@ -526,7 +600,10 @@ async fn handle_radio(matches: &ArgMatches) -> Result<()> {
                 println!("  Protocol: Meshtastic (not connected)");
             }
 
-            println!("\n{}", "Use 'osvm bbs radio connect <address>' to connect.".dimmed());
+            println!(
+                "\n{}",
+                "Use 'osvm bbs radio connect <address>' to connect.".dimmed()
+            );
             Ok(())
         }
         Some(("send", sub_m)) => {
@@ -556,15 +633,19 @@ async fn handle_radio(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
         _ => {
-            println!("{}", "Use 'osvm bbs radio --help' for available commands".yellow());
+            println!(
+                "{}",
+                "Use 'osvm bbs radio --help' for available commands".yellow()
+            );
             Ok(())
         }
     }
 }
 
 /// Global federation manager (lazy singleton)
-static FEDERATION: once_cell::sync::Lazy<Arc<tokio::sync::RwLock<Option<Arc<federation::FederationManager>>>>> =
-    once_cell::sync::Lazy::new(|| Arc::new(tokio::sync::RwLock::new(None)));
+static FEDERATION: once_cell::sync::Lazy<
+    Arc<tokio::sync::RwLock<Option<Arc<federation::FederationManager>>>>,
+> = once_cell::sync::Lazy::new(|| Arc::new(tokio::sync::RwLock::new(None)));
 
 /// Get or create federation manager
 async fn get_federation_manager() -> Arc<federation::FederationManager> {
@@ -637,14 +718,26 @@ async fn handle_peers(matches: &ArgMatches) -> Result<()> {
                             federation::PeerStatus::Unknown => "●".dimmed(),
                             federation::PeerStatus::Error(_) => "●".red(),
                         };
-                        let last_sync = peer.last_sync
-                            .map(|ts| chrono::DateTime::from_timestamp(ts as i64, 0)
-                                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-                                .unwrap_or_else(|| "?".to_string()))
+                        let last_sync = peer
+                            .last_sync
+                            .map(|ts| {
+                                chrono::DateTime::from_timestamp(ts as i64, 0)
+                                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                                    .unwrap_or_else(|| "?".to_string())
+                            })
                             .unwrap_or_else(|| "never".to_string());
 
-                        println!("  {} {} {}", status_color, peer.node_id.cyan(), peer.address);
-                        println!("      Last sync: {} | Failures: {}", last_sync.dimmed(), peer.failure_count);
+                        println!(
+                            "  {} {} {}",
+                            status_color,
+                            peer.node_id.cyan(),
+                            peer.address
+                        );
+                        println!(
+                            "      Last sync: {} | Failures: {}",
+                            last_sync.dimmed(),
+                            peer.failure_count
+                        );
                     }
                 }
 
@@ -658,7 +751,10 @@ async fn handle_peers(matches: &ArgMatches) -> Result<()> {
             println!("{}", "Syncing with peers...".cyan());
 
             let peers = if let Some(node_id) = specific_peer {
-                manager.list_peers().await.into_iter()
+                manager
+                    .list_peers()
+                    .await
+                    .into_iter()
                     .filter(|p| &p.node_id == node_id)
                     .collect()
             } else {
@@ -711,7 +807,10 @@ async fn handle_peers(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
         _ => {
-            println!("{}", "Use 'osvm bbs peers --help' for available commands".yellow());
+            println!(
+                "{}",
+                "Use 'osvm bbs peers --help' for available commands".yellow()
+            );
             Ok(())
         }
     }
@@ -719,14 +818,21 @@ async fn handle_peers(matches: &ArgMatches) -> Result<()> {
 
 /// Handle HTTP server command (internet mode)
 async fn handle_server(matches: &ArgMatches) -> Result<()> {
-    let host = matches.get_one::<String>("host").map(|s| s.as_str()).unwrap_or("0.0.0.0");
-    let port: u16 = matches.get_one::<String>("port")
+    let host = matches
+        .get_one::<String>("host")
+        .map(|s| s.as_str())
+        .unwrap_or("0.0.0.0");
+    let port: u16 = matches
+        .get_one::<String>("port")
         .and_then(|s| s.parse().ok())
         .unwrap_or(8080);
 
     println!("{}", "Starting BBS HTTP Server...".cyan().bold());
-    println!("  Mode: {} (use when radio not available)", "Internet".green());
-    println!("");
+    println!(
+        "  Mode: {} (use when radio not available)",
+        "Internet".green()
+    );
+    println!();
 
     http_server::start_server(host, port)
         .await
@@ -744,13 +850,14 @@ async fn handle_interactive(matches: &ArgMatches) -> Result<()> {
     println!("  Or use individual commands:");
     println!("    osvm bbs read {}", board);
     println!("    osvm bbs post {} \"message\"", board);
-    println!("    osvm bbs reply <id> \"reply\"", );
+    println!("    osvm bbs reply <id> \"reply\"",);
 
     Ok(())
 }
 
 /// Handle full-screen TUI mode
 async fn handle_tui(matches: &ArgMatches) -> Result<()> {
+    use crate::utils::bbs::meshtastic::{MeshtasticClient, MeshtasticPacket};
     use crossterm::{
         event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
         execute,
@@ -760,7 +867,6 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
     use std::io;
     use std::time::Duration;
     use tokio::sync::mpsc;
-    use crate::utils::bbs::meshtastic::{MeshtasticClient, MeshtasticPacket};
 
     let initial_board = matches.get_one::<String>("board").unwrap();
     let mesh_address = matches.get_one::<String>("mesh");
@@ -770,7 +876,10 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
 
     // Connect to database
     if let Err(e) = bbs_state.connect() {
-        return Err(anyhow!("Failed to connect to BBS database: {}\nRun 'osvm bbs init' first.", e));
+        return Err(anyhow!(
+            "Failed to connect to BBS database: {}\nRun 'osvm bbs init' first.",
+            e
+        ));
     }
 
     // Try to connect to Meshtastic if --mesh flag provided
@@ -783,7 +892,8 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
             match client.connect_and_run().await {
                 Ok(rx) => {
                     bbs_state.agent_status.meshtastic_connected = true;
-                    bbs_state.agent_status.meshtastic_node_id = Some(format!("!{:08x}", client.our_node_id()));
+                    bbs_state.agent_status.meshtastic_node_id =
+                        Some(format!("!{:08x}", client.our_node_id()));
                     bbs_state.status_message = format!("📻 Connected to mesh @ {}", addr);
                     mesh_rx = Some(rx);
                     println!("✅ Meshtastic connected!");
@@ -800,7 +910,11 @@ async fn handle_tui(matches: &ArgMatches) -> Result<()> {
     }
 
     // Find and select the initial board
-    if let Some(idx) = bbs_state.boards.iter().position(|b| b.name.eq_ignore_ascii_case(initial_board)) {
+    if let Some(idx) = bbs_state
+        .boards
+        .iter()
+        .position(|b| b.name.eq_ignore_ascii_case(initial_board))
+    {
         let board_id = bbs_state.boards[idx].id;
         bbs_state.current_board = Some(board_id);
         bbs_state.selected_board_index = Some(idx);
@@ -923,11 +1037,13 @@ fn run_bbs_tui<B: ratatui::backend::Backend>(
 async fn run_bbs_tui_async<B: ratatui::backend::Backend>(
     terminal: &mut ratatui::Terminal<B>,
     state: &mut crate::utils::bbs::tui_widgets::BBSTuiState,
-    mut mesh_rx: Option<tokio::sync::mpsc::UnboundedReceiver<crate::utils::bbs::meshtastic::MeshtasticPacket>>,
+    mut mesh_rx: Option<
+        tokio::sync::mpsc::UnboundedReceiver<crate::utils::bbs::meshtastic::MeshtasticPacket>,
+    >,
 ) -> Result<()> {
+    use crate::utils::bbs::meshtastic::{BBSCommandRouter, MeshtasticPacket};
     use crossterm::event::{self, Event, KeyCode, KeyModifiers};
     use std::time::Duration;
-    use crate::utils::bbs::meshtastic::{MeshtasticPacket, BBSCommandRouter};
 
     loop {
         // Draw UI
@@ -950,16 +1066,29 @@ async fn run_bbs_tui_async<B: ratatui::backend::Backend>(
                         // If it's a command, process it
                         if is_command {
                             if let Some(cmd) = BBSCommandRouter::parse_command(&message) {
-                                state.status_message = format!("📻 Cmd from !{:08x}: {:?}", from, cmd);
+                                state.status_message =
+                                    format!("📻 Cmd from !{:08x}: {:?}", from, cmd);
                             }
                         } else {
-                            state.status_message = format!("📻 Msg from !{:08x}: {}", from,
-                                if message.len() > 30 { format!("{}...", &message[..30]) } else { message });
+                            state.status_message = format!(
+                                "📻 Msg from !{:08x}: {}",
+                                from,
+                                if message.len() > 30 {
+                                    format!("{}...", &message[..30])
+                                } else {
+                                    message
+                                }
+                            );
                         }
                     }
-                    MeshtasticPacket::NodeInfo { node_id, short_name, long_name } => {
+                    MeshtasticPacket::NodeInfo {
+                        node_id,
+                        short_name,
+                        long_name,
+                    } => {
                         state.update_mesh_node(node_id, short_name.clone());
-                        state.status_message = format!("📻 Node: !{:08x} = {}", node_id, short_name);
+                        state.status_message =
+                            format!("📻 Node: !{:08x} = {}", node_id, short_name);
                     }
                     _ => {}
                 }
@@ -1023,7 +1152,8 @@ async fn run_bbs_tui_async<B: ratatui::backend::Backend>(
                     }
                     KeyCode::Char('m') => {
                         // Toggle showing mesh messages in posts view (future feature)
-                        state.status_message = format!("📻 {} mesh messages", state.mesh_messages.len());
+                        state.status_message =
+                            format!("📻 {} mesh messages", state.mesh_messages.len());
                     }
                     KeyCode::Char(c @ '1'..='9') => {
                         let board_idx = c.to_digit(10).unwrap() as usize - 1;
@@ -1072,20 +1202,20 @@ struct ThreadedPost {
 #[derive(Clone, Debug)]
 struct FlattenedThread {
     post: ThreadedPost,
-    visible: bool,        // Is this visible (parent not collapsed)?
-    is_collapsed: bool,   // Is this post itself collapsed?
-    has_children: bool,   // Does it have children?
-    sentiment: Option<ThreadSentiment>,  // Sentiment analysis result
-    ai_summary: Option<String>,          // AI-generated summary of collapsed children
+    visible: bool,                      // Is this visible (parent not collapsed)?
+    is_collapsed: bool,                 // Is this post itself collapsed?
+    has_children: bool,                 // Does it have children?
+    sentiment: Option<ThreadSentiment>, // Sentiment analysis result
+    ai_summary: Option<String>,         // AI-generated summary of collapsed children
 }
 
 /// Thread sentiment classification
 #[derive(Clone, Debug)]
 enum ThreadSentiment {
-    Positive,   // Constructive, helpful
-    Neutral,    // Factual, informational
-    Negative,   // Critical, angry
-    Mixed,      // Both positive and negative
+    Positive, // Constructive, helpful
+    Neutral,  // Factual, informational
+    Negative, // Critical, angry
+    Mixed,    // Both positive and negative
 }
 
 impl ThreadSentiment {
@@ -1132,10 +1262,13 @@ struct ThreadViewerState {
 /// Handle threads command - interactive collapsible thread viewer
 async fn handle_threads(matches: &ArgMatches) -> Result<()> {
     use crossterm::{
+        cursor,
         event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
         execute,
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, Clear, ClearType},
-        cursor,
+        terminal::{
+            disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+            LeaveAlternateScreen,
+        },
     };
     use std::io::{self, Write};
 
@@ -1160,7 +1293,10 @@ async fn handle_threads(matches: &ArgMatches) -> Result<()> {
 
     if threads.is_empty() {
         println!("{}", "No threads found in this board.".yellow());
-        println!("Try posting first: {}", "osvm bbs post <BOARD> \"message\"".cyan());
+        println!(
+            "Try posting first: {}",
+            "osvm bbs post <BOARD> \"message\"".cyan()
+        );
         return Ok(());
     }
 
@@ -1194,18 +1330,22 @@ async fn handle_threads(matches: &ArgMatches) -> Result<()> {
 /// Fetch threads from HTTP server
 async fn fetch_threads_from_server(url: &str, board: &str) -> Result<Vec<ThreadedPost>> {
     let url = format!("{}/api/boards/{}/threads", url.trim_end_matches('/'), board);
-    let response = reqwest::get(&url).await
+    let response = reqwest::get(&url)
+        .await
         .map_err(|e| anyhow!("Failed to fetch from server: {}", e))?;
 
     if !response.status().is_success() {
         return Err(anyhow!("Server returned error: {}", response.status()));
     }
 
-    let api_response: serde_json::Value = response.json().await
+    let api_response: serde_json::Value = response
+        .json()
+        .await
         .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
 
     // Extract data from ApiResponse wrapper
-    let data = api_response.get("data")
+    let data = api_response
+        .get("data")
         .ok_or_else(|| anyhow!("Missing data field in response"))?;
 
     let threads: Vec<ThreadedPost> = serde_json::from_value(data.clone())
@@ -1282,8 +1422,8 @@ fn fetch_threads_from_local(board_name: &str) -> Result<Vec<ThreadedPost>> {
 
 /// Build thread tree from flat posts (local version for CLI)
 fn build_local_thread_tree(posts: &[http_server::UnifiedPostInfo]) -> Vec<ThreadedPost> {
-    use std::collections::HashMap;
     use crate::utils::bbs::http_server;
+    use std::collections::HashMap;
 
     // Map id -> children
     let mut children_map: HashMap<String, Vec<&http_server::UnifiedPostInfo>> = HashMap::new();
@@ -1291,18 +1431,19 @@ fn build_local_thread_tree(posts: &[http_server::UnifiedPostInfo]) -> Vec<Thread
 
     for post in posts {
         if let Some(ref parent_id) = post.parent_id {
-            children_map.entry(parent_id.clone()).or_default().push(post);
+            children_map
+                .entry(parent_id.clone())
+                .or_default()
+                .push(post);
         } else {
             roots.push(post);
         }
     }
 
     // Sort roots by score (desc) then created_at (desc)
-    roots.sort_by(|a, b| {
-        match b.score.cmp(&a.score) {
-            std::cmp::Ordering::Equal => b.created_at.cmp(&a.created_at),
-            other => other,
-        }
+    roots.sort_by(|a, b| match b.score.cmp(&a.score) {
+        std::cmp::Ordering::Equal => b.created_at.cmp(&a.created_at),
+        other => other,
     });
 
     fn build_thread(
@@ -1313,7 +1454,7 @@ fn build_local_thread_tree(posts: &[http_server::UnifiedPostInfo]) -> Vec<Thread
         let mut replies = Vec::new();
 
         if let Some(children) = children_map.get(&post.id) {
-            let mut sorted: Vec<_> = children.iter().copied().collect();
+            let mut sorted: Vec<_> = children.to_vec();
             sorted.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
             for child in sorted {
@@ -1334,11 +1475,14 @@ fn build_local_thread_tree(posts: &[http_server::UnifiedPostInfo]) -> Vec<Thread
             score: post.score,
             replies,
             depth,
-            collapsed: post.score < -2,  // Auto-collapse low-score posts
+            collapsed: post.score < -2, // Auto-collapse low-score posts
         }
     }
 
-    roots.iter().map(|r| build_thread(r, &children_map, 0)).collect()
+    roots
+        .iter()
+        .map(|r| build_thread(r, &children_map, 0))
+        .collect()
 }
 
 /// Flatten threads for display (with visibility tracking)
@@ -1362,7 +1506,7 @@ fn flatten_threads(threads: &[ThreadedPost]) -> Vec<FlattenedThread> {
             is_collapsed: post.collapsed,
             has_children,
             sentiment: Some(sentiment),
-            ai_summary: None,  // Filled on demand
+            ai_summary: None, // Filled on demand
         });
 
         let child_hidden = parent_collapsed || post.collapsed;
@@ -1383,21 +1527,46 @@ fn analyze_sentiment(text: &str, score: i32) -> ThreadSentiment {
     let text_lower = text.to_lowercase();
 
     // Positive indicators
-    let positive_words = ["thanks", "great", "awesome", "helpful", "love", "excellent",
-                          "agree", "good", "nice", "perfect", "amazing", "happy", "👍", "❤️", "😊"];
+    let positive_words = [
+        "thanks",
+        "great",
+        "awesome",
+        "helpful",
+        "love",
+        "excellent",
+        "agree",
+        "good",
+        "nice",
+        "perfect",
+        "amazing",
+        "happy",
+        "👍",
+        "❤️",
+        "😊",
+    ];
     // Negative indicators
-    let negative_words = ["wrong", "bad", "hate", "terrible", "awful", "disagree",
-                          "stupid", "broken", "bug", "issue", "problem", "angry", "👎", "😠"];
+    let negative_words = [
+        "wrong", "bad", "hate", "terrible", "awful", "disagree", "stupid", "broken", "bug",
+        "issue", "problem", "angry", "👎", "😠",
+    ];
 
-    let positive_count: i32 = positive_words.iter()
+    let positive_count: i32 = positive_words
+        .iter()
         .filter(|w| text_lower.contains(*w))
         .count() as i32;
-    let negative_count: i32 = negative_words.iter()
+    let negative_count: i32 = negative_words
+        .iter()
         .filter(|w| text_lower.contains(*w))
         .count() as i32;
 
     // Factor in voting score
-    let score_factor = if score > 2 { 1 } else if score < -2 { -1 } else { 0 };
+    let score_factor = if score > 2 {
+        1
+    } else if score < -2 {
+        -1
+    } else {
+        0
+    };
 
     let total = positive_count - negative_count + score_factor;
 
@@ -1413,9 +1582,10 @@ fn analyze_sentiment(text: &str, score: i32) -> ThreadSentiment {
 }
 
 /// Re-flatten after toggle
-fn reflatten(flattened: &mut Vec<FlattenedThread>) {
+fn reflatten(flattened: &mut [FlattenedThread]) {
     // Track collapsed state by id
-    let collapsed_ids: std::collections::HashSet<String> = flattened.iter()
+    let collapsed_ids: std::collections::HashSet<String> = flattened
+        .iter()
         .filter(|f| f.is_collapsed)
         .map(|f| f.post.id.clone())
         .collect();
@@ -1455,21 +1625,23 @@ async fn run_thread_viewer_async(
     state: &mut ThreadViewerState,
 ) -> Result<()> {
     use crossterm::{
+        cursor,
         event::{self, Event, KeyCode, KeyModifiers},
         execute,
         terminal::{Clear, ClearType},
-        cursor,
     };
-    use std::time::Duration;
     use std::io::Write;
+    use std::time::Duration;
 
     loop {
         // Get terminal size
         let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
-        let max_visible = (height - 6) as usize;  // Header + footer + status/input
+        let max_visible = (height - 6) as usize; // Header + footer + status/input
 
         // Get visible items
-        let visible_items: Vec<(usize, &FlattenedThread)> = state.flattened.iter()
+        let visible_items: Vec<(usize, &FlattenedThread)> = state
+            .flattened
+            .iter()
             .enumerate()
             .filter(|(_, f)| f.visible)
             .collect();
@@ -1494,7 +1666,13 @@ async fn run_thread_viewer_async(
         let mode_indicator = match &state.mode {
             ViewerMode::Normal => "",
             ViewerMode::Reply { .. } => " [REPLY MODE]",
-            ViewerMode::Summary { loading, .. } => if *loading { " [LOADING SUMMARY...]" } else { " [SUMMARY]" },
+            ViewerMode::Summary { loading, .. } => {
+                if *loading {
+                    " [LOADING SUMMARY...]"
+                } else {
+                    " [SUMMARY]"
+                }
+            }
         };
         let ws_indicator = if state.ws_connected { " 🔗" } else { "" };
         let header = format!(
@@ -1505,22 +1683,29 @@ async fn run_thread_viewer_async(
         println!("{}", "─".repeat(width as usize).dimmed());
 
         // Draw visible threads
-        for (view_idx, (flat_idx, item)) in visible_items.iter().enumerate().skip(state.scroll_offset).take(max_visible) {
+        for (view_idx, (flat_idx, item)) in visible_items
+            .iter()
+            .enumerate()
+            .skip(state.scroll_offset)
+            .take(max_visible)
+        {
             let is_selected = view_idx == state.selected_idx;
             let depth = item.post.depth as usize;
             let indent = "  ".repeat(depth);
 
             // Build collapse indicator
             let collapse_icon = if item.has_children {
-                if item.is_collapsed { "[+]" } else { "[-]" }
+                if item.is_collapsed {
+                    "[+]"
+                } else {
+                    "[-]"
+                }
             } else {
                 "   "
             };
 
             // Sentiment icon
-            let sentiment_icon = item.sentiment.as_ref()
-                .map(|s| s.icon())
-                .unwrap_or("");
+            let sentiment_icon = item.sentiment.as_ref().map(|s| s.icon()).unwrap_or("");
 
             // Score display with vote arrows
             let score_str = if item.post.score > 0 {
@@ -1533,7 +1718,10 @@ async fn run_thread_viewer_async(
 
             // Truncate body for display
             let max_body_len = (width as usize).saturating_sub(indent.len() + 40);
-            let body_preview: String = item.post.body.chars()
+            let body_preview: String = item
+                .post
+                .body
+                .chars()
                 .take(max_body_len)
                 .collect::<String>()
                 .replace('\n', " ");
@@ -1586,7 +1774,11 @@ async fn run_thread_viewer_async(
         // Mode-specific display
         match &state.mode {
             ViewerMode::Reply { target_post_id } => {
-                println!("Replying to post #{}: {}", target_post_id, "(Enter to send, Esc to cancel)".dimmed());
+                println!(
+                    "Replying to post #{}: {}",
+                    target_post_id,
+                    "(Enter to send, Esc to cancel)".dimmed()
+                );
                 print!("> {}", state.input_buffer);
             }
             ViewerMode::Summary { post_id, loading } => {
@@ -1637,17 +1829,31 @@ async fn run_thread_viewer_async(
                                     state.mode = ViewerMode::Normal;
 
                                     // Post the reply
-                                    match submit_reply(&state.board_name, &target, &reply_text, state.server_url.as_deref()).await {
+                                    match submit_reply(
+                                        &state.board_name,
+                                        &target,
+                                        &reply_text,
+                                        state.server_url.as_deref(),
+                                    )
+                                    .await
+                                    {
                                         Ok(_) => {
-                                            state.status_message = Some(format!("{} Reply posted!", "✓".green()));
+                                            state.status_message =
+                                                Some(format!("{} Reply posted!", "✓".green()));
                                             // Refresh threads
-                                            if let Ok(threads) = refresh_threads(&state.board_name, state.server_url.as_deref()).await {
+                                            if let Ok(threads) = refresh_threads(
+                                                &state.board_name,
+                                                state.server_url.as_deref(),
+                                            )
+                                            .await
+                                            {
                                                 state.flattened = flatten_threads(&threads);
                                                 reflatten(&mut state.flattened);
                                             }
                                         }
                                         Err(e) => {
-                                            state.status_message = Some(format!("{} Failed: {}", "✗".red(), e));
+                                            state.status_message =
+                                                Some(format!("{} Failed: {}", "✗".red(), e));
                                         }
                                     }
                                 }
@@ -1677,7 +1883,8 @@ async fn run_thread_viewer_async(
                         return Ok(());
                     }
                     KeyCode::Char('j') | KeyCode::Down => {
-                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() - 1 {
+                        if !visible_items.is_empty() && state.selected_idx < visible_items.len() - 1
+                        {
                             state.selected_idx += 1;
                         }
                     }
@@ -1689,7 +1896,8 @@ async fn run_thread_viewer_async(
                         if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
                             let (flat_idx, _) = visible_items[state.selected_idx];
                             if state.flattened[flat_idx].has_children {
-                                state.flattened[flat_idx].is_collapsed = !state.flattened[flat_idx].is_collapsed;
+                                state.flattened[flat_idx].is_collapsed =
+                                    !state.flattened[flat_idx].is_collapsed;
                                 reflatten(&mut state.flattened);
                             }
                         }
@@ -1702,10 +1910,15 @@ async fn run_thread_viewer_async(
                             match cast_vote_on_post(post_id, 1, state.server_url.as_deref()).await {
                                 Ok(new_score) => {
                                     state.flattened[flat_idx].post.score = new_score;
-                                    state.status_message = Some(format!("{} Upvoted! Score: {}", "▲".green(), new_score));
+                                    state.status_message = Some(format!(
+                                        "{} Upvoted! Score: {}",
+                                        "▲".green(),
+                                        new_score
+                                    ));
                                 }
                                 Err(e) => {
-                                    state.status_message = Some(format!("{} Vote failed: {}", "✗".red(), e));
+                                    state.status_message =
+                                        Some(format!("{} Vote failed: {}", "✗".red(), e));
                                 }
                             }
                         }
@@ -1714,13 +1927,19 @@ async fn run_thread_viewer_async(
                         if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
                             let (flat_idx, _) = visible_items[state.selected_idx];
                             let post_id = &state.flattened[flat_idx].post.id;
-                            match cast_vote_on_post(post_id, -1, state.server_url.as_deref()).await {
+                            match cast_vote_on_post(post_id, -1, state.server_url.as_deref()).await
+                            {
                                 Ok(new_score) => {
                                     state.flattened[flat_idx].post.score = new_score;
-                                    state.status_message = Some(format!("{} Downvoted! Score: {}", "▼".red(), new_score));
+                                    state.status_message = Some(format!(
+                                        "{} Downvoted! Score: {}",
+                                        "▼".red(),
+                                        new_score
+                                    ));
                                 }
                                 Err(e) => {
-                                    state.status_message = Some(format!("{} Vote failed: {}", "✗".red(), e));
+                                    state.status_message =
+                                        Some(format!("{} Vote failed: {}", "✗".red(), e));
                                 }
                             }
                         }
@@ -1730,7 +1949,9 @@ async fn run_thread_viewer_async(
                         if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
                             let (flat_idx, _) = visible_items[state.selected_idx];
                             let post_id = state.flattened[flat_idx].post.id.clone();
-                            state.mode = ViewerMode::Reply { target_post_id: post_id };
+                            state.mode = ViewerMode::Reply {
+                                target_post_id: post_id,
+                            };
                             state.input_buffer.clear();
                         }
                     }
@@ -1738,24 +1959,36 @@ async fn run_thread_viewer_async(
                     KeyCode::Char('s') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                         if !visible_items.is_empty() && state.selected_idx < visible_items.len() {
                             let (flat_idx, _) = visible_items[state.selected_idx];
-                            if state.flattened[flat_idx].has_children && state.flattened[flat_idx].is_collapsed {
+                            if state.flattened[flat_idx].has_children
+                                && state.flattened[flat_idx].is_collapsed
+                            {
                                 let post_id = state.flattened[flat_idx].post.id.clone();
-                                state.mode = ViewerMode::Summary { post_id: post_id.clone(), loading: true };
+                                state.mode = ViewerMode::Summary {
+                                    post_id: post_id.clone(),
+                                    loading: true,
+                                };
 
                                 // Collect children text for summarization
-                                let children_text = collect_children_text(&state.flattened, flat_idx);
+                                let children_text =
+                                    collect_children_text(&state.flattened, flat_idx);
                                 match generate_thread_summary(&children_text).await {
                                     Ok(summary) => {
                                         state.flattened[flat_idx].ai_summary = Some(summary);
-                                        state.status_message = Some(format!("{} Summary generated!", "✓".green()));
+                                        state.status_message =
+                                            Some(format!("{} Summary generated!", "✓".green()));
                                     }
                                     Err(e) => {
-                                        state.status_message = Some(format!("{} Summary failed: {}", "✗".red(), e));
+                                        state.status_message =
+                                            Some(format!("{} Summary failed: {}", "✗".red(), e));
                                     }
                                 }
                                 state.mode = ViewerMode::Normal;
                             } else {
-                                state.status_message = Some("Collapse a thread with children first (Enter), then press 's'".yellow().to_string());
+                                state.status_message = Some(
+                                    "Collapse a thread with children first (Enter), then press 's'"
+                                        .yellow()
+                                        .to_string(),
+                                );
                             }
                         }
                     }
@@ -1779,7 +2012,8 @@ async fn run_thread_viewer_async(
                         return Ok(());
                     }
                     KeyCode::PageDown => {
-                        state.selected_idx = (state.selected_idx + max_visible).min(visible_items.len().saturating_sub(1));
+                        state.selected_idx = (state.selected_idx + max_visible)
+                            .min(visible_items.len().saturating_sub(1));
                     }
                     KeyCode::PageUp => {
                         state.selected_idx = state.selected_idx.saturating_sub(max_visible);
@@ -1794,7 +2028,9 @@ async fn run_thread_viewer_async(
                     // FEATURE 3: Refresh (for now, WebSocket would be automatic)
                     KeyCode::Char('R') => {
                         state.status_message = Some("Refreshing...".cyan().to_string());
-                        if let Ok(threads) = refresh_threads(&state.board_name, state.server_url.as_deref()).await {
+                        if let Ok(threads) =
+                            refresh_threads(&state.board_name, state.server_url.as_deref()).await
+                        {
                             state.flattened = flatten_threads(&threads);
                             reflatten(&mut state.flattened);
                             state.status_message = Some(format!("{} Refreshed!", "✓".green()));
@@ -1821,7 +2057,8 @@ async fn cast_vote_on_post(post_id: &str, vote_type: i32, server_url: Option<&st
         // Vote via HTTP API
         let vote_url = format!("{}/api/posts/{}/vote", url.trim_end_matches('/'), post_id);
         let client = reqwest::Client::new();
-        let response = client.post(&vote_url)
+        let response = client
+            .post(&vote_url)
             .json(&serde_json::json!({ "vote": vote_type }))
             .send()
             .await
@@ -1832,7 +2069,8 @@ async fn cast_vote_on_post(post_id: &str, vote_type: i32, server_url: Option<&st
         }
 
         let result: serde_json::Value = response.json().await?;
-        let new_score = result.get("data")
+        let new_score = result
+            .get("data")
             .and_then(|d| d.get("new_score"))
             .and_then(|s| s.as_i64())
             .unwrap_or(0) as i32;
@@ -1860,12 +2098,18 @@ async fn cast_vote_on_post(post_id: &str, vote_type: i32, server_url: Option<&st
 }
 
 /// Submit a reply to a post
-async fn submit_reply(board: &str, parent_id: &str, body: &str, server_url: Option<&str>) -> Result<()> {
+async fn submit_reply(
+    board: &str,
+    parent_id: &str,
+    body: &str,
+    server_url: Option<&str>,
+) -> Result<()> {
     if let Some(url) = server_url {
         // Reply via HTTP API
         let reply_url = format!("{}/api/boards/{}/posts", url.trim_end_matches('/'), board);
         let client = reqwest::Client::new();
-        let response = client.post(&reply_url)
+        let response = client
+            .post(&reply_url)
             .json(&serde_json::json!({
                 "message": body,
                 "parent_id": parent_id
@@ -1885,22 +2129,35 @@ async fn submit_reply(board: &str, parent_id: &str, body: &str, server_url: Opti
         // Get or create user for local posting (using observe which upserts)
         let node_id = format!("!{:08x}", std::process::id());
         let now_us = crate::utils::bbs::db::now_as_useconds();
-        let (user, _) = db::users::observe(&mut conn, &node_id, Some("CLI"), Some("CLI User"), now_us)
-            .map_err(|e| anyhow!("Failed to get/create user: {}", e))?;
+        let (user, _) =
+            db::users::observe(&mut conn, &node_id, Some("CLI"), Some("CLI User"), now_us)
+                .map_err(|e| anyhow!("Failed to get/create user: {}", e))?;
 
         // Get board
-        let board_record = db::boards::get_by_name(&mut conn, board)
-            .map_err(|_| anyhow!("Board not found"))?;
+        let board_record =
+            db::boards::get_by_name(&mut conn, board).map_err(|_| anyhow!("Board not found"))?;
 
         // Parse parent_id - if it's numeric, it's a local reply; otherwise federated
         if let Ok(local_parent) = parent_id.parse::<i32>() {
             // Local reply
-            db::posts::create_with_parent(&mut conn, board_record.id, user.id, body, Some(local_parent))
-                .map_err(|e| anyhow!("Failed to create reply: {}", e))?;
+            db::posts::create_with_parent(
+                &mut conn,
+                board_record.id,
+                user.id,
+                body,
+                Some(local_parent),
+            )
+            .map_err(|e| anyhow!("Failed to create reply: {}", e))?;
         } else {
             // Federated reply
-            db::posts::create_with_federated_parent(&mut conn, board_record.id, user.id, body, parent_id)
-                .map_err(|e| anyhow!("Failed to create reply: {}", e))?;
+            db::posts::create_with_federated_parent(
+                &mut conn,
+                board_record.id,
+                user.id,
+                body,
+                parent_id,
+            )
+            .map_err(|e| anyhow!("Failed to create reply: {}", e))?;
         }
         Ok(())
     }
@@ -1925,7 +2182,10 @@ fn collect_children_text(flattened: &[FlattenedThread], parent_idx: usize) -> St
             break; // No longer a child
         }
         let indent = "  ".repeat((item.post.depth - parent_depth - 1) as usize);
-        texts.push(format!("{}- {}: {}", indent, item.post.author, item.post.body));
+        texts.push(format!(
+            "{}- {}: {}",
+            indent, item.post.author, item.post.body
+        ));
     }
 
     texts.join("\n")
@@ -1962,7 +2222,10 @@ async fn generate_thread_summary(content: &str) -> Result<String> {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(choice) = json.get("choices").and_then(|c| c.get(0)) {
                     if let Some(message) = choice.get("message").and_then(|m| m.get("content")) {
-                        return Ok(message.as_str().unwrap_or("Summary unavailable").to_string());
+                        return Ok(message
+                            .as_str()
+                            .unwrap_or("Summary unavailable")
+                            .to_string());
                     }
                 }
             }
@@ -1991,28 +2254,41 @@ async fn handle_stats(matches: &ArgMatches) -> Result<()> {
     let (user_count, active_users) = db::users::counts(&mut conn);
 
     // Check radio status
-    let radio_connected = RADIO.lock().unwrap().as_ref()
+    let radio_connected = RADIO
+        .lock()
+        .unwrap()
+        .as_ref()
         .map(|r| r.state() == meshtastic::ConnectionState::Connected)
         .unwrap_or(false);
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-            "boards": board_count,
-            "posts": post_count,
-            "users": {
-                "total": user_count,
-                "active": active_users,
-            },
-            "radio_connected": radio_connected,
-            "database": crate::utils::bbs::db_path().to_string_lossy(),
-        }))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "boards": board_count,
+                "posts": post_count,
+                "users": {
+                    "total": user_count,
+                    "active": active_users,
+                },
+                "radio_connected": radio_connected,
+                "database": crate::utils::bbs::db_path().to_string_lossy(),
+            }))?
+        );
     } else {
         println!("{}", "BBS Statistics".cyan().bold());
         println!("{}", "─".repeat(40));
         println!("  Boards: {}", board_count);
         println!("  Posts: {}", post_count);
         println!("  Users: {} ({} active)", user_count, active_users);
-        println!("  Radio: {}", if radio_connected { "Connected".green() } else { "Disconnected".dimmed() });
+        println!(
+            "  Radio: {}",
+            if radio_connected {
+                "Connected".green()
+            } else {
+                "Disconnected".dimmed()
+            }
+        );
         println!("\n  Database: {}", crate::utils::bbs::db_path().display());
     }
 
@@ -2024,10 +2300,12 @@ async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
     use chrono::{Local, TimeZone, Timelike};
 
     let mut conn = db_err(db::establish_connection())?;
-    let board_name = matches.get_one::<String>("board")
+    let board_name = matches
+        .get_one::<String>("board")
         .map(|s| s.to_uppercase())
         .unwrap_or_else(|| "GENERAL".to_string());
-    let days: i64 = matches.get_one::<String>("days")
+    let days: i64 = matches
+        .get_one::<String>("days")
         .and_then(|s| s.parse().ok())
         .unwrap_or(7);
     let json = matches.get_flag("json");
@@ -2070,7 +2348,8 @@ async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
     let mut activity_by_hour: [u32; 24] = [0; 24];
 
     // Top contributors
-    let mut contributor_posts: std::collections::HashMap<i32, u32> = std::collections::HashMap::new();
+    let mut contributor_posts: std::collections::HashMap<i32, u32> =
+        std::collections::HashMap::new();
 
     for post in &posts {
         // Score analysis
@@ -2115,7 +2394,8 @@ async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
     let top_5: Vec<_> = top_contributors.into_iter().take(5).collect();
 
     // Peak hour
-    let peak_hour = activity_by_hour.iter()
+    let peak_hour = activity_by_hour
+        .iter()
         .enumerate()
         .max_by_key(|(_, &count)| count)
         .map(|(hour, _)| hour)
@@ -2123,49 +2403,60 @@ async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
 
     // Format output
     if json {
-        let top_contributors_json: Vec<_> = top_5.iter()
+        let top_contributors_json: Vec<_> = top_5
+            .iter()
             .filter_map(|(user_id, count)| {
                 db::users::get_by_user_id(&mut conn, *user_id)
                     .ok()
-                    .map(|u| serde_json::json!({
-                        "user": u.short_name,
-                        "node_id": u.node_id,
-                        "posts": count,
-                    }))
+                    .map(|u| {
+                        serde_json::json!({
+                            "user": u.short_name,
+                            "node_id": u.node_id,
+                            "posts": count,
+                        })
+                    })
             })
             .collect();
 
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-            "board": board_name,
-            "period_days": days,
-            "posts": {
-                "total": posts.len(),
-                "with_positive_score": positive_posts,
-                "with_negative_score": negative_posts,
-                "neutral": neutral_posts,
-            },
-            "votes": {
-                "total_upvotes": total_upvotes,
-                "total_downvotes": total_downvotes,
-                "net_score": total_score,
-                "upvote_ratio": if total_upvotes + total_downvotes > 0 {
-                    (total_upvotes as f64 / (total_upvotes + total_downvotes) as f64 * 100.0).round()
-                } else { 0.0 },
-            },
-            "sentiment": {
-                "positive": sentiment_positive,
-                "negative": sentiment_negative,
-                "neutral": sentiment_neutral,
-                "mixed": sentiment_mixed,
-            },
-            "activity": {
-                "peak_hour": peak_hour,
-                "by_hour": activity_by_hour.to_vec(),
-            },
-            "top_contributors": top_contributors_json,
-        }))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "board": board_name,
+                "period_days": days,
+                "posts": {
+                    "total": posts.len(),
+                    "with_positive_score": positive_posts,
+                    "with_negative_score": negative_posts,
+                    "neutral": neutral_posts,
+                },
+                "votes": {
+                    "total_upvotes": total_upvotes,
+                    "total_downvotes": total_downvotes,
+                    "net_score": total_score,
+                    "upvote_ratio": if total_upvotes + total_downvotes > 0 {
+                        (total_upvotes as f64 / (total_upvotes + total_downvotes) as f64 * 100.0).round()
+                    } else { 0.0 },
+                },
+                "sentiment": {
+                    "positive": sentiment_positive,
+                    "negative": sentiment_negative,
+                    "neutral": sentiment_neutral,
+                    "mixed": sentiment_mixed,
+                },
+                "activity": {
+                    "peak_hour": peak_hour,
+                    "by_hour": activity_by_hour.to_vec(),
+                },
+                "top_contributors": top_contributors_json,
+            }))?
+        );
     } else {
-        println!("{}", format!("📊 Analytics: {} (Last {} days)", board_name, days).cyan().bold());
+        println!(
+            "{}",
+            format!("📊 Analytics: {} (Last {} days)", board_name, days)
+                .cyan()
+                .bold()
+        );
         println!("{}", "═".repeat(50));
 
         // Post summary
@@ -2179,11 +2470,14 @@ async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
         println!("\n{}", "🗳️  Votes".bold());
         println!("   Total upvotes: {} {}", total_upvotes, "▲".green());
         println!("   Total downvotes: {} {}", total_downvotes, "▼".red());
-        println!("   Net score: {}", if total_score >= 0 {
-            format!("+{}", total_score).green()
-        } else {
-            format!("{}", total_score).red()
-        });
+        println!(
+            "   Net score: {}",
+            if total_score >= 0 {
+                format!("+{}", total_score).green()
+            } else {
+                format!("{}", total_score).red()
+            }
+        );
         if total_upvotes + total_downvotes > 0 {
             let ratio = total_upvotes as f64 / (total_upvotes + total_downvotes) as f64 * 100.0;
             println!("   Upvote ratio: {:.1}%", ratio);
@@ -2191,16 +2485,32 @@ async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
 
         // Sentiment summary
         println!("\n{}", "😊 Sentiment".bold());
-        let total_sentiment = sentiment_positive + sentiment_negative + sentiment_neutral + sentiment_mixed;
+        let total_sentiment =
+            sentiment_positive + sentiment_negative + sentiment_neutral + sentiment_mixed;
         if total_sentiment > 0 {
-            println!("   Positive: {} ({:.1}%) {}", sentiment_positive,
-                sentiment_positive as f64 / total_sentiment as f64 * 100.0, "😊".green());
-            println!("   Negative: {} ({:.1}%) {}", sentiment_negative,
-                sentiment_negative as f64 / total_sentiment as f64 * 100.0, "😠".red());
-            println!("   Neutral:  {} ({:.1}%) {}", sentiment_neutral,
-                sentiment_neutral as f64 / total_sentiment as f64 * 100.0, "😐");
-            println!("   Mixed:    {} ({:.1}%) {}", sentiment_mixed,
-                sentiment_mixed as f64 / total_sentiment as f64 * 100.0, "🤔".yellow());
+            println!(
+                "   Positive: {} ({:.1}%) {}",
+                sentiment_positive,
+                sentiment_positive as f64 / total_sentiment as f64 * 100.0,
+                "😊".green()
+            );
+            println!(
+                "   Negative: {} ({:.1}%) {}",
+                sentiment_negative,
+                sentiment_negative as f64 / total_sentiment as f64 * 100.0,
+                "😠".red()
+            );
+            println!(
+                "   Neutral:  {} ({:.1}%) 😐",
+                sentiment_neutral,
+                sentiment_neutral as f64 / total_sentiment as f64 * 100.0
+            );
+            println!(
+                "   Mixed:    {} ({:.1}%) {}",
+                sentiment_mixed,
+                sentiment_mixed as f64 / total_sentiment as f64 * 100.0,
+                "🤔".yellow()
+            );
         }
 
         // Activity chart (simplified sparkline)
@@ -2211,7 +2521,9 @@ async fn handle_analytics(matches: &ArgMatches) -> Result<()> {
         for count in activity_by_hour.iter() {
             let level = if max_activity > 0 {
                 (*count as f64 / max_activity as f64 * 7.0).round() as usize
-            } else { 0 };
+            } else {
+                0
+            };
             print!("{}", bar_chars[level.min(7)]);
         }
         println!();
@@ -2249,7 +2561,8 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
         Some(("register", sub_m)) => {
             let address = sub_m.get_one::<String>("address").unwrap();
             let name = sub_m.get_one::<String>("name").unwrap();
-            let keypair_path = sub_m.get_one::<String>("keypair")
+            let keypair_path = sub_m
+                .get_one::<String>("keypair")
                 .map(|s| s.as_str())
                 .unwrap_or("~/.config/solana/id.json");
 
@@ -2282,8 +2595,14 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
             match client.register(&keypair, node_id, address, name) {
                 Ok(sig) => {
                     println!("{} Node registered on-chain!", "✓".green());
-                    println!("  Node ID: {}", format!("!{:02x}{:02x}{:02x}{:02x}",
-                        node_id[0], node_id[1], node_id[2], node_id[3]).cyan());
+                    println!(
+                        "  Node ID: {}",
+                        format!(
+                            "!{:02x}{:02x}{:02x}{:02x}",
+                            node_id[0], node_id[1], node_id[2], node_id[3]
+                        )
+                        .cyan()
+                    );
                     println!("  Address: {}", address);
                     println!("  Name: {}", name);
                     println!("  Owner: {}", keypair.pubkey());
@@ -2315,17 +2634,20 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
             match client.list_nodes() {
                 Ok(nodes) => {
                     if json {
-                        let output: Vec<_> = nodes.iter().map(|(pda, node)| {
-                            serde_json::json!({
-                                "pda": pda.to_string(),
-                                "node_id": node.get_node_id_string(),
-                                "address": node.get_address(),
-                                "name": node.get_name(),
-                                "owner": node.owner.to_string(),
-                                "registered_at": node.registered_at,
-                                "last_heartbeat": node.last_heartbeat,
+                        let output: Vec<_> = nodes
+                            .iter()
+                            .map(|(pda, node)| {
+                                serde_json::json!({
+                                    "pda": pda.to_string(),
+                                    "node_id": node.get_node_id_string(),
+                                    "address": node.get_address(),
+                                    "name": node.get_name(),
+                                    "owner": node.owner.to_string(),
+                                    "registered_at": node.registered_at,
+                                    "last_heartbeat": node.last_heartbeat,
+                                })
                             })
-                        }).collect();
+                            .collect();
                         println!("{}", serde_json::to_string_pretty(&output)?);
                     } else {
                         println!("{}", "On-Chain BBS Nodes".cyan().bold());
@@ -2337,7 +2659,8 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
                         } else {
                             for (_pda, node) in nodes {
                                 let heartbeat = registry::format_timestamp(node.last_heartbeat);
-                                println!("  {} {} {}",
+                                println!(
+                                    "  {} {} {}",
                                     "◉".green(),
                                     node.get_node_id_string().cyan(),
                                     node.get_name().bold()
@@ -2360,12 +2683,16 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
         Some(("update", sub_m)) => {
             let address = sub_m.get_one::<String>("address");
             let name = sub_m.get_one::<String>("name");
-            let keypair_path = sub_m.get_one::<String>("keypair")
+            let keypair_path = sub_m
+                .get_one::<String>("keypair")
                 .map(|s| s.as_str())
                 .unwrap_or("~/.config/solana/id.json");
 
             if address.is_none() && name.is_none() {
-                println!("{}", "Nothing to update. Specify --address or --name.".yellow());
+                println!(
+                    "{}",
+                    "Nothing to update. Specify --address or --name.".yellow()
+                );
                 return Ok(());
             }
 
@@ -2374,7 +2701,11 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
 
             let client = registry::RegistryClient::new(rpc_url)?;
 
-            match client.update(&keypair, address.map(|s| s.as_str()), name.map(|s| s.as_str())) {
+            match client.update(
+                &keypair,
+                address.map(|s| s.as_str()),
+                name.map(|s| s.as_str()),
+            ) {
                 Ok(sig) => {
                     println!("{} Registration updated!", "✓".green());
                     if let Some(a) = address {
@@ -2392,7 +2723,8 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
         Some(("heartbeat", sub_m)) => {
-            let keypair_path = sub_m.get_one::<String>("keypair")
+            let keypair_path = sub_m
+                .get_one::<String>("keypair")
                 .map(|s| s.as_str())
                 .unwrap_or("~/.config/solana/id.json");
 
@@ -2413,13 +2745,17 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
             Ok(())
         }
         Some(("deregister", sub_m)) => {
-            let keypair_path = sub_m.get_one::<String>("keypair")
+            let keypair_path = sub_m
+                .get_one::<String>("keypair")
                 .map(|s| s.as_str())
                 .unwrap_or("~/.config/solana/id.json");
             let force = sub_m.get_flag("force");
 
             if !force {
-                println!("{} This will remove your node from the on-chain registry.", "!".yellow());
+                println!(
+                    "{} This will remove your node from the on-chain registry.",
+                    "!".yellow()
+                );
                 println!("  Use --force to confirm.");
                 return Ok(());
             }
@@ -2456,7 +2792,12 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
                         let address = node.get_address();
                         if !address.is_empty() {
                             if let Ok(_peer) = manager.add_peer(&address).await {
-                                println!("    {} {} {}", "→".green(), node.get_node_id_string().cyan(), address);
+                                println!(
+                                    "    {} {} {}",
+                                    "→".green(),
+                                    node.get_node_id_string().cyan(),
+                                    address
+                                );
                                 added += 1;
                             }
                         }
@@ -2473,12 +2814,21 @@ async fn handle_registry(matches: &ArgMatches) -> Result<()> {
         _ => {
             println!("{}", "On-Chain Registry Commands".cyan().bold());
             println!("{}", "─".repeat(50));
-            println!("  {} - Register this node on Solana devnet", "register".bold());
+            println!(
+                "  {} - Register this node on Solana devnet",
+                "register".bold()
+            );
             println!("  {} - List all registered nodes", "list".bold());
             println!("  {} - Update registration (address/name)", "update".bold());
-            println!("  {} - Send heartbeat (update last_seen)", "heartbeat".bold());
+            println!(
+                "  {} - Send heartbeat (update last_seen)",
+                "heartbeat".bold()
+            );
             println!("  {} - Remove registration from chain", "deregister".bold());
-            println!("  {} - Discover and add peers from registry", "discover".bold());
+            println!(
+                "  {} - Discover and add peers from registry",
+                "discover".bold()
+            );
             println!();
             println!("  Program ID: {}", registry::PROGRAM_ID.dimmed());
             println!("  Network: {}", "Solana Devnet".cyan());
@@ -2545,12 +2895,15 @@ async fn handle_mesh_stats(matches: &ArgMatches) -> Result<()> {
 
         // Overview
         println!("  {} {}", "Total Messages:".bold(), stats.total_messages);
-        println!("  {} {} ({:.1}%)",
+        println!(
+            "  {} {} ({:.1}%)",
             "Commands:".bold(),
             stats.total_commands,
             if stats.total_messages > 0 {
                 (stats.total_commands as f64 / stats.total_messages as f64) * 100.0
-            } else { 0.0 }
+            } else {
+                0.0
+            }
         );
         println!("  {} {}", "With Responses:".bold(), stats.total_responses);
         println!("  {} {}", "Unique Nodes:".bold(), stats.unique_nodes);
@@ -2583,7 +2936,8 @@ async fn handle_mesh_stats(matches: &ArgMatches) -> Result<()> {
             for (i, node) in stats.top_nodes.iter().take(5).enumerate() {
                 let name = node.node_name.as_deref().unwrap_or("Unknown");
                 let node_id = format!("!{:08x}", node.node_id);
-                println!("  {}. {} {} ({} msgs, {} cmds)",
+                println!(
+                    "  {}. {} {} ({} msgs, {} cmds)",
                     i + 1,
                     node_id.yellow(),
                     name,
@@ -2598,8 +2952,7 @@ async fn handle_mesh_stats(matches: &ArgMatches) -> Result<()> {
             println!();
             println!("{}", "Hourly Activity (Last 24h)".cyan().bold());
 
-            let hourly = db::mesh_messages::get_hourly_activity(&mut conn)
-                .unwrap_or_default();
+            let hourly = db::mesh_messages::get_hourly_activity(&mut conn).unwrap_or_default();
 
             if hourly.is_empty() {
                 println!("  {} No activity in the last 24 hours", "─".dimmed());
@@ -2613,10 +2966,18 @@ async fn handle_mesh_stats(matches: &ArgMatches) -> Result<()> {
 
                     let bar_len = if max_count > 0 {
                         (*count as f64 / max_count as f64 * 30.0) as usize
-                    } else { 0 };
+                    } else {
+                        0
+                    };
                     let bar = "█".repeat(bar_len);
 
-                    println!("  {} {} {} ({})", dt.dimmed(), bar.green(), " ".repeat(30 - bar_len), count);
+                    println!(
+                        "  {} {} {} ({})",
+                        dt.dimmed(),
+                        bar.green(),
+                        " ".repeat(30 - bar_len),
+                        count
+                    );
                 }
             }
         }
@@ -2627,7 +2988,8 @@ async fn handle_mesh_stats(matches: &ArgMatches) -> Result<()> {
 
 /// Show recent mesh messages
 async fn handle_mesh_recent(matches: &ArgMatches) -> Result<()> {
-    let limit: i64 = matches.get_one::<String>("limit")
+    let limit: i64 = matches
+        .get_one::<String>("limit")
         .and_then(|s| s.parse().ok())
         .unwrap_or(20);
     let commands_only = matches.get_flag("commands");
@@ -2645,18 +3007,24 @@ async fn handle_mesh_recent(matches: &ArgMatches) -> Result<()> {
         db::mesh_messages::get_from_node(&mut conn, node_id, limit)
     } else {
         db::mesh_messages::get_recent(&mut conn, limit)
-    }.map_err(|e| anyhow::anyhow!("Failed to get messages: {}", e))?;
+    }
+    .map_err(|e| anyhow::anyhow!("Failed to get messages: {}", e))?;
 
     if json_output {
-        let json: Vec<_> = messages.iter().map(|m| serde_json::json!({
-            "id": m.id,
-            "from_node_id": format!("!{:08x}", m.from_node_id as u32),
-            "from_name": m.from_name,
-            "body": m.body,
-            "is_command": m.is_command,
-            "received_at": m.received_at_us,
-            "response": m.response,
-        })).collect();
+        let json: Vec<_> = messages
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "id": m.id,
+                    "from_node_id": format!("!{:08x}", m.from_node_id as u32),
+                    "from_name": m.from_name,
+                    "body": m.body,
+                    "is_command": m.is_command,
+                    "received_at": m.received_at_us,
+                    "response": m.response,
+                })
+            })
+            .collect();
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
         println!("{}", "Recent Mesh Messages".cyan().bold());
@@ -2675,7 +3043,13 @@ async fn handle_mesh_recent(matches: &ArgMatches) -> Result<()> {
                 let cmd_marker = if msg.is_command { "📡" } else { "  " };
 
                 println!();
-                println!("  {} {} {} ({})", cmd_marker, node_id.yellow(), name.cyan(), time.dimmed());
+                println!(
+                    "  {} {} {} ({})",
+                    cmd_marker,
+                    node_id.yellow(),
+                    name.cyan(),
+                    time.dimmed()
+                );
                 println!("     {}", msg.body);
 
                 if let Some(ref response) = msg.response {
@@ -2690,7 +3064,8 @@ async fn handle_mesh_recent(matches: &ArgMatches) -> Result<()> {
 
 /// List mesh nodes by activity
 async fn handle_mesh_nodes(matches: &ArgMatches) -> Result<()> {
-    let limit: i64 = matches.get_one::<String>("limit")
+    let limit: i64 = matches
+        .get_one::<String>("limit")
         .and_then(|s| s.parse().ok())
         .unwrap_or(10);
     let json_output = matches.get_flag("json");
@@ -2701,19 +3076,34 @@ async fn handle_mesh_nodes(matches: &ArgMatches) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to get nodes: {}", e))?;
 
     if json_output {
-        let json: Vec<_> = nodes.iter().map(|n| serde_json::json!({
-            "node_id": format!("!{:08x}", n.node_id),
-            "node_name": n.node_name,
-            "message_count": n.message_count,
-            "command_count": n.command_count,
-        })).collect();
+        let json: Vec<_> = nodes
+            .iter()
+            .map(|n| {
+                serde_json::json!({
+                    "node_id": format!("!{:08x}", n.node_id),
+                    "node_name": n.node_name,
+                    "message_count": n.message_count,
+                    "command_count": n.command_count,
+                })
+            })
+            .collect();
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
         println!("{}", "Mesh Nodes by Activity".cyan().bold());
         println!("{}", "─".repeat(60));
         println!();
-        println!("  {:^4} {:^12} {:^20} {:>8} {:>8}", "#", "Node ID", "Name", "Msgs", "Cmds");
-        println!("  {} {} {} {} {}", "─".repeat(4), "─".repeat(12), "─".repeat(20), "─".repeat(8), "─".repeat(8));
+        println!(
+            "  {:^4} {:^12} {:^20} {:>8} {:>8}",
+            "#", "Node ID", "Name", "Msgs", "Cmds"
+        );
+        println!(
+            "  {} {} {} {} {}",
+            "─".repeat(4),
+            "─".repeat(12),
+            "─".repeat(20),
+            "─".repeat(8),
+            "─".repeat(8)
+        );
 
         if nodes.is_empty() {
             println!("  {} No nodes found", "─".dimmed());
@@ -2721,9 +3111,14 @@ async fn handle_mesh_nodes(matches: &ArgMatches) -> Result<()> {
             for (i, node) in nodes.iter().enumerate() {
                 let node_id = format!("!{:08x}", node.node_id);
                 let name = node.node_name.as_deref().unwrap_or("Unknown");
-                let name_truncated = if name.len() > 20 { format!("{}...", &name[..17]) } else { name.to_string() };
+                let name_truncated = if name.len() > 20 {
+                    format!("{}...", &name[..17])
+                } else {
+                    name.to_string()
+                };
 
-                println!("  {:>4} {} {:20} {:>8} {:>8}",
+                println!(
+                    "  {:>4} {} {:20} {:>8} {:>8}",
                     i + 1,
                     node_id.yellow(),
                     name_truncated.cyan(),
@@ -2739,7 +3134,8 @@ async fn handle_mesh_nodes(matches: &ArgMatches) -> Result<()> {
 
 /// Prune old mesh messages
 async fn handle_mesh_prune(matches: &ArgMatches) -> Result<()> {
-    let keep_count: i64 = matches.get_one::<String>("keep")
+    let keep_count: i64 = matches
+        .get_one::<String>("keep")
         .and_then(|s| s.parse().ok())
         .unwrap_or(1000);
     let force = matches.get_flag("force");
@@ -2751,8 +3147,12 @@ async fn handle_mesh_prune(matches: &ArgMatches) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to count messages: {}", e))?;
 
     if current_count <= keep_count {
-        println!("{} Only {} messages in database (keeping {}), nothing to prune.",
-            "ℹ".cyan(), current_count, keep_count);
+        println!(
+            "{} Only {} messages in database (keeping {}), nothing to prune.",
+            "ℹ".cyan(),
+            current_count,
+            keep_count
+        );
         return Ok(());
     }
 
@@ -2780,8 +3180,12 @@ async fn handle_mesh_prune(matches: &ArgMatches) -> Result<()> {
     let deleted = db::mesh_messages::prune_old(&mut conn, keep_count)
         .map_err(|e| anyhow::anyhow!("Failed to prune messages: {}", e))?;
 
-    println!("{} Deleted {} old messages. {} remaining.",
-        "✓".green(), deleted, current_count - deleted as i64);
+    println!(
+        "{} Deleted {} old messages. {} remaining.",
+        "✓".green(),
+        deleted,
+        current_count - deleted as i64
+    );
 
     Ok(())
 }
