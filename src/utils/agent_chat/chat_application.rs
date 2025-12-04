@@ -4,7 +4,7 @@
 //! in the terminal session with real-time auto-complete and suggestions.
 
 use super::streaming_output::{
-    stream_claude_style, show_context_bar, ContextTracker,
+    stream_claude_style, show_context_bar, ContextTracker, MultilineInput, render_multiline_input,
 };
 use super::system_status_bar::SystemStatusBarManager;
 use super::ui_components::{show_enhanced_status_bar, show_welcome_box};
@@ -1876,20 +1876,22 @@ async fn execute_ai_plan_with_colors(
         .await
     {
         Ok(response) => {
-            // Render AI response as markdown
+            // Stream the AI response with Claude Code-style typing effect
+            print!("{}AI: {}", Colors::CYAN, Colors::RESET);
+            stream_claude_style(&response).await;
+            println!(); // End line after streaming
+
+            // Also render as markdown for code blocks and formatting
             if let Err(e) = render_markdown_to_terminal(&response) {
-                // Fallback to plain text if markdown rendering fails
-                println!("{}", response);
                 debug!("Markdown rendering failed: {}", e);
             }
         }
         Err(_) => {
-            println!(
-                "{}Executed {} tools successfully.{}",
-                Colors::GREEN,
-                tool_results.len(),
-                Colors::RESET
-            );
+            // Stream a friendly fallback message
+            let fallback_msg = format!("Executed {} tools successfully.", tool_results.len());
+            print!("{}AI: {}", Colors::GREEN, Colors::RESET);
+            stream_claude_style(&fallback_msg).await;
+            println!();
         }
     }
 
