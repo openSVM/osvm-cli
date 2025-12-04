@@ -3,7 +3,7 @@
 //! This module replaces solana-clap-utils input validators to eliminate
 //! the clap 2.x dependency chain (ansi_term, atty) which has security warnings.
 //!
-//! Implemented based on: https://github.com/solana-labs/solana/blob/master/clap-utils/src/input_validators.rs
+//! Implemented based on: <https://github.com/solana-labs/solana/blob/master/clap-utils/src/input_validators.rs>
 
 use std::path::Path;
 use url::Url;

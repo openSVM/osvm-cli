@@ -4,7 +4,7 @@
 //! communication from the host to MCP server processes via stdio.
 //!
 //! Architecture:
-//! ```
+//! ```text
 //! Host (OSVM) ──[TCP]──> Guest Wrapper ──[stdio]──> MCP Server
 //!                        (this program)           (Node.js/Python)
 //! ```

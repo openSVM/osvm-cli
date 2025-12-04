@@ -1,7 +1,7 @@
 //! OpenSVM API Client
 //!
 //! Client for the OpenSVM IDL & Annotations API.
-//! Base URL: https://opensvm.com/api
+//! Base URL: <https://opensvm.com/api>
 //!
 //! Features:
 //! - Fetch and cache address annotations (labels, risk, tags)

@@ -30,7 +30,7 @@ const ANTHROPIC_DEFAULT_URL: &str = "https://api.anthropic.com/v1/messages";
 const OSVM_DEFAULT_URL: &str = "https://osvm.ai/api/getAnswer";
 
 /// LLM query - main entry point
-/// (llm-query provider prompt [options])
+/// `(llm-query provider prompt [options])`
 ///
 /// Provider: "ollama", "openai", "anthropic"
 /// Options object can contain:

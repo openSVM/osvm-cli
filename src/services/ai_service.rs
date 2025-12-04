@@ -2660,8 +2660,8 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
     ///
     /// Handles:
     /// - Raw LISP code
-    /// - XML-wrapped plans (<code> tags)
-    /// - Markdown code blocks (```lisp)
+    /// - XML-wrapped plans (`<code>` tags)
+    /// - Markdown code blocks (triple backtick + lisp)
     /// - Mixed format plans with sections
     ///
     /// # Arguments

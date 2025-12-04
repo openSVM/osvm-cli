@@ -272,7 +272,7 @@ impl Default for StringRuntime {
 
 /// Array runtime representation
 ///
-/// Heap layout: [length: u64][capacity: u64][element_size: u64][data...]
+/// Heap layout: `[length: u64][capacity: u64][element_size: u64][data...]`
 pub struct ArrayRuntime {
     heap: HeapAllocator,
 }

@@ -132,10 +132,10 @@ impl ServerConfig {
         "~/.ssh/id_rsa".to_string()
     }
 
-    /// Create a ServerConfig from a connection string (user@host[:port])
+    /// Create a ServerConfig from a connection string (`user@host[:port]`)
     ///
     /// # Arguments
-    /// * `conn_str` - Connection string in the format user@host[:port]
+    /// * `conn_str` - Connection string in the format `user@host[:port]`
     ///
     /// # Returns
     /// * `Result<ServerConfig, DeploymentError>` - Server config or error
