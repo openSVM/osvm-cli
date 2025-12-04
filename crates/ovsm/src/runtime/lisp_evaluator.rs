@@ -6924,7 +6924,7 @@ impl LispEvaluator {
     fn apply_binary_op(&self, op: BinaryOp, left: Value, right: Value) -> Result<Value> {
         match op {
             BinaryOp::Add => match (left, right) {
-                (Value::Int(l), Value::Int(r)) => Ok(Value::Int(l + r)),
+                (Value::Int(l), Value::Int(r)) => Ok(Value::Int(l.saturating_add(r))),
                 (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l + r)),
                 (Value::Int(l), Value::Float(r)) => Ok(Value::Float(l as f64 + r)),
                 (Value::Float(l), Value::Int(r)) => Ok(Value::Float(l + r as f64)),
@@ -6943,7 +6943,7 @@ impl LispEvaluator {
             },
 
             BinaryOp::Sub => match (left, right) {
-                (Value::Int(l), Value::Int(r)) => Ok(Value::Int(l - r)),
+                (Value::Int(l), Value::Int(r)) => Ok(Value::Int(l.saturating_sub(r))),
                 (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l - r)),
                 (Value::Int(l), Value::Float(r)) => Ok(Value::Float(l as f64 - r)),
                 (Value::Float(l), Value::Int(r)) => Ok(Value::Float(l - r as f64)),
@@ -6955,7 +6955,7 @@ impl LispEvaluator {
             },
 
             BinaryOp::Mul => match (left, right) {
-                (Value::Int(l), Value::Int(r)) => Ok(Value::Int(l * r)),
+                (Value::Int(l), Value::Int(r)) => Ok(Value::Int(l.saturating_mul(r))),
                 (Value::Float(l), Value::Float(r)) => Ok(Value::Float(l * r)),
                 (Value::Int(l), Value::Float(r)) => Ok(Value::Float(l as f64 * r)),
                 (Value::Float(l), Value::Int(r)) => Ok(Value::Float(l * r as f64)),
