@@ -62,7 +62,9 @@ core.*
 *.sublime-project
 .history/
 .ionide/
-.claude/
+# Claude Code - ignore auto-generated, keep documentation
+.claude/status.md
+.claude/settings.local.json
 osvm-local 
 # OS specific files
 .DS_Store
