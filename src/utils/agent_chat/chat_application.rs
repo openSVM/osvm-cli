@@ -556,7 +556,7 @@ async fn get_enhanced_input_with_status(
                     {
                         let suggestion = &input_state.suggestions[input_state.selected_suggestion];
                         input_state.input = suggestion.text.clone();
-                        input_state.cursor_pos = input_state.input.len();
+                        input_state.cursor_pos = input_state.input.chars().count(); // Use char count, not byte len
                         input_state.suggestions.clear();
                         input_state.selected_suggestion = 0;
                         input_state.original_before_sug = None;
@@ -743,6 +743,37 @@ async fn get_enhanced_input_with_status(
                     }
                 }
             }
+            InputChar::CtrlM => {
+                // Toggle multiline mode (Ctrl+U)
+                if task_state.input_mode == InputMode::InputField {
+                    input_state.toggle_multiline();
+                    let mode_str = if input_state.multiline_mode { "MULTI" } else { "SINGLE" };
+                    // Show mode indicator
+                    print!("\r\x1B[K{}│{} [{}] > {}",
+                        Colors::GREEN, Colors::RESET, mode_str, input_state.input);
+                    io::stdout().flush().ok();
+                }
+            }
+            InputChar::CtrlEnter => {
+                // Insert newline in multiline mode (Ctrl+N)
+                if task_state.input_mode == InputMode::InputField && input_state.multiline_mode {
+                    input_state.insert_newline();
+                    // Redraw multiline display
+                    print!("\r\x1B[K{}│{} [MULTI] \n", Colors::GREEN, Colors::RESET);
+                    print!("{}", input_state.format_multiline_display());
+                    io::stdout().flush().ok();
+                }
+            }
+            InputChar::CtrlL => {
+                // Clear screen (Ctrl+L)
+                print!("\x1B[2J\x1B[1;1H");
+                show_enhanced_status_bar(task_state);
+                redraw_input_line(&input_state.input)?;
+            }
+            InputChar::Mouse => {
+                // Ignore mouse events for now
+                debug!("Mouse event received, ignoring");
+            }
             InputChar::Unknown => {
                 debug!("Unknown character received in enhanced input");
             }
@@ -766,28 +797,8 @@ async fn read_line_buffered_input() -> Result<String> {
     Ok(input)
 }
 
-/// Input character classification
-#[derive(Debug)]
-pub enum InputChar {
-    Enter,
-    Backspace,
-    CtrlC,
-    CtrlT,
-    Tab,
-    Escape,
-    Arrow(ArrowKey),
-    Regular(char),
-    Unknown,
-}
-
-/// Arrow key enum
-#[derive(Debug)]
-pub enum ArrowKey {
-    Up,
-    Down,
-    Left,
-    Right,
-}
+// InputChar and ArrowKey are imported from input_handler via super::*
+// This avoids duplication and ensures multiline mode keys (CtrlM, CtrlEnter) work
 
 /// Read and classify a single character from input
 fn read_single_character() -> Result<InputChar> {
@@ -798,9 +809,12 @@ fn read_single_character() -> Result<InputChar> {
             0x7f | 0x08 => Ok(InputChar::Backspace),
             0x03 => Ok(InputChar::CtrlC),
             0x14 => Ok(InputChar::CtrlT),
+            0x0c => Ok(InputChar::CtrlL),      // Ctrl+L - clear screen
+            0x0e => Ok(InputChar::CtrlEnter),  // Ctrl+N - insert newline in multiline
+            0x15 => Ok(InputChar::CtrlM),      // Ctrl+U - toggle multiline mode
             b'\t' => Ok(InputChar::Tab),
             0x1b => {
-                // Handle escape sequences for arrow keys
+                // Handle escape sequences for arrow keys and mouse
                 let mut next_buffer = [0; 2];
                 if let Ok(2) = std::io::stdin().read(&mut next_buffer) {
                     if next_buffer[0] == b'[' {
@@ -809,6 +823,7 @@ fn read_single_character() -> Result<InputChar> {
                             b'B' => return Ok(InputChar::Arrow(ArrowKey::Down)),
                             b'C' => return Ok(InputChar::Arrow(ArrowKey::Right)),
                             b'D' => return Ok(InputChar::Arrow(ArrowKey::Left)),
+                            b'M' => return Ok(InputChar::Mouse), // Mouse event
                             _ => {}
                         }
                     }
