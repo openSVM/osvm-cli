@@ -11,6 +11,7 @@ use ratatui::{
 };
 
 /// Modal for approving tool executions
+#[derive(Clone)]
 pub struct ApprovalModal {
     pub request: ApprovalRequest,
     pub selected: ApprovalResponse,

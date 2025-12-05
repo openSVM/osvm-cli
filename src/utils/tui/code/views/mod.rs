@@ -1,5 +1,6 @@
 //! UI views for osvm code
 
-mod approval;
+pub mod approval;
+mod main;
 
-pub use approval::ApprovalModal;
+pub use approval::{ApprovalModal, centered_rect};
