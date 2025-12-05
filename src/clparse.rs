@@ -28,6 +28,7 @@ mod rpc;
 mod settings;
 mod snapshot;
 mod svm;
+mod swap;
 mod tutorial;
 
 fn validate_signer(s: &str) -> Result<String, String> {
@@ -290,5 +291,6 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
         .subcommand(qa::build_qa_command())
         .subcommand(ovsm::build_ovsm_command())
         .subcommand(settings::build_settings_command())
+        .subcommand(swap::build_swap_command())
         .get_matches()
 }

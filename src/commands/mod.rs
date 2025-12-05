@@ -23,4 +23,5 @@ pub mod settings;
 pub mod snapshot;
 pub mod stream;
 pub mod svm_handler;
+pub mod swap_handler;
 pub mod tutorial;

@@ -6,6 +6,7 @@ pub mod graph;
 pub mod graph_forensics;
 pub mod logger;
 pub mod screenshot_test;
+pub mod swap;
 pub mod widgets;
 
 pub use app::OsvmApp;

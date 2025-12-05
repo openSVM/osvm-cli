@@ -62,6 +62,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "realtime"
             | "chat"
             | "code"
+            | "swap"
             | "agent"
             | "plan"
             | "p"     // Short alias for plan
@@ -391,6 +392,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle code command - AI-powered coding assistant
     if sub_command == "code" {
         return commands::code_handler::handle_code_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
+    }
+
+    // Handle swap command - Token swaps via Jupiter
+    if sub_command == "swap" {
+        return commands::swap_handler::handle_swap_command(sub_matches)
             .await
             .map_err(|e| e.into());
     }
