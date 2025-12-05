@@ -1,10 +1,30 @@
 //! Token registry for swap UI
 //!
 //! Caches token list from Jupiter and provides fast search.
+//! Implements local file caching to avoid repeated API calls.
 
 use super::jupiter::{JupiterClient, TokenInfo};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
+
+/// Cache TTL - 24 hours
+const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Cache file name
+const CACHE_FILE: &str = "jupiter_tokens.json";
+
+/// Cached token list with metadata
+#[derive(Debug, Serialize, Deserialize)]
+struct TokenCache {
+    /// Unix timestamp when cache was created
+    timestamp: u64,
+    /// Cached tokens
+    tokens: Vec<TokenInfo>,
+}
 
 /// Well-known token mint addresses
 pub mod well_known {
@@ -54,14 +74,213 @@ impl TokenRegistry {
         }
     }
 
-    /// Load token list from Jupiter API
+    /// Load token list with caching
+    ///
+    /// Tries to load from local cache first. If cache is missing or expired,
+    /// fetches from Jupiter API and updates the cache.
     pub async fn load() -> Result<Self> {
+        // Try to load from cache
+        if let Some(cached) = Self::load_from_cache() {
+            log::info!("Loaded {} tokens from cache", cached.len());
+            return Ok(cached);
+        }
+
+        // Cache miss or expired - fetch from API
+        log::info!("Token cache miss, fetching from Jupiter API...");
         let client = JupiterClient::new();
         let tokens = client.get_token_list().await?;
 
         let mut registry = Self::new();
-        registry.populate(tokens);
+        registry.populate(tokens.clone());
+
+        // Save to cache (don't fail if cache write fails)
+        if let Err(e) = Self::save_to_cache(&tokens) {
+            log::warn!("Failed to save token cache: {}", e);
+        } else {
+            log::info!("Saved {} tokens to cache", tokens.len());
+        }
+
         Ok(registry)
+    }
+
+    /// Load from API without caching (for refresh)
+    pub async fn load_fresh() -> Result<Self> {
+        let client = JupiterClient::new();
+        let tokens = client.get_token_list().await?;
+
+        let mut registry = Self::new();
+        registry.populate(tokens.clone());
+
+        // Update cache
+        let _ = Self::save_to_cache(&tokens);
+
+        Ok(registry)
+    }
+
+    /// Get the cache file path
+    fn cache_path() -> Option<PathBuf> {
+        dirs::cache_dir().map(|d| d.join("osvm").join(CACHE_FILE))
+    }
+
+    /// Load tokens from cache if valid
+    fn load_from_cache() -> Option<Self> {
+        let path = Self::cache_path()?;
+
+        if !path.exists() {
+            return None;
+        }
+
+        let content = fs::read_to_string(&path).ok()?;
+        let cache: TokenCache = serde_json::from_str(&content).ok()?;
+
+        // Check if cache is expired
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+
+        if now - cache.timestamp > CACHE_TTL.as_secs() {
+            log::info!("Token cache expired");
+            return None;
+        }
+
+        let mut registry = Self::new();
+        registry.populate(cache.tokens);
+        Some(registry)
+    }
+
+    /// Save tokens to cache
+    fn save_to_cache(tokens: &[TokenInfo]) -> Result<()> {
+        let path = Self::cache_path()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?;
+
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let cache = TokenCache {
+            timestamp: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)?
+                .as_secs(),
+            tokens: tokens.to_vec(),
+        };
+
+        let content = serde_json::to_string(&cache)?;
+        fs::write(&path, content)?;
+
+        Ok(())
+    }
+
+    /// Clear the cache (for testing or manual refresh)
+    pub fn clear_cache() -> Result<()> {
+        if let Some(path) = Self::cache_path() {
+            if path.exists() {
+                fs::remove_file(&path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Load with fallback - uses cache, then API, then hardcoded fallback
+    ///
+    /// This ensures the swap UI can always start, even offline.
+    pub async fn load_with_fallback() -> Self {
+        // Try cache first
+        if let Some(cached) = Self::load_from_cache() {
+            return cached;
+        }
+
+        // Try API
+        match Self::load().await {
+            Ok(registry) => registry,
+            Err(e) => {
+                log::warn!("Failed to load tokens from API: {}. Using fallback.", e);
+                Self::with_fallback_tokens()
+            }
+        }
+    }
+
+    /// Create registry with hardcoded fallback tokens
+    ///
+    /// These are the most commonly traded tokens on Solana.
+    pub fn with_fallback_tokens() -> Self {
+        let mut registry = Self::new();
+        registry.populate(vec![
+            TokenInfo {
+                address: well_known::SOL.to_string(),
+                symbol: "SOL".to_string(),
+                name: "Wrapped SOL".to_string(),
+                decimals: 9,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string()]),
+                daily_volume: None,
+            },
+            TokenInfo {
+                address: well_known::USDC.to_string(),
+                symbol: "USDC".to_string(),
+                name: "USD Coin".to_string(),
+                decimals: 6,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string(), "stablecoin".to_string()]),
+                daily_volume: None,
+            },
+            TokenInfo {
+                address: well_known::USDT.to_string(),
+                symbol: "USDT".to_string(),
+                name: "Tether USD".to_string(),
+                decimals: 6,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string(), "stablecoin".to_string()]),
+                daily_volume: None,
+            },
+            TokenInfo {
+                address: well_known::JUP.to_string(),
+                symbol: "JUP".to_string(),
+                name: "Jupiter".to_string(),
+                decimals: 6,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string()]),
+                daily_volume: None,
+            },
+            TokenInfo {
+                address: well_known::BONK.to_string(),
+                symbol: "BONK".to_string(),
+                name: "Bonk".to_string(),
+                decimals: 5,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string(), "meme".to_string()]),
+                daily_volume: None,
+            },
+            TokenInfo {
+                address: well_known::RAY.to_string(),
+                symbol: "RAY".to_string(),
+                name: "Raydium".to_string(),
+                decimals: 6,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string()]),
+                daily_volume: None,
+            },
+            TokenInfo {
+                address: well_known::ORCA.to_string(),
+                symbol: "ORCA".to_string(),
+                name: "Orca".to_string(),
+                decimals: 6,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string()]),
+                daily_volume: None,
+            },
+            TokenInfo {
+                address: well_known::PYTH.to_string(),
+                symbol: "PYTH".to_string(),
+                name: "Pyth Network".to_string(),
+                decimals: 6,
+                logo_uri: None,
+                tags: Some(vec!["verified".to_string()]),
+                daily_volume: None,
+            },
+        ]);
+        registry
     }
 
     /// Populate registry from a list of tokens

@@ -143,19 +143,13 @@ impl SwapApp {
     pub async fn initialize(&mut self, wallet_pubkey: Option<&Pubkey>) -> Result<()> {
         self.status_message = Some("Loading tokens...".to_string());
 
-        // Load token registry
-        match TokenRegistry::load().await {
-            Ok(registry) => {
-                // Set default tokens
-                self.from_token = registry.get_by_symbol("SOL").cloned();
-                self.to_token = registry.get_by_symbol("USDC").cloned();
-                self.tokens = Some(registry);
-            }
-            Err(e) => {
-                self.status_message = Some(format!("Failed to load tokens: {}", e));
-                return Err(e);
-            }
-        }
+        // Load token registry (with fallback for offline mode)
+        let registry = TokenRegistry::load_with_fallback().await;
+
+        // Set default tokens
+        self.from_token = registry.get_by_symbol("SOL").cloned();
+        self.to_token = registry.get_by_symbol("USDC").cloned();
+        self.tokens = Some(registry);
 
         // Load wallet if provided
         if let Some(pubkey) = wallet_pubkey {

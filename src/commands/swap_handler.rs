@@ -85,8 +85,8 @@ async fn run_dry_run(
 
     println!("🔍 Fetching quote...\n");
 
-    // Load token registry
-    let tokens = TokenRegistry::load().await?;
+    // Load token registry (with fallback for offline mode)
+    let tokens = TokenRegistry::load_with_fallback().await;
 
     // Resolve tokens
     let from_token = from
