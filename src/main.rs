@@ -63,6 +63,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "chat"
             | "code"
             | "swap"
+            | "degen"
             | "agent"
             | "plan"
             | "p"     // Short alias for plan
@@ -399,6 +400,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle swap command - Token swaps via Jupiter
     if sub_command == "swap" {
         return commands::swap_handler::handle_swap_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
+    }
+
+    // Handle degen command - Autonomous trading agent
+    if sub_command == "degen" {
+        return commands::degen_handler::handle_degen_command(sub_matches)
             .await
             .map_err(|e| e.into());
     }
@@ -762,6 +770,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             use crate::commands::realtime::{execute_realtime_command, RealtimeArgs};
 
             let args = RealtimeArgs {
+                pumpfun: realtime_sub_matches.get_flag("pumpfun"),
                 programs: realtime_sub_matches
                     .get_one::<String>("programs")
                     .map(|s| s.to_string()),

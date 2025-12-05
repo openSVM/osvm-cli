@@ -7,6 +7,7 @@ pub mod bbs_handler;
 pub mod code_handler;
 pub mod database;
 pub mod deep_research;
+pub mod degen_handler;
 pub mod deploy_handler;
 pub mod doctor_handler;
 pub mod invoke_handler;

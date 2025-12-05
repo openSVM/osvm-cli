@@ -12,6 +12,7 @@ mod chat;
 mod code;
 mod collab;
 mod database;
+mod degen;
 mod deploy;
 mod doctor;
 mod examples;
@@ -292,5 +293,6 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
         .subcommand(ovsm::build_ovsm_command())
         .subcommand(settings::build_settings_command())
         .subcommand(swap::build_swap_command())
+        .subcommand(degen::build_degen_command())
         .get_matches()
 }

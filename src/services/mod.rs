@@ -9,6 +9,7 @@ pub mod chat_ui_test_scenarios;
 pub mod clickhouse_service;
 pub mod collab_service; // Real-time collaborative investigation
 pub mod cross_validator; // Cross-validation for findings
+pub mod degen_agent; // Autonomous trading agent for pump.fun
 pub mod enhanced_ascii_graph; // Enhanced ASCII graph with advanced TUI visualization
 pub mod ephemeral_microvm;
 pub mod graph_tui; // Interactive TUI graph viewer for transfer relationships
@@ -21,6 +22,7 @@ pub mod microvm_launcher;
 pub mod opensvm_api; // OpenSVM IDL & Annotations API client
 pub mod ovsm_executor; // Phase 2: OVSM execution engine
 pub mod ovsm_service;
+pub mod pumpfun_client; // Pump.fun API client for memecoin data
 pub mod qa_agent_service;
 pub mod realtime_graph_stream; // Real-time streaming graph visualization
 pub mod research_agent; // Self-evaluating research agent
