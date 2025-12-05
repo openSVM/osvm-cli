@@ -53,6 +53,8 @@ pub struct InputState {
     pub lines: Vec<String>,
     pub current_line: usize,
     pub line_cursor: usize,
+    // Dynamic MCP tools cache (server_id, tool_name, description)
+    pub mcp_tools_cache: Vec<(String, String, Option<String>)>,
 }
 
 impl InputState {
@@ -76,7 +78,15 @@ impl InputState {
             lines: vec![String::new()],
             current_line: 0,
             line_cursor: 0,
+            // Dynamic MCP tools cache
+            mcp_tools_cache: Vec::new(),
         }
+    }
+
+    /// Update the MCP tools cache from available tools
+    /// Call this when MCP servers are initialized or tools change
+    pub fn update_mcp_tools_cache(&mut self, tools: Vec<(String, String, Option<String>)>) {
+        self.mcp_tools_cache = tools;
     }
 
     /// Default command history for demonstration
@@ -470,29 +480,39 @@ impl InputState {
             }
         }
 
-        // MCP tool suggestions
-        let mcp_tools = vec![
-            (
-                "@solana/get_balance",
-                "Get wallet balance via Solana MCP",
-                "mcp",
-            ),
-            ("@solana/get_transactions", "Get transaction history", "mcp"),
-            (
-                "@solana/get_network_status",
-                "Check Solana network status",
-                "mcp",
-            ),
-            ("@solana/stake_account", "Manage stake accounts", "mcp"),
-        ];
+        // MCP tool suggestions - use dynamic cache if available, fallback to defaults
+        if !self.mcp_tools_cache.is_empty() {
+            // Use dynamically loaded MCP tools
+            for (server_id, tool_name, desc) in &self.mcp_tools_cache {
+                let tool_path = format!("@{}/{}", server_id, tool_name);
+                if tool_path.to_lowercase().contains(&input_lower)
+                    || tool_name.to_lowercase().contains(&input_lower)
+                    || input_lower.contains("@")
+                {
+                    suggestions.push(RealtimeSuggestion::new(
+                        tool_path,
+                        desc.clone().unwrap_or_else(|| format!("MCP tool from {}", server_id)),
+                        "mcp".to_string(),
+                    ));
+                }
+            }
+        } else {
+            // Fallback to hardcoded defaults when no MCP tools are cached
+            let default_mcp_tools = vec![
+                ("@solana/get_balance", "Get wallet balance via Solana MCP"),
+                ("@solana/get_transactions", "Get transaction history"),
+                ("@solana/get_network_status", "Check Solana network status"),
+                ("@solana/stake_account", "Manage stake accounts"),
+            ];
 
-        for (tool, desc, category) in mcp_tools {
-            if tool.to_lowercase().contains(&input_lower) || input_lower.contains("@") {
-                suggestions.push(RealtimeSuggestion::new(
-                    tool.to_string(),
-                    desc.to_string(),
-                    category.to_string(),
-                ));
+            for (tool, desc) in default_mcp_tools {
+                if tool.to_lowercase().contains(&input_lower) || input_lower.contains("@") {
+                    suggestions.push(RealtimeSuggestion::new(
+                        tool.to_string(),
+                        desc.to_string(),
+                        "mcp".to_string(),
+                    ));
+                }
             }
         }
 

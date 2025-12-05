@@ -10,6 +10,18 @@ use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::time::{sleep, timeout, Duration};
 
+/// Maximum chat history size to prevent unbounded memory growth
+const MAX_CHAT_HISTORY_SIZE: usize = 1000;
+
+/// Add message to chat history with size limit
+/// Removes oldest 100 messages when limit is exceeded (same behavior as V2)
+pub(crate) fn add_to_chat_history(chat_history: &mut Vec<String>, message: String) {
+    chat_history.push(message);
+    if chat_history.len() > MAX_CHAT_HISTORY_SIZE {
+        chat_history.drain(0..100);
+    }
+}
+
 /// Generate real-time suggestions using AI
 pub async fn generate_realtime_suggestions(
     partial_input: &str,
@@ -112,7 +124,7 @@ pub async fn process_with_realtime_ai(
             ai_response,
             Colors::RESET
         );
-        chat_history.push(format!("Assistant: {}", ai_response));
+        add_to_chat_history(chat_history, format!("Assistant: {}", ai_response));
 
         // Extract and offer to execute OVSM code blocks
         let code_blocks = extract_ovsm_code_blocks(&ai_response);
@@ -224,8 +236,10 @@ pub async fn process_with_realtime_ai(
                                 Colors::RESET
                             );
                             println!("{}Result:{} {:?}", Colors::CYAN, Colors::RESET, result);
-                            chat_history
-                                .push(format!("System: Executed OVSM code, result: {:?}", result));
+                            add_to_chat_history(
+                                chat_history,
+                                format!("System: Executed OVSM code, result: {:?}", result),
+                            );
                         }
                         Ok(Ok(Err(e))) => {
                             println!(
@@ -234,11 +248,17 @@ pub async fn process_with_realtime_ai(
                                 e,
                                 Colors::RESET
                             );
-                            chat_history.push(format!("System: OVSM execution failed: {}", e));
+                            add_to_chat_history(
+                                chat_history,
+                                format!("System: OVSM execution failed: {}", e),
+                            );
                         }
                         Ok(Err(e)) => {
                             println!("\n{}✗ Thread panic: {}{}", Colors::RED, e, Colors::RESET);
-                            chat_history.push("System: OVSM execution panicked".to_string());
+                            add_to_chat_history(
+                                chat_history,
+                                "System: OVSM execution panicked".to_string(),
+                            );
                         }
                         Err(_) => {
                             println!(
@@ -251,7 +271,10 @@ pub async fn process_with_realtime_ai(
                                 Colors::DIM,
                                 Colors::RESET
                             );
-                            chat_history.push("System: OVSM execution timed out".to_string());
+                            add_to_chat_history(
+                                chat_history,
+                                "System: OVSM execution timed out".to_string(),
+                            );
                         }
                     }
                 } else {

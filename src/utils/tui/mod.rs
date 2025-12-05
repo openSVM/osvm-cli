@@ -1,5 +1,6 @@
 // TUI module for OSVM - Beautiful terminal interface
 pub mod app;
+pub mod code;
 pub mod events;
 pub mod graph;
 pub mod graph_forensics;

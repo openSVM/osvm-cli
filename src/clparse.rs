@@ -3,12 +3,13 @@ use {
     clap::{command, Arg, ArgAction, Command},
 };
 
-// Import all modularized command builders (full refactoring - 21 commands)
+// Import all modularized command builders (full refactoring - 22 commands)
 mod agent;
 mod audit;
 mod balance;
 mod bbs;
 mod chat;
+mod code;
 mod collab;
 mod database;
 mod deploy;
@@ -270,6 +271,7 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
         .subcommand(rpc::build_rpc_command())
         .subcommand(examples::build_examples_command())
         .subcommand(chat::build_chat_command())
+        .subcommand(code::build_code_command())
         .subcommand(plan::build_plan_command())
         .subcommand(agent::build_agent_command())
         .subcommand(research::build_research_command())

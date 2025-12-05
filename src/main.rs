@@ -61,6 +61,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "db"
             | "realtime"
             | "chat"
+            | "code"
             | "agent"
             | "plan"
             | "p"     // Short alias for plan
@@ -385,6 +386,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await
                 .map_err(|e| e.into());
         }
+    }
+
+    // Handle code command - AI-powered coding assistant
+    if sub_command == "code" {
+        return commands::code_handler::handle_code_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
     }
 
     // Handle research command early - it only needs AI and OVSM services, no Solana config

@@ -180,8 +180,10 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
     // Show initial setup - Claude Code style
     show_welcome_box();
 
-    // Show available MCP servers
+    // Show available MCP servers and cache tools for dynamic suggestions
     let servers = mcp_service.list_servers();
+    let mut mcp_tools_cache: Vec<(String, String, Option<String>)> = Vec::new();
+
     if servers.is_empty() {
         println!(
             "{}• No MCP servers configured. Use 'osvm mcp setup' to get started{}",
@@ -204,6 +206,22 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
         }
         task_state.current_reasoning =
             "MCP servers loaded successfully. Ready for user interaction.".to_string();
+
+        // Cache MCP tools for dynamic suggestions
+        for (server_id, _config) in &servers {
+            if let Ok(tools) = mcp_service.list_tools(server_id).await {
+                for tool in tools {
+                    mcp_tools_cache.push((
+                        (*server_id).clone(),
+                        tool.name.clone(),
+                        tool.description.clone(),
+                    ));
+                }
+            }
+        }
+        if !mcp_tools_cache.is_empty() {
+            debug!("Cached {} MCP tools for suggestions", mcp_tools_cache.len());
+        }
     }
 
     // Mark services as initialized
