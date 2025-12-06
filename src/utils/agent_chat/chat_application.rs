@@ -798,7 +798,11 @@ async fn get_enhanced_input_with_status(
                 debug!("Mouse event received, ignoring");
             }
             InputChar::Resize(cols, rows) => {
-                // Terminal was resized - redraw the input box
+                // Terminal was resized - full redraw of UI components
+                // 1. Clear screen and refresh status bar at top
+                print!("\x1B[2J\x1B[1;1H");
+                show_enhanced_status_bar(task_state);
+                // 2. Redraw the input box at bottom
                 if let Err(e) = handle_terminal_resize(cols, rows, &input_state.input) {
                     debug!("Failed to handle terminal resize: {}", e);
                 }

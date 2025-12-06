@@ -961,6 +961,13 @@ impl InputHandler {
                 Ok(None)
             }
 
+            InputChar::Resize(_cols, _rows) => {
+                // Terminal resize event - caller should handle redraw
+                // We mark suggestions for update to ensure proper redraw
+                should_update_suggestions = true;
+                Ok(None)
+            }
+
             _ => Ok(None),
         };
 
@@ -1043,6 +1050,12 @@ impl InputHandler {
 
             InputChar::Mouse => {
                 // Silently ignore mouse events
+                Ok(None)
+            }
+
+            InputChar::Resize(_cols, _rows) => {
+                // Terminal resize event - legacy handler doesn't do layout updates
+                // Caller should handle redraw if needed
                 Ok(None)
             }
 
