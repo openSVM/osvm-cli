@@ -1,6 +1,7 @@
 //! Command modules for OSVM CLI
 
 pub mod ai_query;
+pub mod amm_handler;
 pub mod audit_handler;
 pub mod balance;
 pub mod bbs_handler;

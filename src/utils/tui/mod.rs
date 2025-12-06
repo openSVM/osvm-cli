@@ -1,4 +1,5 @@
 // TUI module for OSVM - Beautiful terminal interface
+pub mod amm;
 pub mod app;
 pub mod code;
 pub mod degen;

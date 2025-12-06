@@ -64,6 +64,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "code"
             | "swap"
             | "degen"
+            | "amm"
             | "agent"
             | "plan"
             | "p"     // Short alias for plan
@@ -407,6 +408,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle degen command - Autonomous trading agent
     if sub_command == "degen" {
         return commands::degen_handler::handle_degen_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
+    }
+
+    // Handle amm command - Liquidity management TUI
+    if sub_command == "amm" {
+        return commands::amm_handler::handle_amm_command(sub_matches)
             .await
             .map_err(|e| e.into());
     }
