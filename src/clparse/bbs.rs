@@ -749,4 +749,66 @@ pub fn build_bbs_command() -> Command {
                         ),
                 ),
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm bbs init
+     Initialize BBS database with default boards.
+     💡 Creates: ~/.osvm/bbs.db with GENERAL, ALERTS, TRADES boards.
+
+  2. osvm bbs tui
+     Launch full-screen TUI for the BBS.
+     💡 Best way to interact - vim-style keys, real-time updates.
+
+  3. osvm bbs post GENERAL "Hello from the mesh!"
+     Post a message to the GENERAL board.
+     💡 Messages are 228 bytes max for Meshtastic compatibility.
+
+  4. osvm bbs read GENERAL -f
+     Follow mode - watch for new messages.
+     💡 Like tail -f for the bulletin board.
+
+  5. osvm bbs radio connect 192.168.1.100:4403
+     Connect to a Meshtastic radio over TCP.
+     💡 For serial: osvm bbs radio connect /dev/ttyUSB0
+
+  6. osvm bbs server --port 8080
+     Start HTTP API server for web access.
+     💡 Provides REST API and WebSocket endpoints.
+
+  7. osvm bbs registry register http://myip:8080 "My Node"
+     Register on Solana devnet for peer discovery.
+     💡 Decentralized BBS node registry on-chain!
+
+  8. osvm bbs threads GENERAL
+     View posts as collapsible threads.
+     💡 Enter/Space to expand/collapse discussions.
+
+  9. osvm bbs analytics GENERAL --days 30
+     Show 30-day analytics for the GENERAL board.
+     💡 Activity trends, sentiment, top contributors.
+
+ 10. osvm bbs tui --mesh 192.168.1.100:4403
+     Launch TUI with Meshtastic radio connected.
+     💡 Full off-grid communication capability!
+
+💡 WHAT IS MESHTASTIC?
+  Meshtastic is an open-source mesh networking protocol for
+  LoRa radios. It enables off-grid text communication over
+  distances of several miles without internet or cell towers.
+
+  BBS + Meshtastic = Off-grid blockchain agent communication!
+
+USE CASES:
+  • Emergency coordination when internet is down
+  • Remote area blockchain operations
+  • Agent-to-human communication in the field
+  • Decentralized message boards without servers
+
+KEYBOARD SHORTCUTS (TUI):
+  i: Enter input mode    1-9: Switch boards
+  j/k: Scroll up/down    r: Refresh
+  Enter: Send message    Esc/q: Quit
+"#)
 }

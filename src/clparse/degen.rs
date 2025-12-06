@@ -187,4 +187,68 @@ pub fn build_degen_command() -> Command {
                 .help("OVSM script file for custom strategy")
                 .value_name("PATH")
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm degen --dry-run
+     Paper trading mode - test strategies without real funds.
+     💡 ALWAYS start here! Understand the system before risking SOL.
+
+  2. osvm degen --strategy momentum --dry-run
+     Test momentum strategy with paper trading.
+     💡 Momentum buys tokens with strong upward price movement.
+
+  3. osvm degen --max-position 0.05 --stop-loss 10
+     Conservative setup: small positions, tight stops.
+     💡 Risk only 0.05 SOL per trade, exit at 10% loss.
+
+  4. osvm degen --strategy sniper --dry-run
+     Test the sniper strategy for new token launches.
+     💡 Fast entry on new listings - high risk/high reward.
+
+  5. osvm degen --min-liquidity 50 --min-holders 500
+     Filter for established tokens only.
+     💡 Higher liquidity = lower slippage, more holders = less rug risk.
+
+  6. osvm degen --trailing-stop --take-profit 200
+     Enable trailing stops with 200% take-profit.
+     💡 Trailing stop follows price up, locks in gains.
+
+  7. osvm degen --max-daily-loss 0.5 --max-positions 3
+     Strict risk limits: 0.5 SOL/day, 3 concurrent positions.
+     💡 Agent pauses automatically if daily loss exceeded.
+
+  8. osvm degen --headless --log-trades trades.csv
+     Run in daemon mode, logging all trades.
+     💡 Great for servers and automated backtesting review.
+
+  9. osvm degen --webhook "https://discord.com/api/webhooks/..."
+     Get Discord notifications for every trade.
+     💡 Stay informed without watching the dashboard.
+
+ 10. osvm degen --strategy custom --strategy-file my_strat.ovsm
+     Run your own custom OVSM strategy script.
+     💡 Full programmatic control over buy/sell logic.
+
+⚠️  RISK WARNING:
+  • This is an EXPERIMENTAL autonomous trading agent
+  • Real funds are at risk - only trade what you can lose
+  • ALWAYS start with --dry-run to understand behavior
+  • Past performance does not guarantee future results
+  • Pump.fun tokens are highly volatile and risky
+
+💡 PRO TIPS:
+  • Use Tab in TUI to switch between dashboard panels
+  • Press 'p' to pause trading, 'r' to resume
+  • The agent uses real-time SOL price from CoinGecko
+  • Signals are stored for post-trade analysis
+  • Check ~/.osvm/degen_trades.json for trade history
+
+STRATEGY GUIDE:
+  • momentum:    Good for trending markets, follows price action
+  • mean-revert: Best in ranging markets, buys dips
+  • trend:       Conservative, waits for confirmed trends
+  • sniper:      Aggressive, targets new launches (highest risk)
+"#)
 }

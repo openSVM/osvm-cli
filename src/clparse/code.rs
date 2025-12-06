@@ -59,4 +59,72 @@ pub fn build_code_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Enable debug mode"),
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm code
+     Start interactive coding assistant in current directory.
+     💡 AI reads files, understands codebase, helps you code.
+
+  2. osvm code "fix the bug in main.rs"
+     Start with an initial task.
+     💡 AI immediately begins working on your request.
+
+  3. osvm code -d ~/my-project
+     Open a specific project directory.
+     💡 AI has context of entire project structure.
+
+  4. osvm code "add unit tests for auth module"
+     AI writes tests based on your code.
+     💡 Understands code patterns and suggests test cases.
+
+  5. osvm code "refactor to use async/await"
+     Large-scale refactoring with AI assistance.
+     💡 Shows diffs before applying changes.
+
+  6. osvm code --yolo "format all files"
+     Auto-approve all changes (dangerous!).
+     💡 Only use for trusted operations like formatting.
+
+  7. osvm code "explain this function"
+     Get explanations of complex code.
+     💡 AI reads context and explains in plain English.
+
+  8. osvm code -m claude-sonnet-4-20250514
+     Use specific AI model.
+     💡 Different models have different capabilities.
+
+  9. osvm code --no-tools
+     Chat-only mode without file operations.
+     💡 Safe mode for getting advice without changes.
+
+ 10. osvm code "review this PR for security issues"
+     Security-focused code review.
+     💡 AI analyzes code for vulnerabilities.
+
+💡 AI CAPABILITIES:
+  File Operations:
+  • Read any file in the project
+  • Write new files with preview
+  • Edit existing files (shows diff)
+  • Search with glob and grep
+
+  Command Execution:
+  • Run tests, builds, linters
+  • Safe commands auto-approved
+  • Dangerous commands need confirmation
+
+SAFETY FEATURES:
+  • All file changes shown as diffs
+  • Commands require approval (unless --yolo)
+  • Can undo recent changes
+  • Sandboxed execution
+
+PRO TIPS:
+  • Use Ctrl+C to interrupt long operations
+  • Type "undo" to revert last change
+  • Use specific file paths for targeted edits
+  • The AI remembers conversation context
+"#)
 }

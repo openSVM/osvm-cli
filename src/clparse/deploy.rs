@@ -73,4 +73,68 @@ pub fn build_deploy_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Require confirmation for deploying large binaries (>1MB)"),
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm deploy target/deploy/program.so --program-id ./program-keypair.json \
+       --owner ./owner.json --fee ./fee-payer.json
+     Deploy a new program with all required keypairs.
+     💡 Program ID keypair must be NEW for first deployment.
+
+  2. osvm deploy program.so --program-id ./program.json --owner ./owner.json \
+       --fee ./payer.json --network devnet
+     Deploy only to devnet (skip mainnet/testnet).
+     💡 Always test on devnet first!
+
+  3. osvm deploy program.so ... --publish-idl --idl-file ./target/idl/program.json
+     Deploy with Anchor IDL for client SDK generation.
+     💡 IDL enables TypeScript/Rust SDK auto-generation.
+
+  4. osvm deploy program.so ... --json
+     JSON output for CI/CD pipeline integration.
+     💡 Captures: program ID, deploy slot, fees paid.
+
+  5. osvm deploy program.so ... --retry-attempts 5
+     Increase retries for unreliable networks.
+     💡 Default is 3; increase for congested networks.
+
+  6. osvm deploy program.so ... --confirm-large
+     Prompt before deploying large programs.
+     💡 Large programs cost more to deploy and upgrade.
+
+  7. osvm deploy program.so ... --network all
+     Deploy to mainnet, testnet, AND devnet.
+     💡 Useful for multi-network protocols.
+
+  8. cargo build-sbf && osvm deploy ./target/deploy/myprogram.so ...
+     Build and deploy in one command chain.
+     💡 cargo build-sbf compiles Rust to Solana BPF.
+
+  9. osvm ovsm compile script.ovsm -o script.so && osvm deploy script.so ...
+     Deploy OVSM-compiled programs.
+     💡 OVSM scripts can compile to deployable BPF!
+
+ 10. osvm deploy program.so ... 2>&1 | tee deploy.log
+     Log deployment output for auditing.
+     💡 Keep records of all mainnet deployments.
+
+⚠️  SECURITY BEST PRACTICES:
+  • NEVER commit keypairs to git
+  • Use separate fee payer for deployments
+  • Test thoroughly on devnet before mainnet
+  • Keep upgrade authority keypair secure offline
+  • Verify program hash after deployment
+
+KEYPAIR REQUIREMENTS:
+  • --program-id: New keypair (deploy) or address JSON (upgrade)
+  • --owner:      Private key required (signs upgrade auth)
+  • --fee:        Private key required (pays transaction fees)
+
+DEPLOYMENT COSTS:
+  Program size affects cost. Rough estimates:
+  • 100KB: ~1 SOL
+  • 500KB: ~5 SOL
+  • 1MB+:  ~10+ SOL
+"#)
 }

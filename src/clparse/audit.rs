@@ -95,4 +95,68 @@ If not specified, built-in templates embedded in the binary will be used.",
                 .action(ArgAction::SetTrue)
                 .help("Don't commit audit results to repository. If no output directory is provided, files will be copied to the current folder."),
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm audit .
+     Audit the current directory as a project.
+     💡 Scans Rust/Solana code for security vulnerabilities.
+
+  2. osvm audit --gh opensvm/aeamcp#main
+     Audit a GitHub repository directly.
+     💡 Clones, analyzes, and generates report automatically.
+
+  3. osvm audit . --format pdf
+     Generate a professional PDF audit report.
+     💡 Includes: findings, severity, recommendations.
+
+  4. osvm audit . --format html -o ./reports
+     Generate HTML report in custom directory.
+     💡 HTML format is best for sharing via web.
+
+  5. osvm audit --test
+     Generate test report with sample data.
+     💡 Great for previewing report format.
+
+  6. osvm audit . --noai
+     Run audit without AI-powered analysis.
+     💡 Faster, but less comprehensive findings.
+
+  7. osvm audit . --template ./my-template.typst
+     Use custom Typst template for PDF.
+     💡 Brand your audit reports with custom styling.
+
+  8. osvm audit --gh solana-labs/solana#master -v
+     Verbose audit of Solana core repository.
+     💡 Shows detailed progress and findings.
+
+  9. osvm audit . --format json | jq '.findings[]'
+     JSON output for programmatic processing.
+     💡 Integrate with CI/CD pipelines.
+
+ 10. osvm audit --gh myorg/project#develop --no-commit
+     Audit without committing results to repo.
+     💡 Useful for local review before sharing.
+
+💡 AUDIT PHASES:
+  1. Static Analysis:   Rust code patterns, unsafe blocks
+  2. Solana-Specific:   Account validation, signer checks
+  3. AI Analysis:       Contextual vulnerability detection
+  4. Report Generation: Professional formatted output
+
+SEVERITY LEVELS:
+  🔴 Critical: Immediate exploitation risk
+  🟠 High:     Significant security impact
+  🟡 Medium:   Moderate risk, should fix
+  🔵 Low:      Minor issues, best practices
+  ⚪ Info:     Informational findings
+
+SUPPORTED FORMATS:
+  • typst:    Source format for Typst typesetting
+  • pdf:      Professional PDF document
+  • html:     Web-viewable HTML report
+  • markdown: GitHub/GitLab compatible
+  • json:     Machine-readable for automation
+"#)
 }

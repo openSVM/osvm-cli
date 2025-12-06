@@ -379,4 +379,65 @@ pub fn build_mcp_command() -> Command {
                         .index(1)
                 )
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm mcp setup
+     Quick setup for Solana MCP server integration.
+     💡 Configures default localhost:3000 server automatically.
+
+  2. osvm mcp add-github solana-mcp https://github.com/openSVM/solana-mcp-server
+     Add MCP server directly from GitHub repository.
+     💡 Auto-clones, builds, and configures the server.
+
+  3. osvm mcp list
+     Show all configured MCP servers with status.
+     💡 Displays server ID, URL, transport, and enabled state.
+
+  4. osvm mcp test solana-mcp
+     Test connectivity to a specific MCP server.
+     💡 Verifies server is running and responds correctly.
+
+  5. osvm mcp tools solana-mcp
+     List all tools available from an MCP server.
+     💡 Shows tool names, descriptions, and parameter schemas.
+
+  6. osvm mcp call solana-mcp getBalance --args '{"address":"..."}'
+     Call a specific tool with arguments.
+     💡 Arguments must be valid JSON matching tool schema.
+
+  7. osvm mcp enable solana-mcp && osvm mcp disable other-mcp
+     Enable/disable servers for agent tool access.
+     💡 Only enabled servers are used by AI agents.
+
+  8. osvm mcp microvm launch solana-mcp --memory 512
+     Launch MCP server in isolated microVM.
+     💡 Hardware-level isolation for untrusted servers.
+
+  9. osvm mcp mount solana-mcp ~/solana-data --readonly
+     Mount folder to MCP tool in microVM.
+     💡 Use --readonly for security when sharing sensitive data.
+
+ 10. osvm mcp search "solana"
+     Search for MCP servers by name/description.
+     💡 Finds servers matching your query across all configs.
+
+💡 WHAT IS MCP?
+  Model Context Protocol (MCP) is a standard for AI tool calling.
+  MCP servers expose "tools" that AI agents can invoke to:
+  • Query blockchain data (getBalance, getTransaction, etc.)
+  • Execute actions (sendTransaction, deployProgram, etc.)
+  • Access external services (APIs, databases, file systems)
+
+SECURITY BEST PRACTICES:
+  • Use microVMs for untrusted MCP servers
+  • Mount folders as read-only when possible
+  • Review tool permissions before enabling servers
+  • Use auth tokens for production servers
+
+SERVER TYPES:
+  • http:  HTTP-based servers (default, most common)
+  • stdio: Stdio-based servers (local process communication)
+"#)
 }

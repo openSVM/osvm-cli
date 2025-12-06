@@ -112,4 +112,69 @@ pub fn build_perp_command() -> Command {
                 .value_parser(["table", "json", "csv"])
                 .default_value("table")
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm perp
+     Launch interactive perpetual futures dashboard.
+     💡 Real-time charts, positions, and order entry.
+
+  2. osvm perp --protocol drift
+     Filter to Drift markets only.
+     💡 Drift is the leading Solana perps protocol.
+
+  3. osvm perp --market SOL-PERP
+     Go directly to SOL perpetual market.
+     💡 Skip market selection, trade immediately.
+
+  4. osvm perp --list
+     List current positions (non-interactive).
+     💡 Quick check without launching TUI.
+
+  5. osvm perp --list --format json
+     Export positions as JSON.
+     💡 Integrate with trading bots.
+
+  6. osvm perp --side long --size 1 --leverage 10 --market SOL-PERP
+     CLI trading: Open 1 SOL long at 10x.
+     💡 Dangerous! Only for advanced users.
+
+  7. osvm perp --stop-loss 180 --take-profit 220 --market SOL-PERP
+     Set risk parameters before trading.
+     💡 Always use stop-losses with leverage!
+
+  8. osvm perp --protocol zeta --market ETH-PERP
+     Trade ETH on Zeta Markets.
+     💡 Zeta offers options and perps.
+
+  9. osvm perp --keypair ~/.trading-wallet.json
+     Use dedicated trading wallet.
+     💡 NEVER trade with your main wallet!
+
+ 10. osvm perp --list && osvm balance
+     Check positions and available balance.
+     💡 Always monitor margin health.
+
+⚠️  EXTREME RISK WARNING:
+  Perpetual futures are leveraged derivative products.
+  • You can lose MORE than your initial deposit
+  • Liquidation can happen suddenly in volatile markets
+  • Funding rates can erode profits over time
+  • NEVER trade with money you can't afford to lose
+
+KEY CONCEPTS:
+  • Long:       Profit when price goes up
+  • Short:      Profit when price goes down
+  • Leverage:   Amplifies gains AND losses
+  • Margin:     Collateral for your position
+  • Liquidation: Forced closure at max loss
+  • Funding:    Periodic payment between longs/shorts
+
+SUPPORTED PROTOCOLS:
+  Drift   - Largest perps, cross-margin, insurance
+  Zeta    - Options + perps, European style
+  Mango   - V4 margin trading, isolated margin
+  Jupiter - Aggregated perps routing
+"#)
 }

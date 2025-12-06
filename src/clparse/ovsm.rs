@@ -282,4 +282,65 @@ pub fn build_ovsm_command() -> Command {
                         )
                 )
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm ovsm repl
+     Launch interactive REPL for experimentation.
+     💡 Great for learning OVSM syntax - type expressions, see results.
+
+  2. osvm ovsm eval '(+ 1 2 3)'
+     Evaluate inline OVSM expression (prints: 6).
+     💡 Operators are variadic: (+ 1 2 3 4 5) = 15
+
+  3. osvm ovsm run script.ovsm
+     Execute an OVSM script file.
+     💡 Scripts can use MCP tools, loops, conditionals, and more.
+
+  4. osvm ovsm check script.ovsm
+     Syntax check without execution (like a linter).
+     💡 Use before running untrusted scripts.
+
+  5. osvm ovsm eval '(define x 10) (set! x (+ x 5)) x'
+     Variables: define creates, set! mutates.
+     💡 Returns 15. Note: set! modifies existing vars.
+
+  6. osvm ovsm eval '(if (> 5 3) "yes" "no")'
+     Conditional expression (prints: "yes").
+     💡 if takes 3 args: condition, true-branch, false-branch.
+
+  7. osvm ovsm eval '(for (i (range 1 5)) (log :num i))'
+     Loop with range (iterates 1,2,3,4).
+     💡 Ranges are exclusive: (range 1 5) = [1,2,3,4]
+
+  8. osvm ovsm eval '(get {:name "Bob" :age 30} "name")'
+     Access object properties (prints: "Bob").
+     💡 'get' works on objects AND arrays: (get [1 2 3] 0) = 1
+
+  9. osvm ovsm compile script.ovsm -o script.so
+     Compile OVSM to Solana BPF bytecode!
+     💡 Deploy compiled .so to Solana: osvm deploy script.so
+
+ 10. osvm ovsm generate "monitor validator health"
+     AI-powered script generation from description.
+     💡 Describe what you want, get working OVSM code.
+
+💡 OVSM SYNTAX GUIDE:
+  • Comments:    ;; This is a comment
+  • Booleans:    true, false (lowercase!)
+  • Null:        null
+  • Arrays:      [1 2 3] or (list 1 2 3)
+  • Objects:     {:key "value" :num 42}
+  • Strings:     "hello" or 'hello'
+
+CONTROL FLOW:
+  • (if cond then else)     - Conditional
+  • (for (var col) body)    - For-each loop
+  • (while cond body)       - While loop
+  • (break)                 - Exit loop early
+  • (continue)              - Skip to next iteration
+
+FULL SPEC: See OVSM_LISP_SYNTAX_SPEC.md
+"#)
 }

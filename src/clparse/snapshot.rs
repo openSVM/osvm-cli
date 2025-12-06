@@ -257,4 +257,71 @@ pub fn build_snapshot_command() -> Command {
                         .help("Target ledger directory on remote server [default: /opt/osvm/solana/ledger]"),
                 ),
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm snapshot stats
+     Show comprehensive snapshot statistics.
+     💡 Account count, total lamports, program distribution.
+
+  2. osvm snapshot read --limit 100
+     Read first 100 accounts from snapshot.
+     💡 Quick preview of snapshot contents.
+
+  3. osvm snapshot find <pubkey>
+     Find specific account by public key.
+     💡 Returns: balance, owner, data size, rent epoch.
+
+  4. osvm snapshot read --filter-owner TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+     Filter accounts by SPL Token program.
+     💡 Find all token accounts in the snapshot.
+
+  5. osvm snapshot export -o accounts.parquet --format parquet
+     Export to Parquet for data analysis.
+     💡 Parquet is efficient for large-scale analytics.
+
+  6. osvm snapshot compare snap1/ snap2/
+     Compare two snapshots and show differences.
+     💡 Detect account changes between slots.
+
+  7. osvm snapshot validate
+     Check snapshot integrity.
+     💡 Verifies hashes and account consistency.
+
+  8. osvm snapshot interactive
+     Launch TUI for exploring snapshot.
+     💡 Navigate accounts with keyboard shortcuts.
+
+  9. osvm snapshot download user@server.com --network mainnet
+     Download mainnet snapshot to remote server.
+     💡 Useful for bootstrapping new validators.
+
+ 10. osvm snapshot read --filter-min-balance 1000000000 --parallel
+     Find accounts with ≥1 SOL using parallel processing.
+     💡 1 SOL = 1,000,000,000 lamports
+
+💡 WHAT IS A SNAPSHOT?
+  A Solana snapshot is a compressed archive of the entire
+  account database at a specific slot. Validators use snapshots
+  to quickly bootstrap without replaying from genesis.
+
+  Snapshot contents:
+  • All account data (pubkey, lamports, owner, data)
+  • Bank state (slot, epoch, fees)
+  • Program accounts and BPF bytecode
+
+COMMON FILTERS:
+  --filter-owner <PUBKEY>      Filter by program owner
+  --filter-min-balance <LAM>   Minimum lamports
+  --filter-max-balance <LAM>   Maximum lamports
+  --filter-min-size <BYTES>    Minimum data size
+  --filter-executable          Only executable accounts
+
+EXPORT FORMATS:
+  • json:     Standard JSON (large files)
+  • csv:      Spreadsheet compatible
+  • parquet:  Columnar, best for analytics
+  • msgpack:  Binary, compact size
+"#)
 }

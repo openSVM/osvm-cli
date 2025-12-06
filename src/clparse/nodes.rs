@@ -181,4 +181,74 @@ pub fn build_nodes_command() -> Command {
                         .help("Custom name for the node (default: auto-generated)"),
                 ),
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm nodes list
+     List all configured nodes with status.
+     💡 Shows: ID, type, network, status, version.
+
+  2. osvm nodes dashboard
+     Launch interactive node monitoring dashboard.
+     💡 Real-time TUI with health metrics and alerts.
+
+  3. osvm nodes list --type validator --network mainnet
+     Filter to mainnet validators only.
+     💡 Combine filters to narrow down results.
+
+  4. osvm nodes status node-001
+     Check detailed status of specific node.
+     💡 Shows: slot, health, peers, vote account.
+
+  5. osvm nodes get node-001 --json
+     Get node info in JSON format.
+     💡 Useful for scripting and automation.
+
+  6. osvm nodes logs node-001 -f
+     Follow node logs in real-time.
+     💡 Like 'tail -f' for your validator.
+
+  7. osvm nodes logs node-001 -n 500
+     Show last 500 log lines.
+     💡 Increase from default 100 for more context.
+
+  8. osvm nodes deploy --svm agave --type validator \
+       --network mainnet --host user@server.com
+     Deploy new validator to remote server.
+     💡 Automatically configures and starts the node.
+
+  9. osvm nodes list --status running | grep mainnet
+     Find all running mainnet nodes.
+     💡 Chain with grep for quick filtering.
+
+ 10. watch -n 5 osvm nodes status node-001
+     Monitor node status every 5 seconds.
+     💡 Quick way to watch node health.
+
+💡 NODE TYPES:
+  Validator:
+  • Participates in consensus
+  • Earns staking rewards
+  • Requires vote account
+  • Higher resource requirements
+
+  RPC:
+  • Serves API requests
+  • No voting/staking
+  • Good for dApps backend
+  • Lower resource needs
+
+STATUS MEANINGS:
+  🟢 running:  Node is operational and synced
+  🟡 syncing:  Node is catching up to tip
+  🔴 stopped:  Node is not running
+  ⚠️ error:    Node has issues (check logs)
+  ❓ unknown:  Cannot determine status
+
+COMMON ISSUES:
+  • "Behind" → Node falling behind on slots
+  • "No peers" → Network connectivity issues
+  • "Vote failed" → Check vote account balance
+"#)
 }

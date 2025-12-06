@@ -186,4 +186,66 @@ pub fn build_research_command() -> Command {
             Command::new("demo")
                 .about("Run a demonstration of the research agent")
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm research <wallet> --auto
+     Autonomous CLI investigation - AI explores on its own.
+     💡 Prints reasoning steps, generates report automatically.
+
+  2. osvm research <wallet> --tui
+     Launch interactive TUI with real-time graph visualization.
+     💡 Watch the investigation unfold with beautiful ASCII graphs.
+
+  3. osvm research <wallet> --auto --query "Is this a MEV bot?"
+     Investigate with a specific hypothesis.
+     💡 AI focuses investigation on answering your question.
+
+  4. osvm research <wallet> --auto --token USDC
+     Trace specific token flows through wallet.
+     💡 Shows: A ─[500]→ B ─[450]→ C ─[400]→ D
+
+  5. osvm research <wallet> --focus trading -d 8
+     Deep (depth 8) investigation focused on trading activity.
+     💡 Focus areas: trading, defi, nft, mev, general
+
+  6. osvm research <wallet> --tui --web
+     Stream the TUI to browser at localhost:13370!
+     💡 Share your investigation session with others.
+
+  7. osvm research <wallet> --auto --timeline --save
+     Show chronological transaction flow and save report.
+     💡 Timeline view reveals wash trading & arbitrage patterns.
+
+  8. osvm research <wallet> --auto --ai-chart
+     Generate AI-powered ASCII flow diagrams.
+     💡 Beautiful Unicode box-drawing visualizations.
+
+  9. osvm research <wallet> --auto --max-wallets 100
+     Explore up to 100 connected wallets (default: 50).
+     💡 Higher = more thorough but slower investigation.
+
+ 10. osvm research demo
+     Run a demo to see the research agent in action.
+     💡 Uses sample data to showcase all features.
+
+💡 INVESTIGATION PHASES:
+  1. Initial:          Wallet overview and balance analysis
+  2. Profiling:        Transaction patterns and counterparties
+  3. Analysis:         DeFi interactions, swap patterns
+  4. Pattern Recognition: Behavioral clusters, anomalies
+
+FOCUS AREAS EXPLAINED:
+  • trading:  Swap patterns, DEX usage, profit/loss
+  • defi:     Lending, borrowing, yield farming
+  • nft:      NFT trading, minting, collection analysis
+  • mev:      MEV bot detection, sandwich attacks
+  • general:  Broad investigation across all areas
+
+KEYBOARD SHORTCUTS (TUI):
+  Tab: Switch panels    q: Quit
+  ←→: Navigate graph    Enter: Expand node
+  /: Search             r: Reset view
+"#)
 }

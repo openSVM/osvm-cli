@@ -295,4 +295,72 @@ pub fn build_rpc_command() -> Command {
                         .help("Follow log output in real-time (used with --logs)"),
                 ),
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm rpc test
+     Start a local test validator for development.
+     💡 Isolated environment - perfect for smart contract testing.
+
+  2. osvm rpc test --reset
+     Start fresh with a clean ledger.
+     💡 Use when you want a clean slate for testing.
+
+  3. osvm rpc query-solana --health
+     Check mainnet RPC endpoint health.
+     💡 Returns: "ok" if healthy, error otherwise.
+
+  4. osvm rpc query-solana --monitor
+     Monitor network activity in real-time.
+     💡 Shows TPS, slot height, and network metrics.
+
+  5. osvm rpc local --svm solana --network devnet
+     Run local devnet RPC on your machine.
+     💡 Syncs with public devnet network.
+
+  6. osvm rpc solana user@server.com --network mainnet
+     Deploy mainnet RPC to remote server via SSH.
+     💡 Full mainnet node - requires significant resources.
+
+  7. osvm rpc devnet -d
+     Run devnet RPC in background (daemon mode).
+     💡 Use --status to check, --stop to terminate.
+
+  8. osvm rpc test --logs
+     Show recent test validator logs.
+     💡 Useful for debugging transaction failures.
+
+  9. osvm rpc query-solana --custom-url https://my-rpc.com
+     Test custom RPC endpoint.
+     💡 Verify your own or third-party RPC node.
+
+ 10. osvm rpc local --port 9999 --faucet-port 9901
+     Run RPC on custom ports.
+     💡 Useful when default ports are in use.
+
+💡 RPC NODE TYPES:
+  Test Validator:
+  • Isolated local chain (not connected to any network)
+  • Instant transaction confirmation
+  • Built-in faucet for unlimited devnet SOL
+  • Perfect for development and testing
+
+  Devnet RPC:
+  • Syncs with Solana devnet
+  • Real network behavior
+  • Shares state with other devnet users
+  • Good for integration testing
+
+  Mainnet RPC:
+  • Full production network
+  • Requires significant storage (~2TB)
+  • High bandwidth requirements
+  • Use for production workloads
+
+COMMON PORTS:
+  • 8899: Default RPC port
+  • 8900: Default websocket port
+  • 9900: Default faucet port
+"#)
 }

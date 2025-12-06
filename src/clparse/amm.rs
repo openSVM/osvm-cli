@@ -97,4 +97,71 @@ pub fn build_amm_command() -> Command {
                 .value_parser(["table", "json", "csv"])
                 .default_value("table")
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm amm
+     Launch interactive AMM dashboard.
+     💡 View pools, positions, and manage liquidity.
+
+  2. osvm amm --protocol raydium
+     Filter to only Raydium pools.
+     💡 Raydium is the leading Solana AMM.
+
+  3. osvm amm --search SOL
+     Search pools containing SOL.
+     💡 Find SOL/USDC, SOL/BONK, etc.
+
+  4. osvm amm --min-tvl 1000000
+     Only show pools with >$1M TVL.
+     💡 Filter out low-liquidity pools.
+
+  5. osvm amm --min-apr 50
+     Only show pools with >50% APR.
+     💡 Higher APR = higher risk usually.
+
+  6. osvm amm --list --format json
+     Export pool data as JSON.
+     💡 Useful for analytics and scripting.
+
+  7. osvm amm --pool <ADDRESS>
+     View specific pool by address.
+     💡 Direct access to pool details.
+
+  8. osvm amm --list --format csv > pools.csv
+     Export pools to CSV spreadsheet.
+     💡 Analyze in Excel or Google Sheets.
+
+  9. osvm amm --protocol orca --min-tvl 100000
+     Orca pools with decent liquidity.
+     💡 Combine filters for precision.
+
+ 10. osvm amm --keypair ~/.my-lp-wallet.json
+     Use specific wallet for LP positions.
+     💡 Keep LP funds in dedicated wallet.
+
+💡 WHAT IS AN AMM?
+  Automated Market Maker - a decentralized exchange where
+  liquidity providers deposit tokens into pools. Traders
+  swap against these pools, paying fees to LPs.
+
+KEY CONCEPTS:
+  • TVL: Total Value Locked (liquidity in pool)
+  • APR: Annual Percentage Rate (estimated returns)
+  • IL:  Impermanent Loss (risk of price divergence)
+  • LP:  Liquidity Provider (you!)
+
+SUPPORTED PROTOCOLS:
+  Raydium  - Leading Solana AMM, concentrated liquidity
+  Orca     - User-friendly with Whirlpools (CLMM)
+  Meteora  - Dynamic fees that adjust to volatility
+  Lifinity - Oracle-based, reduced impermanent loss
+
+⚠️  RISKS:
+  • Impermanent loss if prices diverge significantly
+  • Smart contract risk
+  • Pool can be drained in exploits
+  • APR is variable, not guaranteed
+"#)
 }

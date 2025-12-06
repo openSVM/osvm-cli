@@ -19,6 +19,62 @@ pub fn build_chat_command() -> Command {
                            • Session recording and agent control (run/pause/stop)\n\
                            • Professional keyboard shortcuts and vim-like navigation",
         )
+        .after_help(r#"
+TOP 10 POPULAR USAGES:
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. osvm chat
+     Launch basic chat interface for quick interactions.
+     💡 Type naturally - AI understands context and uses tools automatically.
+
+  2. osvm chat --advanced
+     Launch the full FAR-style TUI with dual panels.
+     💡 Left panel: sessions/tools. Right panel: chat. F1-F12 for actions.
+
+  3. osvm chat --microvm
+     Run chat in isolated microVM for maximum security.
+     💡 All AI tool executions happen in ephemeral sandboxed VMs.
+
+  4. osvm chat --debug
+     Enable debug mode to see AI reasoning and tool calls.
+     💡 Great for understanding how the agent plans and executes.
+
+  5. osvm chat --test
+     Run comprehensive UI tests with screenshots.
+     💡 Validates that the TUI renders correctly in your terminal.
+
+  6. osvm chat --test-mode
+     Enable programmatic input mode (line-buffered).
+     💡 Useful for scripting and automated testing of chat.
+
+  7. OPENAI_KEY=sk-... osvm chat
+     Use a specific API key for the chat session.
+     💡 Supports OpenAI, Anthropic, and local models via OPENAI_URL.
+
+  8. osvm chat --advanced && osvm research <wallet>
+     Chain chat with research for investigation workflows.
+     💡 Use chat for exploration, then research for deep analysis.
+
+  9. Ctrl+C in chat
+     Gracefully exit chat, saving session history.
+     💡 Sessions are persisted in ~/.osvm/chat_sessions/
+
+ 10. osvm chat | tee chat.log
+     Log chat session to file while interacting.
+     💡 Useful for capturing AI responses for documentation.
+
+💡 PRO TIPS:
+  • Type "/help" in chat for available slash commands
+  • Use Tab for autocompletion of tool names and parameters
+  • Press Ctrl+L to clear the screen, Ctrl+E for multiline input
+  • The AI can call multiple MCP tools in sequence automatically
+  • Try: "Show my wallet balance and recent transactions"
+
+KEYBOARD SHORTCUTS (Advanced Mode):
+  F1: Help    F2: New Session    F3: Load    F4: Save
+  F5: Run     F6: Pause          F7: Stop    F10: Quit
+  Tab: Switch panels    ↑↓: Navigate    Enter: Send
+"#)
         .arg(
             Arg::new("debug")
                 .long("debug")
