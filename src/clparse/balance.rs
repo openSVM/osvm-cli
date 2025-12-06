@@ -29,9 +29,9 @@ TOP 10 POPULAR USAGES:
      Check balance on devnet instead of mainnet.
      💡 Useful for testing - devnet SOL has no real value.
 
-  4. osvm balance vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg
-     Check balance of the Solana faucet address.
-     💡 This is the devnet faucet that funds test wallets.
+  4. osvm balance TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+     Check balance of the SPL Token Program.
+     💡 Program accounts hold lamports for rent-exemption.
 
   5. osvm balance $(solana address)
      Use shell substitution to check your current wallet.

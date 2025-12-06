@@ -51,17 +51,17 @@ TOP 10 POPULAR USAGES:
      Use a specific API key for the chat session.
      💡 Supports OpenAI, Anthropic, and local models via OPENAI_URL.
 
-  8. osvm chat --advanced && osvm research <wallet>
-     Chain chat with research for investigation workflows.
-     💡 Use chat for exploration, then research for deep analysis.
+  8. RUST_LOG=debug osvm chat
+     Enable debug logging to see tool calls and reasoning.
+     💡 Helps understand AI decision-making process.
 
   9. Ctrl+C in chat
      Gracefully exit chat, saving session history.
      💡 Sessions are persisted in ~/.osvm/chat_sessions/
 
- 10. osvm chat | tee chat.log
-     Log chat session to file while interacting.
-     💡 Useful for capturing AI responses for documentation.
+ 10. osvm chat (then type: /export chat.md)
+     Export chat history from within the session.
+     💡 Use slash commands for session management.
 
 💡 PRO TIPS:
   • Type "/help" in chat for available slash commands

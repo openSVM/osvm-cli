@@ -243,7 +243,7 @@ TOP 10 POPULAR USAGES:
   • Press 'p' to pause trading, 'r' to resume
   • The agent uses real-time SOL price from CoinGecko
   • Signals are stored for post-trade analysis
-  • Check ~/.osvm/degen_trades.json for trade history
+  • Use --log-trades trades.csv to persist trade history
 
 STRATEGY GUIDE:
   • momentum:    Good for trending markets, follows price action
