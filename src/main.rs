@@ -66,6 +66,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "degen"
             | "amm"
             | "perp"
+            | "ide"
             | "agent"
             | "plan"
             | "p"     // Short alias for plan
@@ -423,6 +424,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle perp command - Perpetual futures trading TUI
     if sub_command == "perp" {
         return commands::perp_handler::handle_perp_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
+    }
+
+    // Handle ide command - OVSM LISP IDE
+    if sub_command == "ide" {
+        return commands::ide_handler::handle_ide_command(sub_matches)
             .await
             .map_err(|e| e.into());
     }

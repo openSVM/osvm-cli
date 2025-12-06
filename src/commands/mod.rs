@@ -10,6 +10,7 @@ pub mod database;
 pub mod deep_research;
 pub mod degen_handler;
 pub mod deploy_handler;
+pub mod ide_handler;
 pub mod doctor_handler;
 pub mod invoke_handler;
 pub mod mcp_handler;

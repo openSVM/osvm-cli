@@ -3,6 +3,7 @@ pub mod amm;
 pub mod app;
 pub mod code;
 pub mod degen;
+pub mod ide;
 pub mod perp;
 pub mod events;
 pub mod graph;
