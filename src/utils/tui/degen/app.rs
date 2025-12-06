@@ -1403,3 +1403,90 @@ impl DegenApp {
         f.render_widget(paragraph, popup_area);
     }
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn default_config() -> DegenConfig {
+        DegenConfig {
+            dry_run: true,
+            auto_start: false,
+            max_position_sol: 0.1,
+            stop_loss_pct: 0.1,
+            take_profit_pct: 0.2,
+            max_positions: 3,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_app_creation() {
+        let app = DegenApp::new(default_config());
+
+        assert_eq!(app.active_tab, 0);
+        assert_eq!(app.trenches_sub_tab, 0);
+        assert!(!app.should_quit);
+        assert!(!app.show_help);
+        assert!(app.show_confirm_start); // auto_start is false
+    }
+
+    #[test]
+    fn test_app_creation_with_auto_start() {
+        let mut config = default_config();
+        config.auto_start = true;
+        let app = DegenApp::new(config);
+
+        assert!(!app.show_confirm_start); // auto_start is true
+    }
+
+    #[test]
+    fn test_initial_pnl_history() {
+        let app = DegenApp::new(default_config());
+
+        assert_eq!(app.pnl_history.len(), 60);
+        assert!(app.pnl_history.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn test_status_message() {
+        let mut app = DegenApp::new(default_config());
+
+        // Initially no status message
+        assert!(app.status_message.is_none());
+        assert!(app.status_time.is_none());
+
+        // Set status message
+        app.set_status("Test message");
+
+        assert_eq!(app.status_message, Some("Test message".to_string()));
+        assert!(app.status_time.is_some());
+    }
+
+    #[test]
+    fn test_initial_state() {
+        let app = DegenApp::new(default_config());
+
+        // Agent should be None initially
+        assert!(app.agent.is_none());
+        assert!(app.agent_handle.is_none());
+
+        // Positions and trades should be empty
+        assert!(app.positions.is_empty());
+        assert!(app.trades.is_empty());
+        assert!(app.signals.is_empty());
+    }
+
+    #[test]
+    fn test_dry_run_config() {
+        let app = DegenApp::new(default_config());
+
+        assert!(app.config.dry_run);
+        assert_eq!(app.config.max_position_sol, 0.1);
+        assert_eq!(app.config.max_positions, 3);
+    }
+}

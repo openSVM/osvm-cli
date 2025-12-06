@@ -74,7 +74,7 @@ pub fn build_research_command() -> Command {
         .arg(
             Arg::new("auto")
                 .long("auto")
-                .short('a')
+                // Note: -a is reserved for global --plan alias, so we don't use short here
                 .help("Run autonomous investigation in CLI mode (no TUI, no user input)")
                 .long_help(
                     "Runs a fully autonomous BFS investigation in headless CLI mode.\n\
@@ -82,7 +82,7 @@ pub fn build_research_command() -> Command {
                     Generates a report file at the end.\n\n\
                     Example: osvm research <WALLET> --auto\n\
                     Example: osvm research <WALLET> --auto --query \"Is this a MEV bot?\"\n\
-                    Example: osvm research <WALLET> -a -d 3 --save"
+                    Example: osvm research <WALLET> --auto -d 3 --save"
                 )
                 .action(clap::ArgAction::SetTrue)
                 .conflicts_with_all(["tui", "stream"])

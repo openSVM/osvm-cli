@@ -738,7 +738,15 @@ pub enum ArrowKey {
     Right,
 }
 
-/// Input handler for processing keyboard input
+/// Legacy input handler for processing keyboard input.
+///
+/// NOTE: This struct and its methods are currently unused. The chat system now uses
+/// crossterm's event system via `read_single_character()` in `chat_application.rs`,
+/// which provides better support for terminal resize events and Unicode input.
+///
+/// These methods are preserved for potential fallback use cases where crossterm
+/// event handling may not be available or desired (e.g., raw stdin environments).
+#[allow(dead_code)]
 pub struct InputHandler;
 
 impl InputHandler {

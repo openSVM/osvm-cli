@@ -4,9 +4,6 @@
 
 use super::super::common::centered_rect;
 
-#[allow(unused_imports)]
-use solana_sdk::signer::Signer;
-
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{

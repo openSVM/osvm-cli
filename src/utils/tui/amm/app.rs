@@ -4,9 +4,6 @@
 
 use super::super::common::{centered_rect, format_usd, load_wallet_address};
 
-#[allow(unused_imports)]
-use solana_sdk::signer::Signer;
-
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
