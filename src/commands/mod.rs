@@ -17,6 +17,7 @@ pub mod mcp_microvm;
 pub mod mount;
 pub mod nodes_handler;
 pub mod ovsm_handler;
+pub mod perp_handler;
 pub mod qa_handler;
 pub mod realtime;
 pub mod research;

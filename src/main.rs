@@ -65,6 +65,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "swap"
             | "degen"
             | "amm"
+            | "perp"
             | "agent"
             | "plan"
             | "p"     // Short alias for plan
@@ -415,6 +416,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle amm command - Liquidity management TUI
     if sub_command == "amm" {
         return commands::amm_handler::handle_amm_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
+    }
+
+    // Handle perp command - Perpetual futures trading TUI
+    if sub_command == "perp" {
+        return commands::perp_handler::handle_perp_command(sub_matches)
             .await
             .map_err(|e| e.into());
     }
