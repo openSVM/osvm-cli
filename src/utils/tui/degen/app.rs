@@ -356,6 +356,11 @@ impl DegenApp {
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                     self.show_confirm_start = false;
                 }
+                // Allow quit from confirmation dialog
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    self.show_confirm_start = false;
+                    self.should_quit = true;
+                }
                 _ => {}
             }
             return Ok(());
@@ -367,12 +372,24 @@ impl DegenApp {
                 KeyCode::Char('y') | KeyCode::Char('Y') => {
                     self.show_confirm_stop = false;
                     self.stop_agent().await?;
+                    self.should_quit = true;
                 }
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                     self.show_confirm_stop = false;
                 }
+                // Force quit without stopping gracefully
+                KeyCode::Char('Q') => {
+                    self.show_confirm_stop = false;
+                    self.should_quit = true;
+                }
                 _ => {}
             }
+            return Ok(());
+        }
+
+        // Ctrl+C for emergency exit (works anywhere)
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+            self.should_quit = true;
             return Ok(());
         }
 
@@ -1326,7 +1343,7 @@ impl DegenApp {
     }
 
     fn render_status_bar(&self, f: &mut Frame, area: Rect) {
-        let help_hint = " [?] Help  [S] Start  [P] Pause  [X] Stop  [Q] Quit  [1-6] Tabs  [←→] Sub-tabs ";
+        let help_hint = " [?] Help  [S] Start  [P] Pause  [X] Stop  [q] Quit  [Q] Force Quit  [Ctrl+C] Exit  [1-6] Tabs ";
 
         let status = self.status_message.as_deref().unwrap_or("");
 
@@ -1350,7 +1367,9 @@ impl DegenApp {
             Line::from("  [S]       Start trading agent"),
             Line::from("  [P]       Pause/Resume trading"),
             Line::from("  [X]       Stop trading agent"),
-            Line::from("  [Q/Esc]   Quit application"),
+            Line::from("  [q/Esc]   Quit (with confirmation if running)"),
+            Line::from("  [Q]       Force quit immediately"),
+            Line::from("  [Ctrl+C]  Emergency exit"),
             Line::from(""),
             Line::from(vec![Span::styled("  NAVIGATION", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))]),
             Line::from(""),
@@ -1385,6 +1404,8 @@ impl DegenApp {
                 Span::styled("[Y] Yes", Style::default().fg(Color::Green)),
                 Span::raw("    "),
                 Span::styled("[N] No", Style::default().fg(Color::Red)),
+                Span::raw("    "),
+                Span::styled("[Q] Quit", Style::default().fg(Color::Yellow)),
             ]),
             Line::from(""),
         ];
