@@ -724,7 +724,8 @@ pub enum InputChar {
     Escape,
     Arrow(ArrowKey),
     Regular(char),
-    Mouse, // Mouse event to be ignored
+    Mouse,  // Mouse event to be ignored
+    Resize(u16, u16), // Terminal resize event (new_cols, new_rows)
     Unknown,
 }
 

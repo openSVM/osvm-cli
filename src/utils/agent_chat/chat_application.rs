@@ -12,6 +12,7 @@ use super::*;
 use crate::services::ai_service::{AiService, PlannedTool, ToolPlan};
 use crate::services::mcp_service::{McpServerConfig, McpService, McpTool};
 use anyhow::{anyhow, Context, Result};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal;
 use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
@@ -281,6 +282,7 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
             &suggestion_tx,
             &mut task_state,
             test_mode || !raw_mode_available,
+            &mcp_tools_cache,
         )
         .await
         {
@@ -490,9 +492,12 @@ async fn get_enhanced_input_with_status(
     suggestion_tx: &mpsc::UnboundedSender<String>,
     task_state: &mut TaskState,
     test_mode: bool,
+    mcp_tools_cache: &[(String, String, Option<String>)],
 ) -> Result<String> {
     let mut input_state = InputState::new();
     input_state.history_index = input_state.command_history.len();
+    // Initialize MCP tools cache for dynamic suggestions
+    input_state.update_mcp_tools_cache(mcp_tools_cache.to_vec());
 
     // Position input box anchored to bottom of terminal
     let (cols, rows) = terminal::size().unwrap_or((80, 24));
@@ -792,11 +797,68 @@ async fn get_enhanced_input_with_status(
                 // Ignore mouse events for now
                 debug!("Mouse event received, ignoring");
             }
+            InputChar::Resize(cols, rows) => {
+                // Terminal was resized - redraw the input box
+                if let Err(e) = handle_terminal_resize(cols, rows, &input_state.input) {
+                    debug!("Failed to handle terminal resize: {}", e);
+                }
+            }
             InputChar::Unknown => {
-                debug!("Unknown character received in enhanced input");
+                // Unknown events or poll timeout - just continue the loop
             }
         }
     }
+}
+
+/// Redraw the input box on terminal resize
+/// This handles repositioning and resizing of the input UI elements
+fn handle_terminal_resize(cols: u16, rows: u16, input: &str) -> Result<()> {
+    // Calculate new input box position (anchored to bottom)
+    let input_start_row = rows.saturating_sub(3);
+
+    // Clear and redraw input box at new position
+    print!("\x1B[{};1H", input_start_row);
+    let input_border = "─".repeat(cols.saturating_sub(10) as usize);
+    println!(
+        "{}┌─ Input {}┐{}",
+        Colors::GREEN,
+        input_border,
+        Colors::RESET
+    );
+
+    // Draw input content line
+    print!("\x1B[{};1H", input_start_row + 1);
+    print!("{}│{} > ", Colors::GREEN, Colors::RESET);
+    let content_width = cols.saturating_sub(6) as usize;
+
+    // Truncate input if too long for new terminal width
+    let display_input = if input.chars().count() > content_width.saturating_sub(2) {
+        let truncated: String = input.chars().take(content_width.saturating_sub(5)).collect();
+        format!("{}...", truncated)
+    } else {
+        input.to_string()
+    };
+
+    print!(
+        "{:<width$}{} │{}",
+        display_input,
+        Colors::RESET,
+        Colors::GREEN,
+        width = content_width
+    );
+
+    // Draw bottom border
+    print!("\x1B[{};1H", input_start_row + 2);
+    let bottom_border = "─".repeat(cols.saturating_sub(2) as usize);
+    println!("{}└{}┘{}", Colors::GREEN, bottom_border, Colors::RESET);
+
+    // Position cursor in input field after the text
+    let cursor_col = 4 + display_input.chars().count().min(content_width);
+    print!("\x1B[{};{}H", input_start_row + 1, cursor_col);
+    io::stdout().flush()?;
+
+    debug!("Terminal resized to {}x{}, input box redrawn", cols, rows);
+    Ok(())
 }
 
 /// Read line-buffered input for test mode (programmatic access)
@@ -818,41 +880,62 @@ async fn read_line_buffered_input() -> Result<String> {
 // InputChar and ArrowKey are imported from input_handler via super::*
 // This avoids duplication and ensures multiline mode keys (CtrlM, CtrlEnter) work
 
-/// Read and classify a single character from input
+/// Read and classify a single event from input using crossterm's event system
+/// This properly handles keyboard events, resize events, and mouse events
 fn read_single_character() -> Result<InputChar> {
-    let mut buffer = [0; 1];
-    if let Ok(1) = std::io::stdin().read(&mut buffer) {
-        match buffer[0] {
-            b'\n' | b'\r' => Ok(InputChar::Enter),
-            0x7f | 0x08 => Ok(InputChar::Backspace),
-            0x03 => Ok(InputChar::CtrlC),
-            0x14 => Ok(InputChar::CtrlT),
-            0x0c => Ok(InputChar::CtrlL),      // Ctrl+L - clear screen
-            0x0e => Ok(InputChar::CtrlEnter),  // Ctrl+N - insert newline in multiline
-            0x15 => Ok(InputChar::CtrlM),      // Ctrl+U - toggle multiline mode
-            b'\t' => Ok(InputChar::Tab),
-            0x1b => {
-                // Handle escape sequences for arrow keys and mouse
-                let mut next_buffer = [0; 2];
-                if let Ok(2) = std::io::stdin().read(&mut next_buffer) {
-                    if next_buffer[0] == b'[' {
-                        match next_buffer[1] {
-                            b'A' => return Ok(InputChar::Arrow(ArrowKey::Up)),
-                            b'B' => return Ok(InputChar::Arrow(ArrowKey::Down)),
-                            b'C' => return Ok(InputChar::Arrow(ArrowKey::Right)),
-                            b'D' => return Ok(InputChar::Arrow(ArrowKey::Left)),
-                            b'M' => return Ok(InputChar::Mouse), // Mouse event
-                            _ => {}
+    // Use crossterm's event polling with a timeout for responsive resize handling
+    // Poll with 100ms timeout to periodically check for events
+    if event::poll(Duration::from_millis(100))? {
+        match event::read()? {
+            Event::Key(key_event) => {
+                // Handle key events
+                match key_event.code {
+                    KeyCode::Enter => {
+                        // Check for Ctrl+Enter (newline in multiline mode)
+                        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                            Ok(InputChar::CtrlEnter)
+                        } else {
+                            Ok(InputChar::Enter)
                         }
                     }
+                    KeyCode::Backspace => Ok(InputChar::Backspace),
+                    KeyCode::Tab => Ok(InputChar::Tab),
+                    KeyCode::Esc => Ok(InputChar::Escape),
+                    KeyCode::Up => Ok(InputChar::Arrow(ArrowKey::Up)),
+                    KeyCode::Down => Ok(InputChar::Arrow(ArrowKey::Down)),
+                    KeyCode::Left => Ok(InputChar::Arrow(ArrowKey::Left)),
+                    KeyCode::Right => Ok(InputChar::Arrow(ArrowKey::Right)),
+                    KeyCode::Char(c) => {
+                        // Handle control key combinations
+                        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                            match c {
+                                'c' => Ok(InputChar::CtrlC),
+                                't' => Ok(InputChar::CtrlT),
+                                'l' => Ok(InputChar::CtrlL),
+                                'n' => Ok(InputChar::CtrlEnter), // Ctrl+N for newline
+                                'u' => Ok(InputChar::CtrlM),    // Ctrl+U for multiline toggle
+                                _ => Ok(InputChar::Unknown),
+                            }
+                        } else {
+                            Ok(InputChar::Regular(c))
+                        }
+                    }
+                    _ => Ok(InputChar::Unknown),
                 }
-                Ok(InputChar::Escape)
             }
-            ch if ch >= 0x20 && ch < 0x7f => Ok(InputChar::Regular(ch as char)),
+            Event::Resize(cols, rows) => {
+                // Terminal was resized - return the new dimensions
+                Ok(InputChar::Resize(cols, rows))
+            }
+            Event::Mouse(_) => {
+                // Ignore mouse events to preserve right-click functionality
+                Ok(InputChar::Mouse)
+            }
             _ => Ok(InputChar::Unknown),
         }
     } else {
-        Err(anyhow!("Failed to read character from stdin"))
+        // No event available within timeout - this is normal, just continue the loop
+        Ok(InputChar::Unknown)
     }
 }
 
