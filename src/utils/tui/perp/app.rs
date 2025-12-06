@@ -2,6 +2,8 @@
 //!
 //! Main state struct for trading perpetual futures on Solana DEXs.
 
+use super::super::common::{centered_rect, format_price, format_usd, load_wallet_address};
+
 #[allow(unused_imports)]
 use solana_sdk::signer::Signer;
 
@@ -250,8 +252,8 @@ impl PerpApp {
 
     /// Initialize with mock data
     pub async fn initialize(&mut self) -> Result<()> {
-        // Load wallet if available
-        self.wallet_address = Self::load_wallet_address();
+        // Load wallet if available (using shared utility)
+        self.wallet_address = load_wallet_address();
         self.usdc_balance = 5000.0; // Mock balance
 
         // Load mock markets
@@ -273,32 +275,6 @@ impl PerpApp {
         self.calculate_totals();
         self.set_status("Connected to perpetual markets");
         Ok(())
-    }
-
-    fn load_wallet_address() -> Option<String> {
-        let keypair_path = std::env::var("SOLANA_KEYPAIR")
-            .ok()
-            .or_else(|| {
-                dirs::home_dir().map(|h| {
-                    h.join(".config/solana/id.json")
-                        .to_string_lossy()
-                        .to_string()
-                })
-            })?;
-
-        let keypair_bytes = std::fs::read_to_string(&keypair_path).ok()?;
-        let keypair_vec: Vec<u8> = serde_json::from_str(&keypair_bytes).ok()?;
-
-        if keypair_vec.len() != 64 {
-            return None;
-        }
-
-        use solana_sdk::signer::keypair::Keypair;
-        let mut secret_key = [0u8; 32];
-        secret_key.copy_from_slice(&keypair_vec[..32]);
-        let keypair = Keypair::new_from_array(secret_key);
-
-        Some(keypair.pubkey().to_string())
     }
 
     fn fetch_mock_markets(&self) -> Vec<PerpMarket> {
@@ -495,14 +471,14 @@ impl PerpApp {
     }
 
     fn update_prices(&mut self) {
-        // Simulate price movement
+        // Simulate price movement using updated rand API
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for market in &mut self.markets {
-            let change = rng.gen_range(-0.5..0.5);
+            let change = rng.random_range(-0.5..0.5);
             market.mark_price *= 1.0 + (change / 100.0);
-            market.index_price = market.mark_price * rng.gen_range(0.999..1.001);
+            market.index_price = market.mark_price * rng.random_range(0.999..1.001);
         }
 
         // Update price history
@@ -1136,53 +1112,7 @@ impl PerpApp {
     }
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
-
-fn format_price(value: f64) -> String {
-    if value >= 1000.0 {
-        format!("${:.2}", value)
-    } else if value >= 1.0 {
-        format!("${:.4}", value)
-    } else if value >= 0.001 {
-        format!("${:.6}", value)
-    } else {
-        format!("${:.8}", value)
-    }
-}
-
-fn format_usd(value: f64) -> String {
-    if value >= 1_000_000_000.0 {
-        format!("${:.1}B", value / 1_000_000_000.0)
-    } else if value >= 1_000_000.0 {
-        format!("${:.1}M", value / 1_000_000.0)
-    } else if value >= 1_000.0 {
-        format!("${:.1}K", value / 1_000.0)
-    } else {
-        format!("${:.2}", value)
-    }
-}
+// Helper functions are now in super::super::common module
 
 impl Default for PerpApp {
     fn default() -> Self {

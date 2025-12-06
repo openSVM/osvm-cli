@@ -2,6 +2,8 @@
 //!
 //! Main state struct for managing liquidity positions on Solana DEXs.
 
+use super::super::common::{centered_rect, format_usd, load_wallet_address};
+
 #[allow(unused_imports)]
 use solana_sdk::signer::Signer;
 
@@ -219,8 +221,8 @@ impl AmmApp {
 
     /// Initialize with mock data for demonstration
     pub async fn initialize(&mut self) -> Result<()> {
-        // Load wallet if available
-        self.wallet_address = Self::load_wallet_address();
+        // Load wallet if available (using shared utility)
+        self.wallet_address = load_wallet_address();
 
         // Load mock pools (would fetch from APIs in production)
         self.pools = self.fetch_mock_pools();
@@ -232,33 +234,6 @@ impl AmmApp {
 
         self.set_status("Loaded pools and positions");
         Ok(())
-    }
-
-    fn load_wallet_address() -> Option<String> {
-        let keypair_path = std::env::var("SOLANA_KEYPAIR")
-            .ok()
-            .or_else(|| {
-                dirs::home_dir().map(|h| {
-                    h.join(".config/solana/id.json")
-                        .to_string_lossy()
-                        .to_string()
-                })
-            })?;
-
-        let keypair_bytes = std::fs::read_to_string(&keypair_path).ok()?;
-        let keypair_vec: Vec<u8> = serde_json::from_str(&keypair_bytes).ok()?;
-
-        if keypair_vec.len() != 64 {
-            return None;
-        }
-
-        // Derive pubkey from secret key
-        use solana_sdk::signer::{keypair::Keypair, Signer};
-        let mut secret_key = [0u8; 32];
-        secret_key.copy_from_slice(&keypair_vec[..32]);
-        let keypair = Keypair::new_from_array(secret_key);
-
-        Some(keypair.pubkey().to_string())
     }
 
     fn fetch_mock_pools(&self) -> Vec<LiquidityPool> {
@@ -1140,39 +1115,7 @@ impl AmmApp {
     }
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
-
-fn format_usd(value: f64) -> String {
-    if value >= 1_000_000.0 {
-        format!("${:.1}M", value / 1_000_000.0)
-    } else if value >= 1_000.0 {
-        format!("${:.1}K", value / 1_000.0)
-    } else {
-        format!("${:.2}", value)
-    }
-}
+// Helper functions are now in super::super::common module
 
 impl Default for AmmApp {
     fn default() -> Self {

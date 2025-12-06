@@ -1,0 +1,25 @@
+# Cargo build configuration for OSVM
+# Limits resource usage to prevent system lag
+
+[build]
+# Limit parallel compilation jobs (default uses all cores)
+# Rule of thumb: RAM_GB / 2
+jobs = 2
+
+[profile.dev]
+# Faster dev builds with reduced optimization
+opt-level = 0
+# Keep debug info for better error messages
+debug = true
+
+[profile.dev.package."*"]
+# Optimize dependencies even in dev mode for faster runtime
+opt-level = 2
+
+[net]
+# Git fetch optimization
+git-fetch-with-cli = true
+
+[term]
+# Show warnings in color
+color = "auto"

@@ -2,6 +2,8 @@
 //!
 //! An integrated development environment for OVSM LISP scripting.
 
+use super::super::common::centered_rect;
+
 #[allow(unused_imports)]
 use solana_sdk::signer::Signer;
 
@@ -1139,29 +1141,7 @@ impl SourceFile {
     }
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
+// Helper functions are now in super::super::common module
 
 impl Default for IdeApp {
     fn default() -> Self {

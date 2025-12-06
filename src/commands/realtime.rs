@@ -11,9 +11,13 @@ use crate::services::{
     clickhouse_service::{ClickHouseService, ClickHouseStatus},
 };
 
+/// Pump.fun program ID on Solana mainnet
+pub const PUMPFUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+
 /// Real-time daemon arguments
 #[derive(Debug, Clone, Default)]
 pub struct RealtimeArgs {
+    pub pumpfun: bool,
     pub programs: Option<String>,
     pub accounts: Option<String>,
     pub patterns: Option<String>,
@@ -60,8 +64,22 @@ async fn cmd_start(args: &RealtimeArgs) -> Result<()> {
     println!("✓ ClickHouse server is running");
     println!();
 
+    // Handle --pumpfun flag by adding pump.fun program to the list
+    let effective_programs = if args.pumpfun {
+        println!("🎰 {} pump.fun memecoin monitoring", "Enabling".green().bold());
+        println!("   Program ID: {}", PUMPFUN_PROGRAM_ID);
+        println!();
+
+        match &args.programs {
+            Some(existing) => Some(format!("{},{}", existing, PUMPFUN_PROGRAM_ID)),
+            None => Some(PUMPFUN_PROGRAM_ID.to_string()),
+        }
+    } else {
+        args.programs.clone()
+    };
+
     // SECURITY: Validate all user inputs before passing to daemon subprocess
-    if let Some(programs) = &args.programs {
+    if let Some(programs) = &effective_programs {
         validate_daemon_argument(programs, "programs")?;
     }
     if let Some(accounts) = &args.accounts {
@@ -80,7 +98,7 @@ async fn cmd_start(args: &RealtimeArgs) -> Result<()> {
     // Build daemon configuration
     let mut daemon_args = vec!["realtime-daemon".to_string()];
 
-    if let Some(programs) = &args.programs {
+    if let Some(programs) = &effective_programs {
         daemon_args.push(format!("--programs={}", programs));
     }
     if let Some(accounts) = &args.accounts {

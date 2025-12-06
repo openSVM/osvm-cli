@@ -1,5 +1,8 @@
 use clap::{Arg, ArgAction, Command};
 
+/// Pump.fun program ID on Solana mainnet
+pub const PUMPFUN_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+
 /// Build the realtime command
 pub fn build_realtime_command() -> Command {
     Command::new("realtime")
@@ -8,6 +11,12 @@ pub fn build_realtime_command() -> Command {
         .subcommand(
             Command::new("start")
                 .about("Start real-time sync daemon")
+                .arg(
+                    Arg::new("pumpfun")
+                        .long("pumpfun")
+                        .action(ArgAction::SetTrue)
+                        .help("Monitor pump.fun memecoin transactions (shortcut for --programs=6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P)"),
+                )
                 .arg(
                     Arg::new("programs")
                         .long("programs")

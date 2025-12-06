@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Mutex, RwLock};
 
+use crate::services::pumpfun_client::{PumpFunClient, PumpFunConfig};
 use crate::utils::tui::swap::{JupiterClient, QuoteParams, TokenInfo, TokenRegistry};
 
 // ============================================================================
@@ -808,6 +809,9 @@ impl Default for AgentState {
 pub struct AgentHandle {
     stop_tx: mpsc::Sender<()>,
     state: Arc<RwLock<AgentState>>,
+    positions: Arc<RwLock<Vec<Position>>>,
+    trades: Arc<RwLock<Vec<Trade>>>,
+    signals: Arc<RwLock<Vec<TradeSignal>>>,
 }
 
 impl AgentHandle {
@@ -819,6 +823,21 @@ impl AgentHandle {
     /// Get current state
     pub async fn state(&self) -> AgentState {
         self.state.read().await.clone()
+    }
+
+    /// Get current positions
+    pub async fn positions(&self) -> Vec<Position> {
+        self.positions.read().await.clone()
+    }
+
+    /// Get trade history
+    pub async fn trades(&self) -> Vec<Trade> {
+        self.trades.read().await.clone()
+    }
+
+    /// Get recent signals
+    pub async fn signals(&self) -> Vec<TradeSignal> {
+        self.signals.read().await.clone()
     }
 
     /// Pause trading
@@ -842,11 +861,13 @@ pub struct DegenAgent {
     keypair: Option<Keypair>,
     rpc: Arc<RpcClient>,
     jupiter: JupiterClient,
-    tokens: TokenRegistry,
+    pumpfun: PumpFunClient,
+    tokens: Option<TokenRegistry>, // Lazy-loaded for non-pumpfun swaps
     strategy: Box<dyn TradingStrategy>,
     risk_manager: Arc<Mutex<RiskManager>>,
     positions: Arc<RwLock<Vec<Position>>>,
     trades: Arc<RwLock<Vec<Trade>>>,
+    signals: Arc<RwLock<Vec<TradeSignal>>>,
     state: Arc<RwLock<AgentState>>,
 }
 
@@ -873,8 +894,12 @@ impl DegenAgent {
             _ => Box::new(MomentumStrategy::new(config.momentum_threshold_pct)),
         };
 
-        // Load token registry
-        let tokens = TokenRegistry::load_with_fallback().await;
+        // Create pump.fun client for market data (primary data source)
+        let pumpfun = PumpFunClient::new(PumpFunConfig::default());
+
+        // TokenRegistry is lazy-loaded only when needed for non-pumpfun swaps
+        // This avoids blocking startup with Jupiter API calls
+        let tokens = None;
 
         Ok(Self {
             risk_manager: Arc::new(Mutex::new(RiskManager::new(config.clone()))),
@@ -882,10 +907,12 @@ impl DegenAgent {
             keypair,
             rpc: Arc::new(RpcClient::new(rpc_url)),
             jupiter: JupiterClient::new(),
+            pumpfun,
             tokens,
             strategy,
             positions: Arc::new(RwLock::new(Vec::new())),
             trades: Arc::new(RwLock::new(Vec::new())),
+            signals: Arc::new(RwLock::new(Vec::new())),
             state: Arc::new(RwLock::new(AgentState::default())),
         })
     }
@@ -919,6 +946,9 @@ impl DegenAgent {
     pub async fn start(self) -> Result<AgentHandle> {
         let (stop_tx, mut stop_rx) = mpsc::channel::<()>(1);
         let state = self.state.clone();
+        let positions = self.positions.clone();
+        let trades = self.trades.clone();
+        let signals = self.signals.clone();
 
         // Mark as running
         {
@@ -968,7 +998,7 @@ impl DegenAgent {
             }
         });
 
-        Ok(AgentHandle { stop_tx, state })
+        Ok(AgentHandle { stop_tx, state, positions, trades, signals })
     }
 
     /// Execute one trading cycle
@@ -984,11 +1014,21 @@ impl DegenAgent {
 
         // Generate signals
         let positions = self.positions.read().await;
-        let signals = self.strategy.analyze(&market_data, &positions);
+        let new_signals = self.strategy.analyze(&market_data, &positions);
         drop(positions);
 
+        // Store signals for TUI display (keep last 50)
+        {
+            let mut signals = self.signals.write().await;
+            signals.extend(new_signals.clone());
+            if signals.len() > 50 {
+                let excess = signals.len() - 50;
+                signals.drain(0..excess);
+            }
+        }
+
         // Process signals
-        for signal in signals {
+        for signal in new_signals {
             if let Err(e) = self.process_signal(signal).await {
                 log::debug!("Signal rejected: {}", e);
             }
@@ -997,11 +1037,41 @@ impl DegenAgent {
         Ok(())
     }
 
-    /// Fetch market data (placeholder - would connect to pump.fun API)
+    /// Fetch market data from PumpFunClient
     async fn fetch_market_data(&self) -> Result<Vec<TokenMarketData>> {
-        // TODO: Implement real pump.fun API integration
-        // For now, return empty data
-        Ok(Vec::new())
+        // Fetch trending tokens from OpenSVM API via PumpFunClient
+        match self.pumpfun.get_trending_tokens().await {
+            Ok(tokens) => {
+                // Convert PumpToken to TokenMarketData
+                let market_data: Vec<TokenMarketData> = tokens
+                    .into_iter()
+                    .map(|t| TokenMarketData {
+                        mint: t.mint,
+                        symbol: t.symbol,
+                        name: t.name,
+                        price_sol: t.price_sol,
+                        price_usd: t.price_usd,
+                        market_cap_sol: t.market_cap_sol,
+                        liquidity_sol: t.liquidity_sol,
+                        volume_24h_sol: t.volume_24h_sol,
+                        holders: t.holder_count,
+                        price_change_1m: t.price_change_1m,
+                        price_change_5m: t.price_change_5m,
+                        price_change_1h: t.price_change_1h,
+                        price_change_24h: t.price_change_24h,
+                        created_at: t.created_at,
+                        last_updated: Utc::now(),
+                    })
+                    .collect();
+
+                log::debug!("Fetched {} tokens from market data", market_data.len());
+                Ok(market_data)
+            }
+            Err(e) => {
+                log::warn!("Failed to fetch market data: {}", e);
+                Ok(Vec::new()) // Return empty on error to avoid breaking the trading cycle
+            }
+        }
     }
 
     /// Update position prices
@@ -1017,8 +1087,12 @@ impl DegenAgent {
                 position.current_price_sol = data.price_sol;
                 position.current_value_sol = position.amount * data.price_sol;
                 position.unrealized_pnl_sol = position.current_value_sol - position.cost_basis_sol;
-                position.unrealized_pnl_pct =
-                    (position.unrealized_pnl_sol / position.cost_basis_sol) * 100.0;
+                // Guard against division by zero
+                position.unrealized_pnl_pct = if position.cost_basis_sol > 0.0 {
+                    (position.unrealized_pnl_sol / position.cost_basis_sol) * 100.0
+                } else {
+                    0.0
+                };
 
                 // Update trailing stop
                 if self.config.trailing_stop {
@@ -1041,21 +1115,28 @@ impl DegenAgent {
         let positions = self.positions.read().await.clone();
         let risk_manager = self.risk_manager.lock().await;
 
+        // Collect all positions that need to exit
+        let mut exits: Vec<(String, &str)> = Vec::new();
+
         for position in positions.iter() {
             if position.status != PositionStatus::Open {
                 continue;
             }
 
             if risk_manager.check_stop_loss(position) {
-                drop(risk_manager);
-                self.close_position(&position.id, "stop_loss").await?;
-                return Ok(());
+                exits.push((position.id.clone(), "stop_loss"));
+            } else if risk_manager.check_take_profit(position) {
+                exits.push((position.id.clone(), "take_profit"));
             }
+        }
 
-            if risk_manager.check_take_profit(position) {
-                drop(risk_manager);
-                self.close_position(&position.id, "take_profit").await?;
-                return Ok(());
+        // Drop lock before closing positions
+        drop(risk_manager);
+
+        // Close all positions that need to exit
+        for (position_id, reason) in exits {
+            if let Err(e) = self.close_position(&position_id, reason).await {
+                log::warn!("Failed to close position {}: {}", position_id, e);
             }
         }
 
@@ -1106,20 +1187,32 @@ impl DegenAgent {
 
     /// Paper trade buy
     async fn paper_buy(&self, signal: TradeSignal) -> Result<()> {
+        // Fetch current price from API
+        let entry_price_sol = match self.pumpfun.get_token_info_opensvm(&signal.mint).await {
+            Ok(token) => token.price_sol.max(0.0000001), // Prevent division by zero
+            Err(_) => {
+                // Fallback: calculate from signal if price lookup fails
+                log::warn!("Could not fetch price for {}, using estimate", signal.symbol);
+                0.0001
+            }
+        };
+
+        let amount = signal.suggested_size_sol / entry_price_sol;
+
         let position = Position {
             id: uuid::Uuid::new_v4().to_string(),
             mint: signal.mint.clone(),
             symbol: signal.symbol.clone(),
-            entry_price_sol: 0.0001, // Placeholder
-            current_price_sol: 0.0001,
-            amount: signal.suggested_size_sol / 0.0001,
+            entry_price_sol,
+            current_price_sol: entry_price_sol,
+            amount,
             cost_basis_sol: signal.suggested_size_sol,
             current_value_sol: signal.suggested_size_sol,
             unrealized_pnl_sol: 0.0,
             unrealized_pnl_pct: 0.0,
             entry_time: Utc::now(),
-            stop_loss_price: 0.0001 * (1.0 - self.config.stop_loss_pct / 100.0),
-            take_profit_price: 0.0001 * (1.0 + self.config.take_profit_pct / 100.0),
+            stop_loss_price: entry_price_sol * (1.0 - self.config.stop_loss_pct / 100.0),
+            take_profit_price: entry_price_sol * (1.0 + self.config.take_profit_pct / 100.0),
             trailing_stop_high: None,
             status: PositionStatus::Open,
         };

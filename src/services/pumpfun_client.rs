@@ -179,6 +179,8 @@ struct TokenCache {
     new_tokens: Vec<PumpToken>,
     trending: Vec<PumpToken>,
     last_update: Option<std::time::Instant>,
+    sol_price_usd: f64,
+    sol_price_updated: Option<std::time::Instant>,
 }
 
 impl Default for TokenCache {
@@ -188,6 +190,8 @@ impl Default for TokenCache {
             new_tokens: Vec::new(),
             trending: Vec::new(),
             last_update: None,
+            sol_price_usd: 200.0, // Default fallback
+            sol_price_updated: None,
         }
     }
 }
@@ -241,6 +245,66 @@ impl PumpFunClient {
             }
         }
         false
+    }
+
+    /// Get current SOL price in USD (cached for 60 seconds)
+    pub async fn get_sol_price_usd(&self) -> f64 {
+        const CACHE_TTL_SECS: u64 = 60;
+
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(updated) = cache.sol_price_updated {
+                if updated.elapsed().as_secs() < CACHE_TTL_SECS {
+                    return cache.sol_price_usd;
+                }
+            }
+        }
+
+        // Fetch fresh price from CoinGecko (free, no auth required)
+        let price = self.fetch_sol_price_from_api().await;
+
+        // Update cache
+        {
+            let mut cache = self.cache.write().await;
+            cache.sol_price_usd = price;
+            cache.sol_price_updated = Some(std::time::Instant::now());
+        }
+
+        price
+    }
+
+    /// Fetch SOL price from CoinGecko API
+    async fn fetch_sol_price_from_api(&self) -> f64 {
+        // CoinGecko simple price endpoint (free, no auth)
+        let url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd";
+
+        match self.http.get(url).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    #[derive(Deserialize)]
+                    struct SolPrice {
+                        usd: f64,
+                    }
+                    #[derive(Deserialize)]
+                    struct CoinGeckoResponse {
+                        solana: SolPrice,
+                    }
+
+                    if let Ok(data) = resp.json::<CoinGeckoResponse>().await {
+                        log::debug!("Fetched SOL price: ${:.2}", data.solana.usd);
+                        return data.solana.usd;
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to fetch SOL price: {}", e);
+            }
+        }
+
+        // Fallback to cached or default
+        let cache = self.cache.read().await;
+        cache.sol_price_usd
     }
 
     // ========================================================================
@@ -352,8 +416,12 @@ impl PumpFunClient {
             return Err(anyhow!("OpenSVM API error: {}", response.status()));
         }
 
+        // Fetch current SOL price for accurate USD->SOL conversions
+        let sol_price_usd = self.get_sol_price_usd().await;
+        log::debug!("Using SOL price: ${:.2} for conversions", sol_price_usd);
+
         let data: OpenSvmMarketsResponse = response.json().await?;
-        Ok(data.data.into_iter().map(|t| t.into()).collect())
+        Ok(data.markets.into_iter().map(|t| t.to_pump_token(sol_price_usd)).collect())
     }
 
     /// Get recent trades for a token from OpenSVM API
@@ -714,62 +782,67 @@ pub enum GainerTimeframe {
 #[derive(Debug, Deserialize)]
 struct OpenSvmMarketsResponse {
     #[serde(default)]
-    data: Vec<OpenSvmMarketToken>,
+    markets: Vec<OpenSvmMarketToken>,
 }
 
 /// Token from markets endpoint
 #[derive(Debug, Deserialize)]
 struct OpenSvmMarketToken {
+    /// Token mint address
     #[serde(default)]
-    address: String,
+    mint: String,
+    /// Trading pair symbol (e.g., "SOL/USDC")
     #[serde(default)]
     symbol: String,
-    #[serde(default)]
-    name: String,
+    /// Base token name
+    #[serde(rename = "baseToken", default)]
+    base_token: String,
+    /// Current price in USD
     #[serde(default)]
     price: f64,
-    #[serde(rename = "priceUsd", default)]
-    price_usd: f64,
+    /// 24h price change percentage
+    #[serde(rename = "change24h", default)]
+    change_24h: f64,
+    /// 24h trading volume in USD
     #[serde(rename = "volume24h", default)]
     volume_24h: f64,
+    /// Market cap in USD
     #[serde(rename = "marketCap", default)]
     market_cap: f64,
+    /// Liquidity in USD
     #[serde(default)]
     liquidity: f64,
-    #[serde(rename = "priceChange24h", default)]
-    price_change_24h: f64,
-    #[serde(default)]
-    holders: u32,
 }
 
-impl From<OpenSvmMarketToken> for PumpToken {
-    fn from(t: OpenSvmMarketToken) -> Self {
+impl OpenSvmMarketToken {
+    /// Convert to PumpToken using the provided SOL price
+    fn to_pump_token(self, sol_price_usd: f64) -> PumpToken {
         PumpToken {
-            mint: t.address,
-            symbol: if t.symbol.is_empty() { "???".to_string() } else { t.symbol },
-            name: if t.name.is_empty() { "Unknown".to_string() } else { t.name },
+            mint: self.mint,
+            symbol: if self.symbol.is_empty() { self.base_token.clone() } else { self.symbol },
+            name: if self.base_token.is_empty() { "Unknown".to_string() } else { self.base_token },
             description: None,
             image_uri: None,
             creator: String::new(),
             created_at: Utc::now(),
             bonding_curve: String::new(),
             associated_bonding_curve: String::new(),
-            price_sol: t.price,
-            price_usd: t.price_usd,
-            market_cap_sol: t.market_cap / 200.0, // Rough USD to SOL
-            market_cap_usd: t.market_cap,
-            liquidity_sol: t.liquidity / 200.0,
-            volume_24h_sol: t.volume_24h / 200.0,
-            holder_count: t.holders,
+            price_sol: self.price / sol_price_usd, // Convert USD to SOL
+            price_usd: self.price,
+            market_cap_sol: self.market_cap / sol_price_usd,
+            market_cap_usd: self.market_cap,
+            liquidity_sol: self.liquidity / sol_price_usd,
+            volume_24h_sol: self.volume_24h / sol_price_usd,
+            holder_count: 0, // Not available from this endpoint
             top_10_holder_pct: 0.0,
             dev_holding_pct: 0.0,
             buy_count_24h: 0,
             sell_count_24h: 0,
             unique_traders_24h: 0,
             price_change_1m: 0.0,
-            price_change_5m: 0.0,
-            price_change_1h: 0.0,
-            price_change_24h: t.price_change_24h,
+            price_change_5m: self.change_24h / 288.0, // Rough estimate
+            price_change_1h: self.change_24h / 24.0, // Rough estimate
+            price_change_24h: self.change_24h,
             is_graduated: false,
             graduation_progress: 0.0,
             twitter: None,

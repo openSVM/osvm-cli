@@ -2,6 +2,7 @@
 //!
 //! Main state struct and event loop for the degen trading dashboard.
 
+use super::super::common::{centered_rect, format_duration};
 use anyhow::Result;
 use chrono::Utc;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
@@ -21,11 +22,12 @@ use std::io;
 use std::time::{Duration, Instant};
 
 use crate::services::degen_agent::{
-    AgentHandle, AgentState, DegenAgent, DegenConfig, GainerLoser, NewTokenLaunch,
+    AgentHandle, AgentState, DegenAgent, DegenConfig, GainerLoser, GainerTimeframe, NewTokenLaunch,
     Position, PositionStatus, SmartMoneyData, SmartMoneySignal, SmartMoneySignalType,
     TokenSafety, Trade, TradeSignal, TradeSide, TrenchesData, TrendingToken,
     TrackedWallet, WalletAction, WalletActivity, WalletType,
 };
+use crate::services::pumpfun_client::{PumpFunClient, PumpFunConfig};
 
 /// Main degen application
 pub struct DegenApp {
@@ -35,6 +37,10 @@ pub struct DegenApp {
     // Agent
     pub agent: Option<DegenAgent>,
     pub agent_handle: Option<AgentHandle>,
+
+    // Data client for pump.fun/OpenSVM
+    pub pumpfun_client: PumpFunClient,
+    pub last_data_refresh: Instant,
 
     // State cache (updated from agent)
     pub state: AgentState,
@@ -74,6 +80,8 @@ impl DegenApp {
             config,
             agent: None,
             agent_handle: None,
+            pumpfun_client: PumpFunClient::new(PumpFunConfig::default()),
+            last_data_refresh: Instant::now() - Duration::from_secs(60), // Force initial refresh
             state: AgentState::default(),
             positions: Vec::new(),
             trades: Vec::new(),
@@ -104,8 +112,132 @@ impl DegenApp {
             self.start_agent().await?;
         }
 
+        // Initial data refresh
+        self.refresh_market_data().await;
+
         self.set_status("Initialized");
         Ok(())
+    }
+
+    /// Refresh market data from PumpFunClient (trenches, smart money)
+    async fn refresh_market_data(&mut self) {
+        // Refresh every 10 seconds
+        if self.last_data_refresh.elapsed() < Duration::from_secs(10) {
+            return;
+        }
+        self.last_data_refresh = Instant::now();
+
+        // Fetch trending tokens for trenches
+        match self.pumpfun_client.get_trending_tokens().await {
+            Ok(trending) => {
+                // Convert to our TrendingToken format
+                self.trenches.trending = trending
+                    .iter()
+                    .take(20)
+                    .map(|t| TrendingToken {
+                        mint: t.mint.clone(),
+                        symbol: t.symbol.clone(),
+                        name: t.name.clone(),
+                        price_sol: t.price_sol,
+                        market_cap_sol: t.market_cap_sol,
+                        volume_1h_sol: t.volume_24h_sol / 24.0, // Estimate
+                        volume_24h_sol: t.volume_24h_sol,
+                        holders: t.holder_count,
+                        holder_change_1h: 0, // Not available from API
+                        price_change_5m: t.price_change_5m,
+                        price_change_1h: t.price_change_1h,
+                        price_change_24h: t.price_change_24h,
+                        buy_pressure: if t.buy_count_24h + t.sell_count_24h > 0 {
+                            t.buy_count_24h as f64 / (t.buy_count_24h + t.sell_count_24h) as f64
+                        } else {
+                            0.5
+                        },
+                        smart_money_buys: 0, // Not available
+                        trend_score: 50.0, // Default
+                        safety: TokenSafety::default(),
+                    })
+                    .collect();
+
+                // Sort for gainers/losers
+                let mut sorted_by_change = self.trenches.trending.clone();
+                sorted_by_change.sort_by(|a, b| b.price_change_24h.partial_cmp(&a.price_change_24h).unwrap_or(std::cmp::Ordering::Equal));
+
+                // Top gainers (5m timeframe as placeholder)
+                self.trenches.top_gainers_5m = sorted_by_change
+                    .iter()
+                    .filter(|t| t.price_change_24h > 0.0)
+                    .take(10)
+                    .map(|t| GainerLoser {
+                        mint: t.mint.clone(),
+                        symbol: t.symbol.clone(),
+                        name: t.name.clone(),
+                        price_sol: t.price_sol,
+                        market_cap_sol: t.market_cap_sol,
+                        price_change_pct: t.price_change_24h,
+                        volume_sol: t.volume_24h_sol,
+                        timeframe: GainerTimeframe::FiveMin,
+                    })
+                    .collect();
+
+                // Top gainers (1h timeframe)
+                self.trenches.top_gainers_1h = sorted_by_change
+                    .iter()
+                    .filter(|t| t.price_change_24h > 0.0)
+                    .take(10)
+                    .map(|t| GainerLoser {
+                        mint: t.mint.clone(),
+                        symbol: t.symbol.clone(),
+                        name: t.name.clone(),
+                        price_sol: t.price_sol,
+                        market_cap_sol: t.market_cap_sol,
+                        price_change_pct: t.price_change_24h,
+                        volume_sol: t.volume_24h_sol,
+                        timeframe: GainerTimeframe::OneHour,
+                    })
+                    .collect();
+
+                // Top losers (5m timeframe)
+                self.trenches.top_losers_5m = sorted_by_change
+                    .iter()
+                    .rev()
+                    .filter(|t| t.price_change_24h < 0.0)
+                    .take(10)
+                    .map(|t| GainerLoser {
+                        mint: t.mint.clone(),
+                        symbol: t.symbol.clone(),
+                        name: t.name.clone(),
+                        price_sol: t.price_sol,
+                        market_cap_sol: t.market_cap_sol,
+                        price_change_pct: t.price_change_24h,
+                        volume_sol: t.volume_24h_sol,
+                        timeframe: GainerTimeframe::FiveMin,
+                    })
+                    .collect();
+
+                // Top losers (1h timeframe)
+                self.trenches.top_losers_1h = sorted_by_change
+                    .iter()
+                    .rev()
+                    .filter(|t| t.price_change_24h < 0.0)
+                    .take(10)
+                    .map(|t| GainerLoser {
+                        mint: t.mint.clone(),
+                        symbol: t.symbol.clone(),
+                        name: t.name.clone(),
+                        price_sol: t.price_sol,
+                        market_cap_sol: t.market_cap_sol,
+                        price_change_pct: t.price_change_24h,
+                        volume_sol: t.volume_24h_sol,
+                        timeframe: GainerTimeframe::OneHour,
+                    })
+                    .collect();
+
+                self.trenches.last_updated = Some(Utc::now());
+            }
+            Err(e) => {
+                log::warn!("Failed to fetch trending tokens: {}", e);
+            }
+        }
     }
 
     /// Start the agent
@@ -150,6 +282,9 @@ impl DegenApp {
     async fn update_from_agent(&mut self) {
         if let Some(handle) = &self.agent_handle {
             self.state = handle.state().await;
+            self.positions = handle.positions().await;
+            self.trades = handle.trades().await;
+            self.signals = handle.signals().await;
         }
 
         // Update PnL history
@@ -167,6 +302,9 @@ impl DegenApp {
                 self.update_from_agent().await;
                 self.last_update = Instant::now();
             }
+
+            // Refresh market data (trenches, smart money) every 10 seconds
+            self.refresh_market_data().await;
 
             // Clear old status messages
             if let Some(time) = self.status_time {
@@ -1263,42 +1401,5 @@ impl DegenApp {
         let popup_area = centered_rect(50, 30, area);
         f.render_widget(ratatui::widgets::Clear, popup_area);
         f.render_widget(paragraph, popup_area);
-    }
-}
-
-/// Helper to create a centered rect
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
-
-/// Format a duration as human-readable
-fn format_duration(d: Duration) -> String {
-    let secs = d.as_secs();
-    let hours = secs / 3600;
-    let mins = (secs % 3600) / 60;
-    let secs = secs % 60;
-
-    if hours > 0 {
-        format!("{}h {}m {}s", hours, mins, secs)
-    } else if mins > 0 {
-        format!("{}m {}s", mins, secs)
-    } else {
-        format!("{}s", secs)
     }
 }
