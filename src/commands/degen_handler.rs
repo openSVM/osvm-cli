@@ -208,12 +208,30 @@ async fn run_headless_mode(config: DegenConfig) -> Result<()> {
     Ok(())
 }
 
+/// Guard struct to ensure terminal cleanup on panic
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        // Best-effort terminal restoration
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        // Show cursor in case it was hidden
+        print!("\x1B[?25h");
+        let _ = io::Write::flush(&mut io::stdout());
+    }
+}
+
 /// Run with TUI dashboard
 async fn run_tui_mode(config: DegenConfig) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
+
+    // Guard ensures cleanup even on panic
+    let _guard = TerminalGuard;
+
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -226,7 +244,7 @@ async fn run_tui_mode(config: DegenConfig) -> Result<()> {
     // Run main loop
     let result = app.run(&mut terminal).await;
 
-    // Restore terminal
+    // Normal cleanup (guard will also run but is idempotent)
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
